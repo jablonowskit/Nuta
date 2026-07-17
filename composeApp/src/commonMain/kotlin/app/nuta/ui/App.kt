@@ -468,6 +468,8 @@ private fun LogRow(item: LogEvent) {
 private fun PlayerBar(state: PlayerState, container: AppContainer) {
     val scope = rememberCoroutineScope()
     val track = state.currentTrack
+    var radioLoading by remember { mutableStateOf(false) }
+    var radioMessage by remember { mutableStateOf<String?>(null) }
     Row(
         Modifier.fillMaxWidth().height(98.dp).background(Color(0xFF131A20)).padding(horizontal = 18.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -486,6 +488,26 @@ private fun PlayerBar(state: PlayerState, container: AppContainer) {
         }
         Spacer(Modifier.width(6.dp))
         OutlinedButton(onClick = { scope.launch { container.audioPlayer.next() } }, enabled = track != null) { Text("›") }
+        Spacer(Modifier.width(6.dp))
+        OutlinedButton(
+            onClick = {
+                val seed = track ?: return@OutlinedButton
+                scope.launch {
+                    radioLoading = true
+                    radioMessage = null
+                    runCatching { container.spotifyRepository.getTrackRadio(seed) }
+                        .onSuccess { recommendations ->
+                            val queue = (listOf(seed) + recommendations).distinctBy(Track::id)
+                            container.audioPlayer.setQueue(queue)
+                            container.audioPlayer.play()
+                            radioMessage = "Radio: ${queue.size} utworów"
+                        }
+                        .onFailure { radioMessage = "Radio: błąd — ${it.message ?: "nieznany"}" }
+                    radioLoading = false
+                }
+            },
+            enabled = track != null && !radioLoading,
+        ) { Text(if (radioLoading) "Radio…" else "Radio utworu") }
         Spacer(Modifier.width(18.dp))
         Text(formatTime(state.positionMs), color = Color(0xFF8D9BA6), fontSize = 11.sp)
         Slider(
@@ -498,6 +520,10 @@ private fun PlayerBar(state: PlayerState, container: AppContainer) {
         Text(formatTime(state.durationMs), color = Color(0xFF8D9BA6), fontSize = 11.sp)
         Spacer(Modifier.width(14.dp))
         Text(state.status.name.lowercase(), color = if (state.status == PlayerStatus.ERROR) Color(0xFFFF7B7B) else MaterialTheme.colors.primary, fontSize = 11.sp)
+        radioMessage?.let {
+            Spacer(Modifier.width(8.dp))
+            Text(it, color = if (it.startsWith("Radio: błąd")) Color(0xFFFF7B7B) else Color(0xFF8FE9AD), fontSize = 11.sp, maxLines = 1)
+        }
     }
 }
 

@@ -102,6 +102,35 @@ class SpotifyWebSearchRepository(
         }
     }
 
+    override suspend fun getTrackRadio(seed: Track, limit: Int): List<Track> {
+        require(limit in 1..50) { "Limit radia musi mieścić się w zakresie 1..50" }
+        require(seed.id.matches(Regex("[A-Za-z0-9]+"))) { "Nieprawidłowy identyfikator utworu" }
+        val operationId = "spotify-radio-${System.currentTimeMillis()}"
+        logger.info("SpotifyRadio", "radio_started", "Tworzenie radia utworu", operationId, mapOf("limit" to limit.toString()))
+        val token = validToken()
+        val stationTracks = runCatching {
+            val root = getJson("https://spclient.wg.spotify.com/context-resolve/v1/spotify:station:track:${seed.id}", token)
+            collectTracks(root).distinctBy(Track::id).filterNot { it.id == seed.id }.take(limit)
+        }.onFailure { error ->
+            logger.warn("SpotifyRadio", "station_context_unavailable", "Kontekst stacji Spotify jest niedostępny; używany jest fallback wyszukiwania", operationId, mapOf("reason" to error.javaClass.simpleName))
+        }.getOrDefault(emptyList())
+        if (stationTracks.isNotEmpty()) {
+            logger.info("SpotifyRadio", "radio_completed", "Pobrano radio utworu ze stacji Spotify", operationId, mapOf("count" to stationTracks.size.toString(), "source" to "station"))
+            return stationTracks
+        }
+        val queries = buildList {
+            seed.artists.take(3).forEach(::add)
+            if (seed.album.isNotBlank()) add(seed.album)
+            add(seed.title)
+        }.distinct()
+        val fallback = queries.flatMap { query ->
+            runCatching { searchTracks(query, token) }.getOrElse { emptyList() }
+        }.distinctBy(Track::id).filterNot { it.id == seed.id }.take(limit)
+        require(fallback.isNotEmpty()) { "Spotify nie zwrócił utworów dla radia" }
+        logger.info("SpotifyRadio", "radio_completed", "Utworzono radio na podstawie katalogu Spotify", operationId, mapOf("count" to fallback.size.toString(), "source" to "search_fallback"))
+        return fallback
+    }
+
     private suspend fun validToken(): SpotifyWebToken = tokenMutex.withLock {
         cachedToken?.takeIf { it.expiresAtMs > System.currentTimeMillis() + 60_000 }
             ?: error("Sesja Spotify wygasła. Zaloguj się ponownie.")
@@ -199,6 +228,16 @@ class SpotifyWebSearchRepository(
         val response = send(builder.build())
         logger.debug("SpotifySearch", "graphql_response_received", "Odebrano odpowiedź wyszukiwania", fields = mapOf("statusCode" to response.statusCode().toString()))
         require(response.statusCode() in 200..299) { "Spotify GraphQL HTTP ${response.statusCode()}" }
+        return json.parseToJsonElement(response.body())
+    }
+
+    private suspend fun getJson(url: String, token: SpotifyWebToken): kotlinx.serialization.json.JsonElement {
+        val builder = HttpRequest.newBuilder(URI(url)).timeout(Duration.ofSeconds(20))
+            .header("User-Agent", BrowserUserAgent).header("Accept", "application/json")
+            .header("App-Platform", "WebPlayer").GET()
+        token.value.use { builder.header("Authorization", "Bearer $it") }
+        val response = send(builder.build())
+        require(response.statusCode() in 200..299) { "Spotify radio HTTP ${response.statusCode()}" }
         return json.parseToJsonElement(response.body())
     }
 

@@ -590,3 +590,7 @@ Ponieważ profil JCEF nie odtwarza niezawodnie sesyjnych cookies między kontene
 Jeżeli używana wersja JCEF nie udostępni cookies przez visitor API, wersja testowa zapisuje token i jego termin ważności bez szyfrowania w `spotify-session/token.test.json`. Po restarcie token jest używany tylko wtedy, gdy nadal jest ważny. Zapis tokenu nie może blokować pomyślnie zakończonego logowania. Plik testowy nie może trafić do wydania produkcyjnego.
 
 Ekran główny pobiera spersonalizowane playlisty z wewnętrznej operacji Spotify Web `home`. Mapper wybiera elementy `spotify:playlist:*` i ignoruje nieobsługiwane albumy, podcasty oraz inne typy. Utwory playlisty są pobierane dopiero po jej wybraniu, aby ograniczyć transfer i zużycie energii.
+
+## Radio utworu
+
+Dolny pasek odtwarzacza udostępnia przycisk „Radio utworu” dla aktualnie wybranego utworu. Aplikacja najpierw próbuje pobrać kontekst stacji `spotify:station:track:*`, a gdy Spotify go nie udostępnia, buduje kolejkę z wyników katalogu Spotify na podstawie wykonawców, albumu i tytułu. Bieżący utwór pozostaje pierwszy, duplikaty są usuwane, a maksymalnie 20 rekomendacji jest kolejno rozwiązywanych do strumieni YouTube przez własny silnik Nuta.

@@ -44,4 +44,9 @@ class FakeSpotifyRepository(private val logger: NutaLogger) : SpotifyRepository 
         logger.debug("FakeSpotifyRepository", "search_completed", "Zakończono lokalne wyszukiwanie", fields = mapOf("queryLength" to query.length.toString(), "results" to (tracks.size + playlists.size).toString()))
         return SearchResult(tracks, playlists)
     }
+
+    override suspend fun getTrackRadio(seed: Track, limit: Int): List<Track> =
+        DemoLibrary.tracks.filterNot { it.id == seed.id }.take(limit).also {
+            logger.info("FakeSpotifyRepository", "radio_completed", "Utworzono demonstracyjne radio utworu", fields = mapOf("count" to it.size.toString()))
+        }
 }
