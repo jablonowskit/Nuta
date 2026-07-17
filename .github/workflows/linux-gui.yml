@@ -35,7 +35,9 @@ jobs:
       - uses: android-actions/setup-android@v3
       - uses: gradle/actions/setup-gradle@v4
       - name: Build Android debug APK
-        run: ./gradlew --no-daemon :androidApp:assembleDebug
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon :androidApp:assembleDebug
       - name: Upload Android APK
         uses: actions/upload-artifact@v4
         with:
