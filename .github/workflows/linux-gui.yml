@@ -1,0 +1,45 @@
+name: Linux GUI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test-linux-gui:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build GUI test image
+        run: docker compose build gui-test
+
+      - name: Start GUI
+        run: docker compose up -d gui-test
+
+      - name: Wait for healthcheck
+        shell: bash
+        run: |
+          for attempt in {1..30}; do
+            if curl --fail --silent http://127.0.0.1:6081/health; then
+              exit 0
+            fi
+            sleep 2
+          done
+          docker compose logs gui-test
+          exit 1
+
+      - name: Capture screenshot
+        run: curl --fail http://127.0.0.1:6081/screenshot --output nuta-linux.png
+
+      - name: Upload diagnostics on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-gui-diagnostics
+          path: |
+            nuta-linux.png
+
+      - name: Stop GUI
+        if: always()
+        run: docker compose down

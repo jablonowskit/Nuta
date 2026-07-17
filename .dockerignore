@@ -1,0 +1,10 @@
+.git
+.gradle
+.idea
+.kotlin
+**/build
+artifacts
+*.log
+.env*
+PROJECT.md
+docs

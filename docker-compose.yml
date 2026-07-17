@@ -1,0 +1,24 @@
+services:
+  builder:
+    build:
+      context: .
+      target: builder
+    command: ["./gradlew", "--no-daemon", ":composeApp:allTests"]
+
+  gui-test:
+    build:
+      context: .
+      target: gui-test
+    environment:
+      NUTA_LOG_LEVEL: ${NUTA_LOG_LEVEL:-DEBUG}
+      NUTA_SCREEN_SIZE: ${NUTA_SCREEN_SIZE:-1440x900x24}
+    ports:
+      - "127.0.0.1:6080:6080"
+      - "127.0.0.1:6081:6081"
+    volumes:
+      - nuta-artifacts:/artifacts
+    shm_size: "512m"
+    restart: "no"
+
+volumes:
+  nuta-artifacts:
