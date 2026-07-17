@@ -28,6 +28,12 @@ class FakeAudioPlayer(
         logger.info("FakeAudioPlayer", "queue_set", "Ustawiono kolejkę demonstracyjną", fields = mapOf("size" to tracks.size.toString(), "index" to safeIndex.toString()))
     }
 
+    override suspend fun appendToQueue(tracks: List<Track>) {
+        if (tracks.isEmpty()) return
+        _state.value = _state.value.copy(queue = _state.value.queue + tracks)
+        logger.info("FakeAudioPlayer", "queue_appended", "Dopisano utwory do kolejki", fields = mapOf("count" to tracks.size.toString()))
+    }
+
     override suspend fun play() {
         if (_state.value.currentTrack == null) return
         _state.value = _state.value.copy(status = PlayerStatus.PLAYING, errorMessage = null)

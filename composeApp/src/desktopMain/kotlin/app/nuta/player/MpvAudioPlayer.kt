@@ -53,6 +53,12 @@ class MpvAudioPlayer(
         logger.info("MpvPlayer", "queue_set", "Ustawiono kolejkę playera", fields = mapOf("count" to tracks.size.toString()))
     }
 
+    override suspend fun appendToQueue(tracks: List<Track>) {
+        if (tracks.isEmpty()) return
+        _state.value = _state.value.copy(queue = _state.value.queue + tracks)
+        logger.info("MpvPlayer", "queue_appended", "Dopisano utwory do kolejki", fields = mapOf("count" to tracks.size.toString(), "queueSize" to _state.value.queue.size.toString()))
+    }
+
     override suspend fun play() {
         val current = _state.value.currentTrack ?: return
         if (_state.value.status == PlayerStatus.PAUSED) {

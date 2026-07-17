@@ -113,6 +113,8 @@ fun NutaApp(container: AppContainer, onSpotifyLogin: (() -> Unit)? = null) {
         var loading by remember { mutableStateOf(true) }
         var loadError by remember { mutableStateOf<String?>(null) }
         var searchState by remember { mutableStateOf(SearchViewState()) }
+        var similarModeActive by remember { mutableStateOf(false) }
+        var similarModeLoading by remember { mutableStateOf(false) }
         val scope = rememberCoroutineScope()
 
         fun selectPlaylist(playlist: Playlist) {
@@ -141,6 +143,31 @@ fun NutaApp(container: AppContainer, onSpotifyLogin: (() -> Unit)? = null) {
                 .onSuccess { playlists = it }
                 .onFailure { loadError = it.message }
             loading = false
+        }
+
+        LaunchedEffect(similarModeActive, playerState.currentIndex, playerState.queue.size) {
+            if (!similarModeActive || similarModeLoading || playerState.currentIndex < 0) return@LaunchedEffect
+            val remaining = playerState.queue.lastIndex - playerState.currentIndex
+            if (remaining > 3) return@LaunchedEffect
+            val seed = playerState.currentTrack ?: return@LaunchedEffect
+            similarModeLoading = true
+            runCatching { container.spotifyRepository.getTrackRadio(seed) }
+                .onSuccess { recommendations ->
+                    val knownIds = playerState.queue.mapTo(mutableSetOf(), Track::id)
+                    val uniqueAdditions = recommendations.shuffled().filter { knownIds.add(it.id) }
+                    val additions = uniqueAdditions.ifEmpty {
+                        recommendations.shuffled().filterNot { it.id == seed.id }
+                    }
+                    container.audioPlayer.appendToQueue(additions)
+                    container.logger.info(
+                        "SpotifyRadio", "continuous_queue_extended", "Automatycznie rozszerzono kolejkę podobnych utworów",
+                        fields = mapOf("added" to additions.size.toString()),
+                    )
+                }
+                .onFailure {
+                    container.logger.warn("SpotifyRadio", "continuous_queue_failed", "Nie udało się rozszerzyć kolejki podobnych utworów", fields = mapOf("reason" to (it::class.simpleName ?: "unknown")))
+                }
+            similarModeLoading = false
         }
 
         Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colors.background) {
@@ -182,7 +209,7 @@ fun NutaApp(container: AppContainer, onSpotifyLogin: (() -> Unit)? = null) {
                     }
                 }
                 Divider(color = Color(0xFF2A343D))
-                PlayerBar(playerState, container, onOpenQueue = {
+                PlayerBar(playerState, container, similarModeActive, onSimilarModeChange = { similarModeActive = it }, onOpenQueue = {
                     destination = Destination.QUEUE
                     selectedPlaylist = null
                     loadError = null
@@ -471,7 +498,13 @@ private fun LogRow(item: LogEvent) {
 }
 
 @Composable
-private fun PlayerBar(state: PlayerState, container: AppContainer, onOpenQueue: () -> Unit) {
+private fun PlayerBar(
+    state: PlayerState,
+    container: AppContainer,
+    similarModeActive: Boolean,
+    onSimilarModeChange: (Boolean) -> Unit,
+    onOpenQueue: () -> Unit,
+) {
     val scope = rememberCoroutineScope()
     val track = state.currentTrack
     var radioLoading by remember { mutableStateOf(false) }
@@ -499,6 +532,11 @@ private fun PlayerBar(state: PlayerState, container: AppContainer, onOpenQueue: 
         Spacer(Modifier.width(6.dp))
         OutlinedButton(
             onClick = {
+                if (similarModeActive) {
+                    onSimilarModeChange(false)
+                    radioMessage = "Automatyczne podobne wyłączone"
+                    return@OutlinedButton
+                }
                 val seed = track ?: return@OutlinedButton
                 scope.launch {
                     radioLoading = true
@@ -509,6 +547,7 @@ private fun PlayerBar(state: PlayerState, container: AppContainer, onOpenQueue: 
                             container.audioPlayer.setQueue(queue)
                             container.audioPlayer.play()
                             radioMessage = "Dodano ${queue.size} podobnych utworów"
+                            onSimilarModeChange(true)
                             onOpenQueue()
                         }
                         .onFailure { radioMessage = "Nie udało się znaleźć podobnych — ${it.message ?: "nieznany błąd"}" }
@@ -516,6 +555,10 @@ private fun PlayerBar(state: PlayerState, container: AppContainer, onOpenQueue: 
                 }
             },
             enabled = track != null && !radioLoading,
+            colors = ButtonDefaults.outlinedButtonColors(
+                backgroundColor = if (similarModeActive) Color(0xFF2F6B45) else Color.Transparent,
+                contentColor = if (similarModeActive) Color.White else MaterialTheme.colors.primary,
+            ),
         ) { Text(if (radioLoading) "…" else "♬+") }
         Spacer(Modifier.width(18.dp))
         Text(formatTime(state.positionMs), color = Color(0xFF8D9BA6), fontSize = 11.sp)
