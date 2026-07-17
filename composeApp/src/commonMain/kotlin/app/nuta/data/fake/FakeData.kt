@@ -34,6 +34,8 @@ class FakeSpotifyRepository(private val logger: NutaLogger) : SpotifyRepository 
     override suspend fun getPlaylistTracks(playlistId: String): List<Track> =
         DemoLibrary.playlists.firstOrNull { it.id == playlistId }?.tracks.orEmpty()
 
+    override suspend fun getLikedTracks(): List<Track> = DemoLibrary.tracks
+
     override suspend fun search(query: String): SearchResult {
         val normalized = query.trim().lowercase()
         if (normalized == "error") error("Wymuszony błąd danych demonstracyjnych")

@@ -9,6 +9,7 @@ import kotlinx.coroutines.flow.StateFlow
 interface SpotifyRepository {
     suspend fun getPlaylists(): List<Playlist>
     suspend fun getPlaylistTracks(playlistId: String): List<Track>
+    suspend fun getLikedTracks(): List<Track>
     suspend fun search(query: String): SearchResult
     suspend fun getTrackRadio(seed: Track, limit: Int = 20): List<Track>
 }

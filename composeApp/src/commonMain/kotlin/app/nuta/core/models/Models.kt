@@ -36,6 +36,7 @@ data class PlayerState(
 enum class Destination(val label: String) {
     HOME("Start"),
     PLAYLISTS("Playlisty"),
+    LIKED("Ulubione"),
     SEARCH("Wyszukiwanie"),
     QUEUE("Kolejka"),
     DIAGNOSTICS("Diagnostyka"),

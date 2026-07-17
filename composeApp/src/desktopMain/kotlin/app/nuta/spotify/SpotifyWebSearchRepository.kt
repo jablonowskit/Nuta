@@ -87,6 +87,33 @@ class SpotifyWebSearchRepository(
         return tracks
     }
 
+    override suspend fun getLikedTracks(): List<Track> {
+        val operationId = "spotify-liked-${System.currentTimeMillis()}"
+        logger.info("SpotifyLiked", "liked_started", "Pobieranie ulubionych utworów Spotify", operationId)
+        val token = validToken()
+        val tracks = mutableListOf<Track>()
+        var offset = 0
+        do {
+            val body = JsonObject(mapOf(
+                "variables" to JsonObject(mapOf("offset" to JsonPrimitive(offset), "limit" to JsonPrimitive(50))),
+                "operationName" to JsonPrimitive("fetchLibraryTracks"),
+                "extensions" to JsonObject(mapOf("persistedQuery" to JsonObject(mapOf(
+                    "version" to JsonPrimitive(1), "sha256Hash" to JsonPrimitive(LibraryTracksHash),
+                )))),
+            )).toString()
+            val root = postJson("https://api-partner.spotify.com/pathfinder/v2/query", body, token).jsonObject
+            val page = root["data"]?.jsonObject?.get("me")?.jsonObject?.get("library")?.jsonObject?.get("tracks")?.jsonObject ?: break
+            val items = page["items"] as? JsonArray ?: break
+            tracks += items.mapNotNull(::mapLibraryTrack)
+            offset += items.size
+            val total = page["totalCount"]?.jsonPrimitive?.content?.toIntOrNull() ?: offset
+            val hasNext = offset < total && items.isNotEmpty()
+        } while (hasNext && tracks.size < 500)
+        val result = tracks.distinctBy(Track::id)
+        logger.info("SpotifyLiked", "liked_completed", "Pobrano ulubione utwory Spotify", operationId, mapOf("count" to result.size.toString()))
+        return result
+    }
+
     override suspend fun search(query: String): SearchResult {
         if (query.isBlank()) return SearchResult(emptyList(), emptyList())
         val operationId = "spotify-search-${System.currentTimeMillis()}"
@@ -221,6 +248,14 @@ class SpotifyWebSearchRepository(
         )
     }
 
+    private fun mapLibraryTrack(element: kotlinx.serialization.json.JsonElement): Track? {
+        val item = element as? JsonObject ?: return null
+        val wrapper = item["track"] as? JsonObject ?: return null
+        val uri = wrapper["_uri"]?.jsonPrimitive?.contentOrNull ?: return null
+        val data = wrapper["data"] as? JsonObject ?: return null
+        return mapGraphTrack(data, uri)
+    }
+
     private suspend fun postJson(url: String, body: String, token: SpotifyWebToken): kotlinx.serialization.json.JsonElement {
         val builder = HttpRequest.newBuilder(URI(url)).timeout(Duration.ofSeconds(20)).header("User-Agent", BrowserUserAgent)
             .header("Content-Type", "application/json").POST(HttpRequest.BodyPublishers.ofString(body))
@@ -249,6 +284,7 @@ class SpotifyWebSearchRepository(
         private const val SearchTracksHash = "bc1ca2fcd0ba1013a0fc88e6cc4f190af501851e3dafd3e1ef85840297694428"
         private const val HomeHash = "76243c78b0e20ecdbe41b794dec8cbe73f75e585b0a7201b8d2e84578412847a"
         private const val PlaylistContentsHash = "a65e12194ed5fc443a1cdebed5fabe33ca5b07b987185d63c72483867ad13cb4"
+        private const val LibraryTracksHash = "087278b20b743578a6262c2b0b4bcd20d879c503cc359a2285baf083ef944240"
         private const val BrowserUserAgent = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/128.0 Safari/537.36"
     }
 }

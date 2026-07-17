@@ -113,6 +113,10 @@ fun NutaApp(container: AppContainer, onSpotifyLogin: (() -> Unit)? = null) {
         var loading by remember { mutableStateOf(true) }
         var loadError by remember { mutableStateOf<String?>(null) }
         var searchState by remember { mutableStateOf(SearchViewState()) }
+        var likedTracks by remember { mutableStateOf<List<Track>>(emptyList()) }
+        var likedLoading by remember { mutableStateOf(false) }
+        var likedLoaded by remember { mutableStateOf(false) }
+        var likedError by remember { mutableStateOf<String?>(null) }
         var similarModeActive by remember { mutableStateOf(false) }
         var similarModeLoading by remember { mutableStateOf(false) }
         val scope = rememberCoroutineScope()
@@ -170,6 +174,19 @@ fun NutaApp(container: AppContainer, onSpotifyLogin: (() -> Unit)? = null) {
             similarModeLoading = false
         }
 
+        LaunchedEffect(destination, container.spotifyRepository) {
+            if (destination != Destination.LIKED || likedLoaded || likedLoading) return@LaunchedEffect
+            likedLoading = true
+            likedError = null
+            runCatching { container.spotifyRepository.getLikedTracks() }
+                .onSuccess {
+                    likedTracks = it
+                    likedLoaded = true
+                }
+                .onFailure { likedError = it.message ?: "Nie udało się pobrać ulubionych" }
+            likedLoading = false
+        }
+
         Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colors.background) {
             Column(Modifier.fillMaxSize()) {
                 TopBar()
@@ -196,6 +213,7 @@ fun NutaApp(container: AppContainer, onSpotifyLogin: (() -> Unit)? = null) {
                                     onSelectPlaylist = ::selectPlaylist,
                                 )
                                 Destination.PLAYLISTS -> PlaylistsScreen(playlists, ::selectPlaylist)
+                                Destination.LIKED -> LikedScreen(likedTracks, likedLoading, likedError, playerState, container)
                                 Destination.SEARCH -> SearchScreen(
                                     container = container,
                                     state = searchState,
@@ -351,6 +369,45 @@ private fun PlaylistDetails(playlist: Playlist, playerState: PlayerState, contai
                     scope.launch {
                         container.audioPlayer.setQueue(playlist.tracks, playlist.tracks.indexOf(track))
                         container.audioPlayer.play()
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun LikedScreen(
+    tracks: List<Track>,
+    loading: Boolean,
+    error: String?,
+    playerState: PlayerState,
+    container: AppContainer,
+) {
+    val scope = rememberCoroutineScope()
+    Column(Modifier.fillMaxSize()) {
+        Heading("Ulubione", "Utwory zapisane na Twoim koncie Spotify")
+        Spacer(Modifier.height(16.dp))
+        when {
+            loading -> CircularProgressIndicator(Modifier.align(Alignment.CenterHorizontally))
+            error != null -> ErrorState(error)
+            tracks.isEmpty() -> EmptyState("Nie znaleziono ulubionych utworów")
+            else -> {
+                Button(onClick = {
+                    scope.launch {
+                        container.audioPlayer.setQueue(tracks)
+                        container.audioPlayer.play()
+                    }
+                }) { Text("▶ Odtwórz wszystkie (${tracks.size})") }
+                Spacer(Modifier.height(14.dp))
+                ScrollableLazyColumn(Modifier.fillMaxSize(), scrollToIndex = tracks.indexOfFirst { it.id == playerState.currentTrack?.id }.takeIf { it >= 0 }) {
+                    items(tracks, key = { "liked-${it.id}" }) { track ->
+                        TrackRow(track, playerState.currentTrack?.id == track.id) {
+                            scope.launch {
+                                container.audioPlayer.setQueue(tracks, tracks.indexOf(track))
+                                container.audioPlayer.play()
+                            }
+                        }
                     }
                 }
             }
