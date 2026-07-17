@@ -176,7 +176,11 @@ fun NutaApp(container: AppContainer, onSpotifyLogin: (() -> Unit)? = null) {
                     }
                 }
                 Divider(color = Color(0xFF2A343D))
-                PlayerBar(playerState, container)
+                PlayerBar(playerState, container, onOpenQueue = {
+                    destination = Destination.QUEUE
+                    selectedPlaylist = null
+                    loadError = null
+                })
             }
         }
     }
@@ -461,7 +465,7 @@ private fun LogRow(item: LogEvent) {
 }
 
 @Composable
-private fun PlayerBar(state: PlayerState, container: AppContainer) {
+private fun PlayerBar(state: PlayerState, container: AppContainer, onOpenQueue: () -> Unit) {
     val scope = rememberCoroutineScope()
     val track = state.currentTrack
     var radioLoading by remember { mutableStateOf(false) }
@@ -496,14 +500,15 @@ private fun PlayerBar(state: PlayerState, container: AppContainer) {
                             val queue = (listOf(seed) + recommendations).distinctBy(Track::id)
                             container.audioPlayer.setQueue(queue)
                             container.audioPlayer.play()
-                            radioMessage = "Radio: ${queue.size} utworów"
+                            radioMessage = "Dodano ${queue.size} podobnych utworów"
+                            onOpenQueue()
                         }
-                        .onFailure { radioMessage = "Radio: błąd — ${it.message ?: "nieznany"}" }
+                        .onFailure { radioMessage = "Nie udało się znaleźć podobnych — ${it.message ?: "nieznany błąd"}" }
                     radioLoading = false
                 }
             },
             enabled = track != null && !radioLoading,
-        ) { Text(if (radioLoading) "Radio…" else "Radio utworu") }
+        ) { Text(if (radioLoading) "Szukam…" else "Odtwarzaj podobne") }
         Spacer(Modifier.width(18.dp))
         Text(formatTime(state.positionMs), color = Color(0xFF8D9BA6), fontSize = 11.sp)
         Slider(
@@ -518,7 +523,7 @@ private fun PlayerBar(state: PlayerState, container: AppContainer) {
         Text(state.status.name.lowercase(), color = if (state.status == PlayerStatus.ERROR) Color(0xFFFF7B7B) else MaterialTheme.colors.primary, fontSize = 11.sp)
         radioMessage?.let {
             Spacer(Modifier.width(8.dp))
-            Text(it, color = if (it.startsWith("Radio: błąd")) Color(0xFFFF7B7B) else Color(0xFF8FE9AD), fontSize = 11.sp, maxLines = 1)
+            Text(it, color = if (it.startsWith("Nie udało")) Color(0xFFFF7B7B) else Color(0xFF8FE9AD), fontSize = 11.sp, maxLines = 1)
         }
     }
 }
