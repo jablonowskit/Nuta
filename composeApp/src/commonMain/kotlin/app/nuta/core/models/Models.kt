@@ -37,5 +37,6 @@ enum class Destination(val label: String) {
     HOME("Start"),
     PLAYLISTS("Playlisty"),
     SEARCH("Wyszukiwanie"),
+    QUEUE("Kolejka"),
     DIAGNOSTICS("Diagnostyka"),
 }

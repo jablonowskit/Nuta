@@ -48,7 +48,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Dialog
 import app.nuta.AppContainer
 import app.nuta.core.logging.LogEvent
 import app.nuta.core.logging.LogLevel
@@ -175,6 +174,7 @@ fun NutaApp(container: AppContainer, onSpotifyLogin: (() -> Unit)? = null) {
                                     onStateChange = { searchState = it },
                                     onPlaylist = { playlist -> selectedPlaylist = playlist },
                                 )
+                                Destination.QUEUE -> QueueScreen(playerState, container)
                                 Destination.DIAGNOSTICS -> DiagnosticsScreen(container)
                             }
                         }
@@ -471,8 +471,6 @@ private fun PlayerBar(state: PlayerState, container: AppContainer) {
     val track = state.currentTrack
     var radioLoading by remember { mutableStateOf(false) }
     var radioMessage by remember { mutableStateOf<String?>(null) }
-    var queueVisible by remember { mutableStateOf(false) }
-    if (queueVisible) QueueDialog(state, container) { queueVisible = false }
     Row(
         Modifier.fillMaxWidth().height(98.dp).background(Color(0xFF131A20)).padding(horizontal = 18.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -491,10 +489,6 @@ private fun PlayerBar(state: PlayerState, container: AppContainer) {
         }
         Spacer(Modifier.width(6.dp))
         OutlinedButton(onClick = { scope.launch { container.audioPlayer.next() } }, enabled = track != null) { Text("›") }
-        Spacer(Modifier.width(6.dp))
-        OutlinedButton(onClick = { queueVisible = true }, enabled = state.queue.isNotEmpty()) {
-            Text("Kolejka (${state.queue.size})")
-        }
         Spacer(Modifier.width(6.dp))
         OutlinedButton(
             onClick = {
@@ -535,24 +529,18 @@ private fun PlayerBar(state: PlayerState, container: AppContainer) {
 }
 
 @Composable
-private fun QueueDialog(state: PlayerState, container: AppContainer, onDismiss: () -> Unit) {
+private fun QueueScreen(state: PlayerState, container: AppContainer) {
     val scope = rememberCoroutineScope()
-    Dialog(onCloseRequest = onDismiss, title = "Aktualna kolejka") {
-        Surface(
-            modifier = Modifier.width(720.dp).height(600.dp),
-            color = Color(0xFF151D23),
-            shape = RoundedCornerShape(12.dp),
-        ) {
-            Column(Modifier.padding(20.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) {
-                        Text("Aktualna kolejka", fontSize = 24.sp, fontWeight = FontWeight.Bold)
-                        Text("${state.queue.size} utworów • odtwarzany ${state.currentIndex + 1}", color = Color(0xFF8F9CA6), fontSize = 12.sp)
-                    }
-                    OutlinedButton(onClick = onDismiss) { Text("Zamknij") }
-                }
-                Spacer(Modifier.height(14.dp))
-                ScrollableLazyColumn(Modifier.fillMaxSize()) {
+    Column(Modifier.fillMaxSize()) {
+        Heading(
+            "Aktualna kolejka",
+            if (state.queue.isEmpty()) "Kolejka jest pusta" else "${state.queue.size} utworów • odtwarzany ${state.currentIndex + 1}",
+        )
+        Spacer(Modifier.height(14.dp))
+        if (state.queue.isEmpty()) {
+            EmptyState("Uruchom utwór, playlistę albo radio, aby utworzyć kolejkę")
+        } else {
+            ScrollableLazyColumn(Modifier.fillMaxSize()) {
                     items(state.queue.indices.toList(), key = { index -> "queue-$index-${state.queue[index].id}" }) { index ->
                         val item = state.queue[index]
                         val active = index == state.currentIndex
@@ -561,7 +549,6 @@ private fun QueueDialog(state: PlayerState, container: AppContainer, onDismiss: 
                                 .background(if (active) Color(0xFF203129) else Color.Transparent, RoundedCornerShape(8.dp))
                                 .clickable {
                                     scope.launch { container.audioPlayer.playAt(index) }
-                                    onDismiss()
                                 }
                                 .padding(horizontal = 12.dp, vertical = 10.dp),
                             verticalAlignment = Alignment.CenterVertically,
@@ -575,7 +562,6 @@ private fun QueueDialog(state: PlayerState, container: AppContainer, onDismiss: 
                             Text(formatTime(item.durationMs), color = Color(0xFF8F9CA6), fontSize = 12.sp)
                         }
                     }
-                }
             }
         }
     }
