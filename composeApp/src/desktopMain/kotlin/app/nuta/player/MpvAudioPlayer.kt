@@ -88,6 +88,13 @@ class MpvAudioPlayer(
         _state.value = _state.value.copy(status = PlayerStatus.PAUSED)
     }
 
+    override suspend fun stop() {
+        ticker?.cancel()
+        if (process?.isAlive == true) sendCommand("stop")
+        _state.value = _state.value.copy(status = PlayerStatus.IDLE, positionMs = 0, errorMessage = null)
+        logger.info("MpvPlayer", "playback_stopped", "Zatrzymano odtwarzanie audio")
+    }
+
     override suspend fun seekTo(positionMs: Long) {
         val bounded = positionMs.coerceIn(0, _state.value.durationMs)
         sendCommand("seek", bounded / 1_000.0, "absolute", "exact")

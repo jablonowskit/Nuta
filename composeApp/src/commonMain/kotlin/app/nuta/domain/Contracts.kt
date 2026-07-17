@@ -18,6 +18,7 @@ interface AudioPlayer {
     suspend fun setQueue(tracks: List<Track>, startIndex: Int = 0)
     suspend fun play()
     suspend fun pause()
+    suspend fun stop()
     suspend fun seekTo(positionMs: Long)
     suspend fun next()
     suspend fun previous()

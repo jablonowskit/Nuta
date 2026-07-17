@@ -481,13 +481,15 @@ private fun PlayerBar(state: PlayerState, container: AppContainer, onOpenQueue: 
             Text(track?.artists?.joinToString() ?: "Wybierz utwór z playlisty", color = Color(0xFF8D9BA6), fontSize = 12.sp, maxLines = 1)
         }
         Spacer(Modifier.width(14.dp))
-        OutlinedButton(onClick = { scope.launch { container.audioPlayer.previous() } }, enabled = track != null) { Text("‹") }
+        OutlinedButton(onClick = { scope.launch { container.audioPlayer.previous() } }, enabled = track != null) { Text("⏮") }
         Spacer(Modifier.width(6.dp))
         Button(onClick = { scope.launch { if (state.status == PlayerStatus.PLAYING) container.audioPlayer.pause() else container.audioPlayer.play() } }, enabled = track != null) {
-            Text(if (state.status == PlayerStatus.PLAYING) "Pauza" else "Odtwórz")
+            Text(if (state.status == PlayerStatus.PLAYING) "⏸" else "▶")
         }
         Spacer(Modifier.width(6.dp))
-        OutlinedButton(onClick = { scope.launch { container.audioPlayer.next() } }, enabled = track != null) { Text("›") }
+        OutlinedButton(onClick = { scope.launch { container.audioPlayer.stop() } }, enabled = track != null && state.status != PlayerStatus.IDLE) { Text("⏹") }
+        Spacer(Modifier.width(6.dp))
+        OutlinedButton(onClick = { scope.launch { container.audioPlayer.next() } }, enabled = track != null) { Text("⏭") }
         Spacer(Modifier.width(6.dp))
         OutlinedButton(
             onClick = {
@@ -508,7 +510,7 @@ private fun PlayerBar(state: PlayerState, container: AppContainer, onOpenQueue: 
                 }
             },
             enabled = track != null && !radioLoading,
-        ) { Text(if (radioLoading) "Szukam…" else "Odtwarzaj podobne") }
+        ) { Text(if (radioLoading) "…" else "♬+") }
         Spacer(Modifier.width(18.dp))
         Text(formatTime(state.positionMs), color = Color(0xFF8D9BA6), fontSize = 11.sp)
         Slider(

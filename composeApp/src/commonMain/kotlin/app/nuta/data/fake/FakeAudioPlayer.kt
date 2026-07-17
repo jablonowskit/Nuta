@@ -42,6 +42,12 @@ class FakeAudioPlayer(
         logger.info("FakeAudioPlayer", "pause", "Wstrzymano symulowane odtwarzanie", fields = currentFields())
     }
 
+    override suspend fun stop() {
+        ticker?.cancel()
+        _state.value = _state.value.copy(status = PlayerStatus.IDLE, positionMs = 0, errorMessage = null)
+        logger.info("FakeAudioPlayer", "stop", "Zatrzymano symulowane odtwarzanie", fields = currentFields())
+    }
+
     override suspend fun seekTo(positionMs: Long) {
         val duration = _state.value.durationMs
         _state.value = _state.value.copy(positionMs = positionMs.coerceIn(0L, duration))
