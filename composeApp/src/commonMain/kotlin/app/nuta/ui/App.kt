@@ -82,9 +82,15 @@ private fun ScrollableLazyColumn(
     modifier: Modifier = Modifier,
     reverseLayout: Boolean = false,
     verticalArrangement: Arrangement.Vertical = Arrangement.Top,
+    scrollToIndex: Int? = null,
     content: LazyListScope.() -> Unit,
 ) {
     val listState = rememberLazyListState()
+    LaunchedEffect(scrollToIndex) {
+        scrollToIndex?.takeIf { it >= 0 }?.let { index ->
+            listState.animateScrollToItem(index)
+        }
+    }
     Box(modifier) {
         LazyColumn(
             state = listState,
@@ -542,7 +548,7 @@ private fun QueueScreen(state: PlayerState, container: AppContainer) {
         if (state.queue.isEmpty()) {
             EmptyState("Uruchom utwór, playlistę albo radio, aby utworzyć kolejkę")
         } else {
-            ScrollableLazyColumn(Modifier.fillMaxSize()) {
+            ScrollableLazyColumn(Modifier.fillMaxSize(), scrollToIndex = state.currentIndex) {
                     items(state.queue.indices.toList(), key = { index -> "queue-$index-${state.queue[index].id}" }) { index ->
                         val item = state.queue[index]
                         val active = index == state.currentIndex
