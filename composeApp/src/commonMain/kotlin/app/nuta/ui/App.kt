@@ -1,8 +1,6 @@
 package app.nuta.ui
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.VerticalScrollbar
-import androidx.compose.foundation.rememberScrollbarAdapter
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -95,10 +93,7 @@ private fun ScrollableLazyColumn(
             modifier = Modifier.fillMaxSize().padding(end = 12.dp),
             content = content,
         )
-        VerticalScrollbar(
-            adapter = rememberScrollbarAdapter(listState),
-            modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
-        )
+        PlatformVerticalScrollbar(listState, Modifier.align(Alignment.CenterEnd).fillMaxHeight())
     }
 }
 

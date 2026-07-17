@@ -5,9 +5,18 @@ plugins {
     alias(libs.plugins.kotlinMultiplatform)
     alias(libs.plugins.jetbrainsCompose)
     alias(libs.plugins.composeCompiler)
+    alias(libs.plugins.androidMultiplatformLibrary)
 }
 
 kotlin {
+    androidLibrary {
+        namespace = "app.nuta.shared"
+        compileSdk = libs.versions.androidCompileSdk.get().toInt()
+        minSdk = libs.versions.androidMinSdk.get().toInt()
+        compilerOptions { jvmTarget.set(JvmTarget.JVM_17) }
+        androidResources { enable = true }
+    }
+
     jvm("desktop") {
         compilerOptions {
             jvmTarget.set(JvmTarget.JVM_25)
@@ -46,6 +55,19 @@ kotlin {
             dependencies {
                 implementation(kotlin("test"))
             }
+        }
+    }
+}
+
+compose.desktop {
+    application {
+        mainClass = "app.nuta.MainKt"
+        nativeDistributions {
+            targetFormats(org.jetbrains.compose.desktop.application.dsl.TargetFormat.Exe)
+            packageName = "Nuta"
+            packageVersion = "0.1.0"
+            description = "Nuta music player"
+            vendor = "Nuta"
         }
     }
 }
