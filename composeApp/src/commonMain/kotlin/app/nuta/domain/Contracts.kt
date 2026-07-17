@@ -21,5 +21,6 @@ interface AudioPlayer {
     suspend fun seekTo(positionMs: Long)
     suspend fun next()
     suspend fun previous()
+    suspend fun playAt(index: Int)
     suspend fun simulateError()
 }

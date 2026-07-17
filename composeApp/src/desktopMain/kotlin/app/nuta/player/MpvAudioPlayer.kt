@@ -96,6 +96,7 @@ class MpvAudioPlayer(
 
     override suspend fun next() = moveTo(_state.value.currentIndex + 1)
     override suspend fun previous() = moveTo(_state.value.currentIndex - 1)
+    override suspend fun playAt(index: Int) = moveTo(index)
     override suspend fun simulateError() { ticker?.cancel(); _state.value = _state.value.copy(status = PlayerStatus.ERROR, errorMessage = "Symulowany błąd playera") }
 
     private suspend fun moveTo(index: Int) {

@@ -50,6 +50,7 @@ class FakeAudioPlayer(
 
     override suspend fun next() = moveTo(_state.value.currentIndex + 1, "next")
     override suspend fun previous() = moveTo(_state.value.currentIndex - 1, "previous")
+    override suspend fun playAt(index: Int) = moveTo(index, "queue_item_selected")
 
     override suspend fun simulateError() {
         ticker?.cancel()
