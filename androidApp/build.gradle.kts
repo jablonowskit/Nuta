@@ -33,4 +33,7 @@ dependencies {
     implementation(libs.androidx.activity.compose)
     implementation(compose.runtime)
     implementation(compose.ui)
+    implementation(compose.foundation)
+    implementation(compose.material)
+    implementation(libs.serialization.json)
 }
