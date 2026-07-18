@@ -33,7 +33,7 @@ class MainActivity : ComponentActivity() {
             if (expiry > System.currentTimeMillis() + 60_000) SpotifyWebToken(SecretValue.of(value), expiry) else null
         }
         val youtubeMediaService = AndroidYouTubeMediaService(logger, playbackSettings)
-        val audioPlayer = Media3AudioPlayer(applicationContext, scope, youtubeMediaService, logger, playbackSettings)
+        val audioPlayer = Media3AudioPlayer(applicationContext, scope, youtubeMediaService, logger, playbackSettings, getSharedPreferences("playback-queue", MODE_PRIVATE))
         setContent {
             var token by remember { mutableStateOf(restoredToken) }
             var showLogin by remember { mutableStateOf(restoredToken == null) }
@@ -48,7 +48,7 @@ class MainActivity : ComponentActivity() {
             } else {
                 val activeToken = token
                 val repository = remember(activeToken) {
-                    activeToken?.let { SpotifyAndroidRepository(it, logger) } ?: FakeSpotifyRepository(logger)
+                    activeToken?.let { SpotifyAndroidRepository(it, logger, getSharedPreferences("spotify-playlists-cache", MODE_PRIVATE)) } ?: FakeSpotifyRepository(logger)
                 }
                 val container = remember(repository) {
                     AppContainer(spotifyRepository = repository, audioPlayer = audioPlayer, logger = logger, youtubeMediaService = youtubeMediaService, playbackSettings = playbackSettings)

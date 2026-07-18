@@ -1,6 +1,8 @@
 package app.nuta.android
 
 import android.content.Context
+import android.content.SharedPreferences
+import android.util.Base64
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
@@ -35,11 +37,13 @@ class Media3AudioPlayer(
     private val youtube: YouTubeMediaService,
     private val logger: NutaLogger,
     settingsStore: PlaybackSettingsStore,
+    private val queuePreferences: SharedPreferences,
 ) : AudioPlayer {
-    private val stateFlow = MutableStateFlow(PlayerState())
+    private val stateFlow = MutableStateFlow(restoreQueue())
     override val state: StateFlow<PlayerState> = stateFlow.asStateFlow()
     private val loadMutex = Mutex()
     private var ticker: Job? = null
+    private var retryingAfterError = false
     private val player = ExoPlayer.Builder(context)
         .setMediaSourceFactory(DefaultMediaSourceFactory(DefaultHttpDataSource.Factory().setUserAgent(USER_AGENT).setAllowCrossProtocolRedirects(true)))
         .setLoadControl(loadControl(settingsStore.settings.value.bufferSize))
@@ -60,6 +64,14 @@ class Media3AudioPlayer(
             }
             override fun onPlayerError(error: PlaybackException) {
                 stateFlow.value = stateFlow.value.copy(status = PlayerStatus.ERROR, errorMessage = error.errorCodeName)
+                if (!retryingAfterError && stateFlow.value.currentTrack != null) {
+                    retryingAfterError = true
+                    scope.launch {
+                        delay(250)
+                        withContext(Dispatchers.Main) { player.stop(); player.clearMediaItems() }
+                        play()
+                    }
+                }
                 logger.error("Media3Player", "playback_failed", "Media3 zgłosił błąd odtwarzania", throwable = error)
             }
         })
@@ -70,12 +82,14 @@ class Media3AudioPlayer(
         require(startIndex in tracks.indices || tracks.isEmpty())
         withContext(Dispatchers.Main) { player.stop(); player.clearMediaItems() }
         stateFlow.value = PlayerState(queue = tracks, currentIndex = if (tracks.isEmpty()) -1 else startIndex)
+        saveQueue()
     }
-    override suspend fun appendToQueue(tracks: List<Track>) { if (tracks.isNotEmpty()) stateFlow.value = stateFlow.value.copy(queue = stateFlow.value.queue + tracks) }
+    override suspend fun appendToQueue(tracks: List<Track>) { if (tracks.isNotEmpty()) { stateFlow.value = stateFlow.value.copy(queue = stateFlow.value.queue + tracks); saveQueue() } }
     override suspend fun shuffleUpcoming() {
         val state = stateFlow.value
         if (state.currentIndex !in state.queue.indices) return
         stateFlow.value = state.copy(queue = state.queue.take(state.currentIndex + 1) + state.queue.drop(state.currentIndex + 1).shuffled(), shuffleEnabled = true)
+        saveQueue()
         logger.info("Media3Player", "queue_shuffled", "Przetasowano pozostałe utwory kolejki")
     }
 
@@ -85,6 +99,7 @@ class Media3AudioPlayer(
         loadMutex.withLock {
             stateFlow.value = stateFlow.value.copy(status = PlayerStatus.LOADING, positionMs = 0, errorMessage = null, streamBitrate = null, streamCodec = null)
             runCatching { youtube.resolve(track) }.onSuccess { resolution ->
+                retryingAfterError = false
                 val url = resolution.stream.url.use { it }
                 stateFlow.value = stateFlow.value.copy(
                     streamBitrate = resolution.stream.bitrate,
@@ -112,7 +127,26 @@ class Media3AudioPlayer(
     override suspend fun playAt(index: Int) = move(index)
     override suspend fun simulateError() { stateFlow.value = stateFlow.value.copy(status = PlayerStatus.ERROR, errorMessage = "Symulowany błąd") }
 
-    private suspend fun move(index: Int) { if (index !in stateFlow.value.queue.indices) return; withContext(Dispatchers.Main) { player.stop() }; stateFlow.value = stateFlow.value.copy(currentIndex = index, status = PlayerStatus.IDLE, positionMs = 0, errorMessage = null, streamBitrate = null, streamCodec = null); play() }
+    private suspend fun move(index: Int) {
+        if (index !in stateFlow.value.queue.indices) return
+        stateFlow.value = stateFlow.value.copy(currentIndex = index, status = PlayerStatus.IDLE, positionMs = 0, errorMessage = null, streamBitrate = null, streamCodec = null)
+        withContext(Dispatchers.Main) { player.stop() }
+        play()
+    }
+
+    private fun saveQueue() {
+        val state = stateFlow.value
+        val rows = state.queue.joinToString("\n") { t -> listOf(t.id, t.title, t.artists.joinToString("\u001f"), t.album, t.durationMs.toString(), t.imageUrl.orEmpty()).joinToString("\u001e") { Base64.encodeToString(it.toByteArray(), Base64.NO_WRAP) } }
+        queuePreferences.edit().putString("tracks", rows).putInt("index", state.currentIndex).apply()
+    }
+
+    private fun restoreQueue(): PlayerState {
+        val tracks = queuePreferences.getString("tracks", "").orEmpty().lineSequence().filter(String::isNotBlank).mapNotNull { row -> runCatching {
+            val v = row.split("\u001e").map { String(Base64.decode(it, Base64.DEFAULT)) }
+            Track(v[0], v[1], v[2].split("\u001f"), v[3], v[4].toLong(), v[5].ifBlank { null })
+        }.getOrNull() }.toList()
+        return PlayerState(queue = tracks, currentIndex = queuePreferences.getInt("index", -1).coerceIn(-1, tracks.lastIndex))
+    }
     private suspend fun advanceAfterEnd() { val next = stateFlow.value.currentIndex + 1; if (next in stateFlow.value.queue.indices) move(next) else stateFlow.value = stateFlow.value.copy(status = PlayerStatus.ENDED) }
     private fun startTicker() { ticker?.cancel(); ticker = scope.launch { while (isActive) { delay(500); val position = withContext(Dispatchers.Main) { player.currentPosition }; stateFlow.value = stateFlow.value.copy(positionMs = position.coerceAtLeast(0)) } } }
     companion object {

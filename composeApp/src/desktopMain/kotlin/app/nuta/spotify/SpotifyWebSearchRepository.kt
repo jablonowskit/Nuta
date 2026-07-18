@@ -66,6 +66,16 @@ class SpotifyWebSearchRepository(
         }
     }
 
+    override suspend fun getSavedPlaylists(): List<Playlist> {
+        val root = getJson("https://api.spotify.com/v1/me/playlists?limit=50", validToken())
+        return (root.jsonObject["items"] as? JsonArray).orEmpty().mapNotNull { item ->
+            val obj = item.jsonObject
+            val id = obj["id"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
+            val image = (obj["images"] as? JsonArray)?.firstOrNull()?.jsonObject?.get("url")?.jsonPrimitive?.contentOrNull
+            Playlist(id, obj["name"]?.jsonPrimitive?.contentOrNull ?: "Playlist", obj["description"]?.jsonPrimitive?.contentOrNull.orEmpty(), emptyList(), image)
+        }
+    }
+
     override suspend fun getPlaylistTracks(playlistId: String): List<Track> {
         require(playlistId.matches(Regex("[A-Za-z0-9]+"))) { "Nieprawidłowy identyfikator playlisty" }
         val token = validToken()
@@ -112,6 +122,15 @@ class SpotifyWebSearchRepository(
         val result = tracks.distinctBy(Track::id)
         logger.info("SpotifyLiked", "liked_completed", "Pobrano ulubione utwory Spotify", operationId, mapOf("count" to result.size.toString()))
         return result
+    }
+
+    override suspend fun isTrackLiked(trackId: String): Boolean {
+        val response = libraryRequest("GET", "contains", trackId)
+        return (response as? JsonArray)?.firstOrNull()?.jsonPrimitive?.content?.toBooleanStrictOrNull() ?: false
+    }
+
+    override suspend fun setTrackLiked(trackId: String, liked: Boolean) {
+        libraryRequest(if (liked) "PUT" else "DELETE", null, trackId)
     }
 
     override suspend fun search(query: String): SearchResult {
@@ -287,6 +306,25 @@ class SpotifyWebSearchRepository(
         val response = send(builder.build())
         require(response.statusCode() in 200..299) { "Spotify radio HTTP ${response.statusCode()}" }
         return json.parseToJsonElement(response.body())
+    }
+
+    private suspend fun libraryRequest(method: String, action: String?, trackId: String): kotlinx.serialization.json.JsonElement? {
+        require(trackId.matches(Regex("[A-Za-z0-9]+"))) { "Nieprawidłowy identyfikator utworu" }
+        val token = validToken()
+        val spotifyUri = URLEncoder.encode("spotify:track:$trackId", StandardCharsets.UTF_8)
+        val suffix = action?.let { "/$it" }.orEmpty()
+        val builder = HttpRequest.newBuilder(URI("https://api.spotify.com/v1/me/library$suffix?uris=$spotifyUri"))
+            .timeout(Duration.ofSeconds(20)).header("Accept", "application/json")
+        token.value.use { builder.header("Authorization", "Bearer $it") }
+        when (method) {
+            "GET" -> builder.GET()
+            "PUT" -> builder.PUT(HttpRequest.BodyPublishers.noBody())
+            "DELETE" -> builder.DELETE()
+            else -> error("Nieobsługiwana metoda HTTP")
+        }
+        val response = send(builder.build())
+        check(response.statusCode() in 200..299) { "Spotify library HTTP ${response.statusCode()}: ${response.body().take(120)}" }
+        return response.body().takeIf(String::isNotBlank)?.let(json::parseToJsonElement)
     }
 
     private suspend fun send(request: HttpRequest): HttpResponse<String> = withContext(Dispatchers.IO) {

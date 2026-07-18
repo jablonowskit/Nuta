@@ -6,8 +6,12 @@ import app.nuta.core.models.SearchResult
 import app.nuta.core.models.Track
 import app.nuta.domain.SpotifyRepository
 import app.nuta.spotify.SpotifyWebToken
+import android.content.SharedPreferences
+import android.util.Base64
 import java.net.HttpURLConnection
 import java.net.URL
+import java.net.URLEncoder
+import java.nio.charset.StandardCharsets
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
@@ -23,6 +27,7 @@ import kotlinx.serialization.json.jsonPrimitive
 class SpotifyAndroidRepository(
     private val token: SpotifyWebToken,
     private val logger: NutaLogger,
+    private val cache: SharedPreferences,
 ) : SpotifyRepository {
     private val json = Json { ignoreUnknownKeys = true }
 
@@ -35,6 +40,45 @@ class SpotifyAndroidRepository(
             "includeEpisodeContentRatingsV2" to JsonPrimitive(false),
         )))
         return collectPlaylists(root).distinctBy(Playlist::id).take(30)
+    }
+
+    override suspend fun getSavedPlaylists(): List<Playlist> = withContext(Dispatchers.IO) {
+        val cached = readPlaylistCache()
+        if (cached != null) return@withContext cached
+        check(token.expiresAtMs > System.currentTimeMillis() + 30_000) { "Sesja Spotify wygasła. Zaloguj się ponownie." }
+        val connection = URL("https://api.spotify.com/v1/me/playlists?limit=50").openConnection() as HttpURLConnection
+        try {
+            connection.requestMethod = "GET"
+            connection.connectTimeout = 15_000
+            connection.readTimeout = 20_000
+            connection.setRequestProperty("Accept", "application/json")
+            token.value.use { connection.setRequestProperty("Authorization", "Bearer $it") }
+            val status = connection.responseCode
+            val response = (if (status in 200..299) connection.inputStream else connection.errorStream)?.bufferedReader()?.use { it.readText() }.orEmpty()
+            check(status in 200..299) { "Spotify playlists HTTP $status: ${response.take(120)}" }
+            val items = json.parseToJsonElement(response).jsonObject["items"] as? JsonArray ?: return@withContext emptyList()
+            val playlists = items.mapNotNull { item ->
+                val obj = item.jsonObject
+                val id = obj["id"]?.asText() ?: return@mapNotNull null
+                Playlist(id, obj["name"]?.asText() ?: "Playlist", obj["description"]?.asText().orEmpty(), emptyList(), (obj["images"] as? JsonArray)?.firstOrNull()?.asObject()?.get("url")?.asText())
+            }
+            writePlaylistCache(playlists)
+            playlists
+        } finally { connection.disconnect() }
+    }
+
+    private fun readPlaylistCache(): List<Playlist>? {
+        val savedAt = cache.getLong("savedPlaylistsAt", 0L)
+        if (savedAt == 0L || System.currentTimeMillis() - savedAt > 10 * 60 * 1000) return null
+        return cache.getString("savedPlaylists", null)?.lineSequence()?.filter(String::isNotBlank)?.mapNotNull { row -> runCatching {
+            val v = row.split("\u001e").map { String(Base64.decode(it, Base64.DEFAULT)) }
+            Playlist(v[0], v[1], v[2], emptyList(), v[3].ifBlank { null })
+        }.getOrNull() }?.toList()
+    }
+
+    private fun writePlaylistCache(playlists: List<Playlist>) {
+        val value = playlists.joinToString("\n") { p -> listOf(p.id, p.name, p.description, p.imageUrl.orEmpty()).joinToString("\u001e") { Base64.encodeToString(it.toByteArray(), Base64.NO_WRAP) } }
+        cache.edit().putString("savedPlaylists", value).putLong("savedPlaylistsAt", System.currentTimeMillis()).apply()
     }
 
     override suspend fun getPlaylistTracks(playlistId: String): List<Track> {
@@ -67,6 +111,15 @@ class SpotifyAndroidRepository(
             hasNext = items.isNotEmpty() && offset < total && result.size < 500
         } while (hasNext)
         return result.distinctBy(Track::id)
+    }
+
+    override suspend fun isTrackLiked(trackId: String): Boolean {
+        val response = libraryRequest("GET", "contains", trackId)
+        return (response as? JsonArray)?.firstOrNull()?.jsonPrimitive?.content?.toBooleanStrictOrNull() ?: false
+    }
+
+    override suspend fun setTrackLiked(trackId: String, liked: Boolean) {
+        libraryRequest(if (liked) "PUT" else "DELETE", null, trackId)
     }
 
     override suspend fun search(query: String): SearchResult {
@@ -132,6 +185,31 @@ class SpotifyAndroidRepository(
                     error("Spotify GraphQL HTTP $status: ${response.take(120)}")
                 }
                 json.parseToJsonElement(response)
+            } finally {
+                connection.disconnect()
+            }
+        }
+    }
+
+    private suspend fun libraryRequest(method: String, action: String?, trackId: String): JsonElement? {
+        require(trackId.matches(Regex("[A-Za-z0-9]+"))) { "Nieprawidłowy identyfikator utworu" }
+        check(token.expiresAtMs > System.currentTimeMillis() + 30_000) { "Sesja Spotify wygasła. Zaloguj się ponownie." }
+        val uri = URLEncoder.encode("spotify:track:$trackId", StandardCharsets.UTF_8.name())
+        val suffix = action?.let { "/$it" }.orEmpty()
+        return withContext(Dispatchers.IO) {
+            val connection = URL("https://api.spotify.com/v1/me/library$suffix?uris=$uri").openConnection() as HttpURLConnection
+            try {
+                connection.requestMethod = method
+                connection.connectTimeout = 15_000
+                connection.readTimeout = 20_000
+                connection.setRequestProperty("Accept", "application/json")
+                connection.setRequestProperty("Content-Length", "0")
+                token.value.use { connection.setRequestProperty("Authorization", "Bearer $it") }
+                val status = connection.responseCode
+                val response = (if (status in 200..299) connection.inputStream else connection.errorStream)
+                    ?.bufferedReader()?.use { it.readText() }.orEmpty()
+                check(status in 200..299) { "Spotify library HTTP $status: ${response.take(120)}" }
+                response.takeIf(String::isNotBlank)?.let(json::parseToJsonElement)
             } finally {
                 connection.disconnect()
             }
