@@ -78,7 +78,11 @@ class Media3AudioPlayer(
                 withContext(Dispatchers.Main) {
                     player.setMediaItem(MediaItem.fromUri(url)); player.prepare(); player.play()
                 }
-                logger.info("Media3Player", "playback_prepared", "Przekazano strumień YouTube do Media3", fields = mapOf("codec" to resolution.stream.codec))
+                logger.info("Media3Player", "playback_prepared", "Przekazano strumień YouTube do Media3", fields = mapOf(
+                    "codec" to resolution.stream.codec,
+                    "mimeType" to resolution.stream.mimeType,
+                    "bitrate" to resolution.stream.bitrate.toString(),
+                ))
             }.onFailure { error ->
                 stateFlow.value = stateFlow.value.copy(status = PlayerStatus.ERROR, errorMessage = error.message)
                 logger.error("Media3Player", "resolution_failed", "Nie udało się przygotować strumienia YouTube", throwable = error)
