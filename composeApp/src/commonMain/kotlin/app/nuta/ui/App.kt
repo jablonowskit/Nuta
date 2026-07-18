@@ -59,6 +59,9 @@ import app.nuta.core.models.PlayerStatus
 import app.nuta.core.models.Playlist
 import app.nuta.core.models.SearchResult
 import app.nuta.core.models.Track
+import app.nuta.settings.BufferSize
+import app.nuta.settings.CodecPreference
+import app.nuta.settings.StreamQuality
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
 
@@ -227,6 +230,7 @@ fun NutaApp(container: AppContainer, onSpotifyLogin: (() -> Unit)? = null) {
                                     onPlaylist = { playlist -> selectedPlaylist = playlist },
                                 )
                                 Destination.QUEUE -> QueueScreen(playerState, container)
+                                Destination.SETTINGS -> SettingsScreen(container)
                                 Destination.DIAGNOSTICS -> DiagnosticsScreen(container)
                             }
                         }
@@ -271,10 +275,10 @@ private fun TopBar(compact: Boolean) {
 private fun BottomNavigation(selected: Destination, onSelect: (Destination) -> Unit) {
     val labels = mapOf(
         Destination.HOME to "Start", Destination.PLAYLISTS to "Listy", Destination.LIKED to "Lubię",
-        Destination.SEARCH to "Szukaj", Destination.QUEUE to "Kolejka", Destination.DIAGNOSTICS to "Logi",
+        Destination.SEARCH to "Szukaj", Destination.QUEUE to "Kolejka", Destination.SETTINGS to "Ustaw.",
     )
     Row(Modifier.fillMaxWidth().height(58.dp).background(Color(0xFF131A20)).padding(horizontal = 4.dp)) {
-        Destination.entries.forEach { item ->
+        Destination.entries.filter { it != Destination.DIAGNOSTICS }.forEach { item ->
             val active = item == selected
             Box(
                 Modifier.weight(1f).fillMaxHeight().clickable { onSelect(item) }
@@ -283,6 +287,81 @@ private fun BottomNavigation(selected: Destination, onSelect: (Destination) -> U
             ) {
                 Text(labels.getValue(item), color = if (active) MaterialTheme.colors.primary else Color(0xFFC5CFD7), fontSize = 10.sp, fontWeight = if (active) FontWeight.Bold else FontWeight.Normal)
             }
+        }
+    }
+}
+
+@Composable
+private fun SettingsScreen(container: AppContainer) {
+    val settings by container.playbackSettings.settings.collectAsState()
+    ScrollableLazyColumn(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        item { Heading("Ustawienia odtwarzania", "Jakość strumienia YouTube i bufor Media3") }
+        item {
+            SettingsGroup("Jakość", "Zmiana działa od następnego utworu") {
+                SettingOptions(
+                    options = listOf(
+                        StreamQuality.AUTO to "Auto",
+                        StreamQuality.DATA_SAVER to "Oszczędna",
+                        StreamQuality.STANDARD to "Standard",
+                        StreamQuality.BEST to "Najwyższa",
+                    ),
+                    selected = settings.quality,
+                ) { container.playbackSettings.update(settings.copy(quality = it)) }
+            }
+        }
+        item {
+            SettingsGroup("Kodek", "AAC jest najbardziej stabilny na Androidzie") {
+                SettingOptions(
+                    options = listOf(CodecPreference.AUTO to "Auto", CodecPreference.AAC to "AAC", CodecPreference.OPUS to "Opus"),
+                    selected = settings.codec,
+                ) { container.playbackSettings.update(settings.copy(codec = it)) }
+            }
+        }
+        item {
+            SettingsGroup("Bufor", "Zmiana bufora działa po ponownym uruchomieniu aplikacji") {
+                SettingOptions(
+                    options = listOf(BufferSize.SMALL to "Mały", BufferSize.STANDARD to "Standard", BufferSize.LARGE to "Duży"),
+                    selected = settings.bufferSize,
+                ) { container.playbackSettings.update(settings.copy(bufferSize = it)) }
+            }
+        }
+        item {
+            Text(
+                "Domyślne ustawienie: najwyższa jakość AAC i standardowy bufor.",
+                color = Color(0xFF8D9BA6),
+                fontSize = 12.sp,
+                modifier = Modifier.padding(vertical = 8.dp),
+            )
+        }
+    }
+}
+
+@Composable
+private fun SettingsGroup(title: String, description: String, content: @Composable () -> Unit) {
+    Card(backgroundColor = Color(0xFF182027), shape = RoundedCornerShape(10.dp), modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(14.dp)) {
+            Text(title, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+            Text(description, color = Color(0xFF8D9BA6), fontSize = 12.sp)
+            Spacer(Modifier.height(10.dp))
+            content()
+        }
+    }
+}
+
+@Composable
+private fun <T> SettingOptions(options: List<Pair<T, String>>, selected: T, onSelect: (T) -> Unit) {
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        options.forEach { (value, label) ->
+            val active = value == selected
+            OutlinedButton(
+                onClick = { onSelect(value) },
+                modifier = Modifier.weight(1f),
+                colors = ButtonDefaults.outlinedButtonColors(
+                    backgroundColor = if (active) Color(0xFF2F6B45) else Color.Transparent,
+                    contentColor = if (active) Color.White else Color(0xFFB8C2C9),
+                ),
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 4.dp, vertical = 8.dp),
+            ) { Text(label, fontSize = 11.sp, maxLines = 1) }
         }
     }
 }
