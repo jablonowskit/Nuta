@@ -78,6 +78,9 @@ fun SpotifyLoginPrototype(
             KCEF.init(
                 builder = {
                     installDir(runtimeDirectory)
+                    // Spotify's login challenge uses cross-site cookies between
+                    // accounts.spotify.com and challenge.spotify.com.
+                    addArgs("--disable-features=BlockThirdPartyCookies")
                     progress {
                         onDownloading { progress = it.coerceAtLeast(0f) }
                         onInitialized { initialized = true }
