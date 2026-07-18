@@ -6,6 +6,7 @@ data class Track(
     val artists: List<String>,
     val album: String,
     val durationMs: Long,
+    val imageUrl: String? = null,
 )
 
 data class Playlist(
@@ -13,6 +14,7 @@ data class Playlist(
     val name: String,
     val description: String,
     val tracks: List<Track>,
+    val imageUrl: String? = null,
 )
 
 data class SearchResult(

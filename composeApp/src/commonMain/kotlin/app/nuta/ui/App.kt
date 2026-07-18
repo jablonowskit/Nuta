@@ -468,7 +468,7 @@ private fun PlaylistCard(playlist: Playlist, onClick: () -> Unit) {
         shape = RoundedCornerShape(10.dp),
     ) {
         Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-            Cover(playlist.name)
+            Cover(playlist.name, playlist.imageUrl)
             Spacer(Modifier.width(14.dp))
             Column(Modifier.weight(1f)) {
                 Text(playlist.name, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis)
@@ -692,7 +692,7 @@ private fun CompactPlayerBar(state: PlayerState, container: AppContainer, simila
         Modifier.fillMaxWidth().weight(1f),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(Modifier.size(46.dp).clickable { onOpenQueue() }) { Cover(track?.title ?: "N") }
+        Box(Modifier.size(46.dp).clickable { onOpenQueue() }) { Cover(track?.title ?: "N", track?.imageUrl, Modifier.fillMaxSize()) }
         Spacer(Modifier.width(10.dp))
         Column(Modifier.weight(1f).clickable { onOpenQueue() }) {
             Text(track?.title ?: "Nic nie odtwarzamy", maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.Bold, fontSize = 14.sp)
@@ -713,6 +713,14 @@ private fun CompactPlayerBar(state: PlayerState, container: AppContainer, simila
             modifier = Modifier.weight(1f).padding(horizontal = 2.dp),
         )
         Text(formatTime(state.durationMs), color = Color(0xFF8D9BA6), fontSize = 10.sp)
+        Text(
+            "🔀",
+            color = if (state.queue.size > 1) MaterialTheme.colors.primary else Color(0xFF55616A),
+            modifier = Modifier.padding(start = 6.dp).clickable(enabled = state.queue.size > 1) {
+                scope.launch { container.audioPlayer.shuffleUpcoming(); onOpenQueue() }
+            }.padding(horizontal = 6.dp, vertical = 6.dp),
+            fontSize = 14.sp,
+        )
         Text(
             if (radioLoading) "…" else "♬+",
             color = if (similarModeActive) Color.White else MaterialTheme.colors.primary,
@@ -765,7 +773,7 @@ private fun PlayerBar(
         Modifier.fillMaxWidth().height(98.dp).background(Color(0xFF131A20)).padding(horizontal = 18.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Cover(track?.title ?: "N")
+        Cover(track?.title ?: "N", track?.imageUrl)
         Spacer(Modifier.width(12.dp))
         Column(Modifier.width(230.dp)) {
             Text(track?.title ?: "Nic nie odtwarzamy", maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.Bold)
@@ -781,6 +789,8 @@ private fun PlayerBar(
         OutlinedButton(onClick = { scope.launch { container.audioPlayer.stop() } }, enabled = track != null && state.status != PlayerStatus.IDLE) { Text("⏹") }
         Spacer(Modifier.width(6.dp))
         OutlinedButton(onClick = { scope.launch { container.audioPlayer.next() } }, enabled = track != null) { Text("⏭") }
+        Spacer(Modifier.width(6.dp))
+        OutlinedButton(onClick = { scope.launch { container.audioPlayer.shuffleUpcoming(); onOpenQueue() } }, enabled = state.queue.size > 1) { Text("🔀") }
         Spacer(Modifier.width(6.dp))
         OutlinedButton(
             onClick = {
@@ -890,11 +900,12 @@ private fun QueueScreen(state: PlayerState, container: AppContainer) {
 }
 
 @Composable
-private fun Cover(seed: String) {
+private fun Cover(seed: String, imageUrl: String? = null, modifier: Modifier = Modifier.size(54.dp)) {
     val colors = listOf(Color(0xFF375B4A), Color(0xFF404A75), Color(0xFF704858), Color(0xFF685C38))
     val color = colors[(seed.hashCode() and Int.MAX_VALUE) % colors.size]
-    Box(Modifier.size(54.dp).background(color, RoundedCornerShape(8.dp)), contentAlignment = Alignment.Center) {
+    Box(modifier.background(color, RoundedCornerShape(8.dp)), contentAlignment = Alignment.Center) {
         Text(seed.take(1).uppercase(), fontWeight = FontWeight.Bold, fontSize = 20.sp)
+        imageUrl?.let { PlatformRemoteImage(it, seed, Modifier.fillMaxSize()) }
     }
 }
 

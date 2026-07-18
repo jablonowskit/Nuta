@@ -34,6 +34,13 @@ class FakeAudioPlayer(
         logger.info("FakeAudioPlayer", "queue_appended", "Dopisano utwory do kolejki", fields = mapOf("count" to tracks.size.toString()))
     }
 
+    override suspend fun shuffleUpcoming() {
+        val state = _state.value
+        if (state.currentIndex !in state.queue.indices) return
+        _state.value = state.copy(queue = state.queue.take(state.currentIndex + 1) + state.queue.drop(state.currentIndex + 1).shuffled())
+        logger.info("FakeAudioPlayer", "queue_shuffled", "Przetasowano pozostałe utwory kolejki")
+    }
+
     override suspend fun play() {
         if (_state.value.currentTrack == null) return
         _state.value = _state.value.copy(status = PlayerStatus.PLAYING, errorMessage = null)

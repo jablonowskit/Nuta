@@ -144,7 +144,7 @@ class SpotifyAndroidRepository(
             val uri = element["uri"]?.asText()
             val current = if (uri?.startsWith("spotify:playlist:") == true) {
                 (element["name"]?.asText() ?: element["title"]?.asObject()?.get("transformedLabel")?.asText())
-                    ?.let { Playlist(uri.substringAfterLast(':'), it, "Rekomendacja Spotify", emptyList()) }
+                    ?.let { Playlist(uri.substringAfterLast(':'), it, "Rekomendacja Spotify", emptyList(), spotifyImageUrl(element)) }
             } else null
             listOfNotNull(current) + element.values.flatMap(::collectPlaylists)
         }
@@ -170,7 +170,19 @@ class SpotifyAndroidRepository(
             ?: item["duration"]?.asObject()?.get("totalMilliseconds")?.asText()?.toLongOrNull()
             ?: item["durationMs"]?.asText()?.toLongOrNull() ?: 0L
         return Track(uri.substringAfterLast(':'), title, artists,
-            item["albumOfTrack"]?.asObject()?.get("name")?.asText().orEmpty(), duration)
+            item["albumOfTrack"]?.asObject()?.get("name")?.asText().orEmpty(), duration,
+            spotifyImageUrl(item["albumOfTrack"] ?: item))
+    }
+
+    private fun spotifyImageUrl(element: JsonElement): String? = when (element) {
+        is JsonPrimitive -> element.contentOrNull?.takeIf { it.startsWith("https://") && ("scdn.co" in it || "spotifycdn" in it) }
+        is JsonArray -> element.firstNotNullOfOrNull(::spotifyImageUrl)
+        is JsonObject -> {
+            val priority = listOf("sources", "images", "coverArt", "image")
+            priority.firstNotNullOfOrNull { key -> element[key]?.let(::spotifyImageUrl) }
+                ?: element.values.firstNotNullOfOrNull(::spotifyImageUrl)
+        }
+        else -> null
     }
 
     private fun JsonElement.asObject() = this as? JsonObject
