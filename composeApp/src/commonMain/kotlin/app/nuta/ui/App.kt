@@ -125,6 +125,7 @@ fun NutaApp(container: AppContainer, onSpotifyLogin: (() -> Unit)? = null) {
         var selectedPlaylist by remember { mutableStateOf<Playlist?>(null) }
         var playlists by remember { mutableStateOf<List<Playlist>>(emptyList()) }
         var savedPlaylists by remember { mutableStateOf<List<Playlist>>(emptyList()) }
+        var savedPlaylistsLoaded by remember { mutableStateOf(false) }
         var loading by remember { mutableStateOf(true) }
         var loadError by remember { mutableStateOf<String?>(null) }
         var searchState by remember { mutableStateOf(SearchViewState()) }
@@ -164,13 +165,17 @@ fun NutaApp(container: AppContainer, onSpotifyLogin: (() -> Unit)? = null) {
             runCatching { container.spotifyRepository.getPlaylists() }
                 .onSuccess { playlists = it }
                 .onFailure { loadError = it.message }
+            loading = false
+        }
+
+        LaunchedEffect(destination, container.spotifyRepository) {
+            if (destination != Destination.PLAYLISTS || savedPlaylistsLoaded) return@LaunchedEffect
             runCatching { container.spotifyRepository.getSavedPlaylists() }
-                .onSuccess { savedPlaylists = it }
+                .onSuccess { savedPlaylists = it; savedPlaylistsLoaded = true }
                 .onFailure {
                     loadError = "Nie udało się pobrać zapisanych playlist Spotify: ${it.message ?: "nieznany błąd"}"
                     container.logger.warn("SpotifyLibrary", "saved_playlists_failed", "Nie udało się pobrać zapisanych playlist", fields = mapOf("reason" to (it.message ?: "unknown")))
                 }
-            loading = false
         }
 
         LaunchedEffect(similarModeActive, playerState.currentIndex, playerState.queue.size) {
