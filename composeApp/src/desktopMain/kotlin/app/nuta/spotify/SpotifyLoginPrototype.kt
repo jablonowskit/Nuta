@@ -79,9 +79,20 @@ fun SpotifyLoginPrototype(
             KCEF.init(
                 builder = {
                     installDir(runtimeDirectory)
-                    // Spotify's login challenge uses cross-site cookies between
-                    // accounts.spotify.com and challenge.spotify.com.
-                    addArgs("--disable-features=BlockThirdPartyCookies")
+                    // Spotify's login challenge (accounts.spotify.com <->
+                    // challenge.spotify.com <-> Google reCAPTCHA) relies on
+                    // cross-site cookies. Chromium 122 blocks these via the
+                    // 3PCD tracking-protection experiment, which emits the
+                    // "Third-party cookie will be blocked" console warnings
+                    // seen in the login logs right before challenge-orchestrator
+                    // returns HTTP 400.
+                    //
+                    // NOTE: "BlockThirdPartyCookies" is a Chromium *policy/pref*
+                    // name, NOT a base::Feature, so the previous
+                    // --disable-features=BlockThirdPartyCookies was silently
+                    // ignored (no-op). TrackingProtection3pcd is the real
+                    // feature behind that warning.
+                    addArgs("--disable-features=TrackingProtection3pcd")
                     progress {
                         onDownloading { progress = it.coerceAtLeast(0f) }
                         onInitialized { initialized = true }
