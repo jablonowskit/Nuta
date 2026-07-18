@@ -698,14 +698,14 @@ private fun CompactPlayerBar(state: PlayerState, container: AppContainer, simila
             Text(track?.title ?: "Nic nie odtwarzamy", maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.Bold, fontSize = 14.sp)
             Text(track?.artists?.joinToString() ?: "Wybierz utwór", color = Color(0xFF8D9BA6), fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
-        Text("|<", modifier = Modifier.clickable(enabled = track != null) { scope.launch { container.audioPlayer.previous() } }.padding(10.dp), color = if (track != null) Color.White else Color(0xFF55616A), fontWeight = FontWeight.Bold)
+        Text("⏮", modifier = Modifier.clickable(enabled = track != null) { scope.launch { container.audioPlayer.previous() } }.padding(10.dp), color = if (track != null) Color.White else Color(0xFF55616A), fontWeight = FontWeight.Bold)
         Text(if (state.status == PlayerStatus.PLAYING) "Ⅱ" else "▶", modifier = Modifier.clickable(enabled = track != null) { scope.launch { if (state.status == PlayerStatus.PLAYING) container.audioPlayer.pause() else container.audioPlayer.play() } }.padding(12.dp), color = MaterialTheme.colors.primary, fontSize = 18.sp)
-        Text(">|", modifier = Modifier.clickable(enabled = track != null) { scope.launch { container.audioPlayer.next() } }.padding(10.dp), color = if (track != null) Color.White else Color(0xFF55616A), fontWeight = FontWeight.Bold)
+        Text("⏭", modifier = Modifier.clickable(enabled = track != null) { scope.launch { container.audioPlayer.next() } }.padding(10.dp), color = if (track != null) Color.White else Color(0xFF55616A), fontWeight = FontWeight.Bold)
     }
     Row(Modifier.fillMaxWidth().height(38.dp), verticalAlignment = Alignment.CenterVertically) {
         Text(formatTime(state.positionMs), color = Color(0xFF8D9BA6), fontSize = 10.sp)
         Text(
-            "<",
+            "↶10",
             modifier = Modifier.clickable(enabled = track != null) {
                 scope.launch { container.audioPlayer.seekTo((state.positionMs - 10_000).coerceAtLeast(0)) }
             }.padding(horizontal = 5.dp, vertical = 6.dp),
@@ -720,7 +720,7 @@ private fun CompactPlayerBar(state: PlayerState, container: AppContainer, simila
             modifier = Modifier.weight(1f).padding(horizontal = 2.dp),
         )
         Text(
-            ">",
+            "10↷",
             modifier = Modifier.clickable(enabled = track != null) {
                 scope.launch { container.audioPlayer.seekTo((state.positionMs + 10_000).coerceAtMost(state.durationMs)) }
             }.padding(horizontal = 5.dp, vertical = 6.dp),
