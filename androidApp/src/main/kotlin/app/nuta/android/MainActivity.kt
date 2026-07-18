@@ -27,12 +27,13 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         val logger = MemoryLogger(now = { Instant.now().toString() }, initialLevel = LogLevel.DEBUG)
         val preferences = getSharedPreferences("spotify-session", MODE_PRIVATE)
+        val playbackSettings = AndroidPlaybackSettingsStore(getSharedPreferences("playback-settings", MODE_PRIVATE))
         val restoredToken = preferences.getString("accessToken", null)?.let { value ->
             val expiry = preferences.getLong("expiresAt", 0L)
             if (expiry > System.currentTimeMillis() + 60_000) SpotifyWebToken(SecretValue.of(value), expiry) else null
         }
-        val youtubeMediaService = AndroidYouTubeMediaService(logger)
-        val audioPlayer = Media3AudioPlayer(applicationContext, scope, youtubeMediaService, logger)
+        val youtubeMediaService = AndroidYouTubeMediaService(logger, playbackSettings)
+        val audioPlayer = Media3AudioPlayer(applicationContext, scope, youtubeMediaService, logger, playbackSettings)
         setContent {
             var token by remember { mutableStateOf(restoredToken) }
             var showLogin by remember { mutableStateOf(restoredToken == null) }
@@ -50,7 +51,7 @@ class MainActivity : ComponentActivity() {
                     activeToken?.let { SpotifyAndroidRepository(it, logger) } ?: FakeSpotifyRepository(logger)
                 }
                 val container = remember(repository) {
-                    AppContainer(spotifyRepository = repository, audioPlayer = audioPlayer, logger = logger, youtubeMediaService = youtubeMediaService)
+                    AppContainer(spotifyRepository = repository, audioPlayer = audioPlayer, logger = logger, youtubeMediaService = youtubeMediaService, playbackSettings = playbackSettings)
                 }
                 NutaApp(container, onSpotifyLogin = { showLogin = true })
             }

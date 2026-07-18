@@ -8,6 +8,9 @@ import app.nuta.youtube.YouTubeCandidate
 import app.nuta.youtube.YouTubeMatch
 import app.nuta.youtube.YouTubeMediaService
 import app.nuta.youtube.YouTubeResolution
+import app.nuta.settings.CodecPreference
+import app.nuta.settings.PlaybackSettingsStore
+import app.nuta.settings.StreamQuality
 import java.net.HttpURLConnection
 import java.net.URLEncoder
 import java.net.URL
@@ -22,7 +25,10 @@ import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 
-class AndroidYouTubeMediaService(private val logger: NutaLogger) : YouTubeMediaService {
+class AndroidYouTubeMediaService(
+    private val logger: NutaLogger,
+    private val settingsStore: PlaybackSettingsStore,
+) : YouTubeMediaService {
     private val json = Json { ignoreUnknownKeys = true }
 
     override suspend fun resolve(track: Track): YouTubeResolution {
@@ -91,15 +97,28 @@ class AndroidYouTubeMediaService(private val logger: NutaLogger) : YouTubeMediaS
             last = root["playabilityStatus"]?.jsonObject?.get("status")?.jsonPrimitive?.contentOrNull ?: "UNKNOWN"
             if (last != "OK") continue
             val formats = root["streamingData"]?.jsonObject?.get("adaptiveFormats") as? JsonArray ?: continue
-            // AAC in an MP4 container is decoded more reliably than WebM/Opus by
-            // Android emulators and is hardware accelerated on physical phones.
-            return formats.mapNotNull { format(it.jsonObject) }.maxWithOrNull(compareBy<AudioStreamSource>(
-                { if (it.codec.contains("mp4a", true) || it.codec.contains("aac", true)) 1 else 0 },
-                AudioStreamSource::bitrate,
-            ))
+            return selectFormat(formats.mapNotNull { format(it.jsonObject) })
                 ?: error("Brak bezpośredniego audio YouTube")
         }
         error("YouTube playability: $last")
+    }
+
+    private fun selectFormat(formats: List<AudioStreamSource>): AudioStreamSource? {
+        if (formats.isEmpty()) return null
+        val settings = settingsStore.settings.value
+        val preferred = formats.filter { stream ->
+            when (settings.codec) {
+                CodecPreference.AUTO -> true
+                CodecPreference.AAC -> stream.codec.contains("mp4a", true) || stream.codec.contains("aac", true)
+                CodecPreference.OPUS -> stream.codec.contains("opus", true)
+            }
+        }.ifEmpty { formats }
+        return when (settings.quality) {
+            StreamQuality.DATA_SAVER -> preferred.minByOrNull { kotlin.math.abs(it.bitrate - 64_000) }
+            StreamQuality.STANDARD -> preferred.minByOrNull { kotlin.math.abs(it.bitrate - 128_000) }
+            StreamQuality.BEST -> preferred.maxByOrNull(AudioStreamSource::bitrate)
+            StreamQuality.AUTO -> preferred.minByOrNull { kotlin.math.abs(it.bitrate - 128_000) }
+        }
     }
 
     private fun format(item: JsonObject): AudioStreamSource? {
