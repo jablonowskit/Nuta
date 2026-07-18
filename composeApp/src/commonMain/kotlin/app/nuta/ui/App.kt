@@ -781,11 +781,30 @@ private fun QueueScreen(state: PlayerState, container: AppContainer) {
                         ) {
                             Text(if (active) "▶" else "${index + 1}.", color = if (active) MaterialTheme.colors.primary else Color(0xFF7D8B95), modifier = Modifier.width(38.dp))
                             Column(Modifier.weight(1f)) {
-                                Text(item.title, fontWeight = if (active) FontWeight.Bold else FontWeight.Normal, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                Text(item.artists.joinToString(), color = Color(0xFF8F9CA6), fontSize = 12.sp, maxLines = 1)
+                                Text(
+                                    item.title,
+                                    fontWeight = if (active) FontWeight.Bold else FontWeight.Normal,
+                                    maxLines = 3,
+                                    overflow = TextOverflow.Clip,
+                                    softWrap = true,
+                                    modifier = Modifier.fillMaxWidth(),
+                                )
+                                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        buildString {
+                                            append(item.artists.joinToString())
+                                            if (item.album.isNotBlank()) append(" • ${item.album}")
+                                        },
+                                        color = Color(0xFF8F9CA6),
+                                        fontSize = 12.sp,
+                                        maxLines = 2,
+                                        overflow = TextOverflow.Ellipsis,
+                                        modifier = Modifier.weight(1f),
+                                    )
+                                    Spacer(Modifier.width(8.dp))
+                                    Text(formatTime(item.durationMs), color = Color(0xFF8F9CA6), fontSize = 12.sp)
+                                }
                             }
-                            Text(item.album, color = Color(0xFF8F9CA6), fontSize = 12.sp, modifier = Modifier.width(160.dp), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            Text(formatTime(item.durationMs), color = Color(0xFF8F9CA6), fontSize = 12.sp)
                         }
                     }
             }
