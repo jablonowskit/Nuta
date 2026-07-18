@@ -10,7 +10,6 @@ import androidx.compose.runtime.setValue
 import app.nuta.AppContainer
 import app.nuta.core.logging.LogLevel
 import app.nuta.core.logging.MemoryLogger
-import app.nuta.data.fake.FakeAudioPlayer
 import app.nuta.data.fake.FakeSpotifyRepository
 import app.nuta.core.security.SecretValue
 import app.nuta.spotify.SpotifyWebToken
@@ -32,7 +31,8 @@ class MainActivity : ComponentActivity() {
             val expiry = preferences.getLong("expiresAt", 0L)
             if (expiry > System.currentTimeMillis() + 60_000) SpotifyWebToken(SecretValue.of(value), expiry) else null
         }
-        val audioPlayer = FakeAudioPlayer(scope, logger)
+        val youtubeMediaService = AndroidYouTubeMediaService(logger)
+        val audioPlayer = Media3AudioPlayer(applicationContext, scope, youtubeMediaService, logger)
         setContent {
             var token by remember { mutableStateOf(restoredToken) }
             var showLogin by remember { mutableStateOf(restoredToken == null) }
@@ -50,7 +50,7 @@ class MainActivity : ComponentActivity() {
                     activeToken?.let { SpotifyAndroidRepository(it, logger) } ?: FakeSpotifyRepository(logger)
                 }
                 val container = remember(repository) {
-                    AppContainer(spotifyRepository = repository, audioPlayer = audioPlayer, logger = logger)
+                    AppContainer(spotifyRepository = repository, audioPlayer = audioPlayer, logger = logger, youtubeMediaService = youtubeMediaService)
                 }
                 NutaApp(container, onSpotifyLogin = { showLogin = true })
             }

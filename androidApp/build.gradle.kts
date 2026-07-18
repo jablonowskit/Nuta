@@ -36,4 +36,5 @@ dependencies {
     implementation(compose.foundation)
     implementation(compose.material)
     implementation(libs.serialization.json)
+    implementation(libs.androidx.media3.exoplayer)
 }
