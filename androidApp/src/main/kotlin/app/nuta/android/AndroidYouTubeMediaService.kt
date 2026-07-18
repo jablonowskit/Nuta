@@ -29,7 +29,12 @@ class AndroidYouTubeMediaService(private val logger: NutaLogger) : YouTubeMediaS
         val matches = search(track)
         val selected = matches.firstOrNull() ?: error("YouTube nie zwrócił kandydatów")
         val stream = resolveStream(selected.candidate.videoId)
-        logger.info("AndroidYouTube", "stream_resolved", "Wybrano strumień audio YouTube", fields = mapOf("codec" to stream.codec, "score" to selected.score.toString()))
+        logger.info("AndroidYouTube", "stream_resolved", "Wybrano strumień audio YouTube", fields = mapOf(
+            "codec" to stream.codec,
+            "mimeType" to stream.mimeType,
+            "bitrate" to stream.bitrate.toString(),
+            "score" to selected.score.toString(),
+        ))
         return YouTubeResolution(selected, matches.drop(1), stream)
     }
 
@@ -86,7 +91,12 @@ class AndroidYouTubeMediaService(private val logger: NutaLogger) : YouTubeMediaS
             last = root["playabilityStatus"]?.jsonObject?.get("status")?.jsonPrimitive?.contentOrNull ?: "UNKNOWN"
             if (last != "OK") continue
             val formats = root["streamingData"]?.jsonObject?.get("adaptiveFormats") as? JsonArray ?: continue
-            return formats.mapNotNull { format(it.jsonObject) }.maxWithOrNull(compareBy<AudioStreamSource>({ if (it.codec.contains("opus", true)) 1 else 0 }, AudioStreamSource::bitrate))
+            // AAC in an MP4 container is decoded more reliably than WebM/Opus by
+            // Android emulators and is hardware accelerated on physical phones.
+            return formats.mapNotNull { format(it.jsonObject) }.maxWithOrNull(compareBy<AudioStreamSource>(
+                { if (it.codec.contains("mp4a", true) || it.codec.contains("aac", true)) 1 else 0 },
+                AudioStreamSource::bitrate,
+            ))
                 ?: error("Brak bezpośredniego audio YouTube")
         }
         error("YouTube playability: $last")
