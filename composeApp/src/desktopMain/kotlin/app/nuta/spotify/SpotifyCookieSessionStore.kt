@@ -39,7 +39,12 @@ class SpotifyCookieSessionStore(private val logger: MemoryLogger) {
                 val host = domain.removePrefix(".")
                 if (host.endsWith("spotify.com") && manager.setCookie("https://$host$path", cookie)) restored++
             }
-            logger.info("SpotifySession", "cookie_restore_completed", "Odtworzono cookies Spotify", fields = mapOf("count" to restored.toString()))
+            logger.info(
+                "SpotifySession",
+                "cookie_restore_completed",
+                "Odtworzono cookies Spotify",
+                fields = mapOf("count" to restored.toString(), "domains" to root.map { it.jsonObject.string("domain") }.distinct().joinToString(",").take(300)),
+            )
             restored
         }.onFailure { error ->
             logger.error("SpotifySession", "cookie_restore_failed", "Nie udało się odtworzyć cookies Spotify", throwable = error)
@@ -61,7 +66,17 @@ class SpotifyCookieSessionStore(private val logger: MemoryLogger) {
         Files.writeString(temporary, json, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING)
         setOwnerOnly(temporary)
         Files.move(temporary, dataFile, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
-        logger.info("SpotifySession", "cookie_store_saved", "Zapisano testowy magazyn cookies Spotify", fields = mapOf("count" to cookies.size.toString(), "encrypted" to "false"))
+        logger.info(
+            "SpotifySession",
+            "cookie_store_saved",
+            "Zapisano testowy magazyn cookies Spotify",
+            fields = mapOf(
+                "count" to cookies.size.toString(),
+                "encrypted" to "false",
+                "names" to cookies.map { it.name }.distinct().joinToString(",").take(500),
+                "domains" to cookies.map { it.domain }.distinct().joinToString(",").take(300),
+            ),
+        )
         return cookies.size
     }
 

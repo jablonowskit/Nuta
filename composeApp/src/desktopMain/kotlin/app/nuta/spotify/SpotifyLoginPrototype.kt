@@ -178,6 +178,16 @@ private fun SpotifyWebView(
     LaunchedEffect(state.lastLoadedUrl) {
         val url = state.lastLoadedUrl ?: return@LaunchedEffect
         val uri = runCatching { URI(url) }.getOrNull()
+        logger.debug(
+            "SpotifyLogin",
+            "navigation_observed",
+            "Zaobserwowano nawigację WebView",
+            fields = mapOf(
+                "host" to (uri?.host ?: "invalid"),
+                "path" to (uri?.path ?: ""),
+                "hasQuery" to (!uri?.query.isNullOrBlank()).toString(),
+            ),
+        )
         val allowed = runCatching {
             val host = uri?.host?.lowercase() ?: return@runCatching false
             host == "spotify.com" || host.endsWith(".spotify.com") || host == "spotifycdn.com" || host.endsWith(".spotifycdn.com")
@@ -212,8 +222,10 @@ private fun SpotifyWebView(
                         }
                         return new Uint8Array(output);
                       };
-                      const serverTime = (await (await fetch('/api/server-time')).json()).serverTime;
-                      const gist = await (await fetch('https://api.github.com/gists/22ed9c6ba463899e933427f7de1f0eef')).json();
+                      const serverTimeResponse = await fetch('/api/server-time', { credentials: 'include' });
+                      const serverTime = (await serverTimeResponse.json()).serverTime;
+                      const gistResponse = await fetch('https://api.github.com/gists/22ed9c6ba463899e933427f7de1f0eef');
+                      const gist = await gistResponse.json();
                       const nuances = JSON.parse(gist.files['nuances.json'].content);
                       const nuance = nuances.reduce((latest, item) => item.v > latest.v ? item : latest);
                       const counter = new ArrayBuffer(8);
@@ -227,10 +239,16 @@ private fun SpotifyWebView(
                       const response = await fetch('/api/token?' + params, { credentials: 'include' });
                         const payload = await response.json();
                         const result = JSON.stringify({
+                          serverTimeStatus: serverTimeResponse.status,
+                          gistStatus: gistResponse.status,
                           status: response.status,
+                          responseKeys: Object.keys(payload),
                           accessToken: payload.accessToken || '',
+                          accessTokenLength: (payload.accessToken || '').length,
                           expiresAt: payload.accessTokenExpirationTimestampMs || 0,
-                          isAnonymous: payload.isAnonymous === true
+                          isAnonymous: payload.isAnonymous === true,
+                          cookieNames: document.cookie.split(';').map(value => value.trim().split('=')[0]).filter(Boolean),
+                          userAgent: navigator.userAgent
                         });
                         window.__nutaTokenResult = btoa(unescape(encodeURIComponent(result)));
                     })().catch(() => { window.__nutaTokenResult = 'ERROR'; });
@@ -246,6 +264,22 @@ private fun SpotifyWebView(
                 val value = root["accessToken"]?.jsonPrimitive?.contentOrNull.orEmpty()
                 val expiresAt = root["expiresAt"]?.jsonPrimitive?.content?.toLongOrNull() ?: 0L
                 val isAnonymous = root["isAnonymous"]?.jsonPrimitive?.content?.toBooleanStrictOrNull() ?: true
+                logger.info(
+                    "SpotifyLogin",
+                    "web_token_diagnostics",
+                    "Odebrano diagnostykę żądania tokenu Web Playera",
+                    fields = mapOf(
+                        "serverTimeStatus" to (root["serverTimeStatus"]?.jsonPrimitive?.content ?: "unknown"),
+                        "gistStatus" to (root["gistStatus"]?.jsonPrimitive?.content ?: "unknown"),
+                        "tokenStatus" to statusCode.toString(),
+                        "responseKeys" to (root["responseKeys"]?.toString() ?: "[]").take(500),
+                        "accessTokenLength" to (root["accessTokenLength"]?.jsonPrimitive?.content ?: "0"),
+                        "expiresAtPresent" to (expiresAt > 0L).toString(),
+                        "isAnonymous" to isAnonymous.toString(),
+                        "cookieNames" to (root["cookieNames"]?.toString() ?: "[]").take(500),
+                        "userAgent" to (root["userAgent"]?.jsonPrimitive?.content ?: "unknown").take(300),
+                    ),
+                )
                 if (isAnonymous) {
                     tokenRequestStarted = false
                     status = "Zaloguj się na stronie Spotify"
