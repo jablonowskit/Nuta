@@ -2,7 +2,9 @@ FROM ghcr.io/cirruslabs/android-sdk:36 AS android-builder
 
 WORKDIR /workspace
 COPY . .
-RUN --mount=type=cache,target=/root/.gradle chmod +x gradlew \
+RUN --mount=type=cache,target=/root/.gradle \
+    --mount=type=cache,target=/root/.android \
+    chmod +x gradlew \
     && ./gradlew --no-daemon :androidApp:assembleDebug
 
 FROM gradle:9.6.1-jdk25 AS builder
