@@ -1,0 +1,100 @@
+package app.nuta.android
+
+import android.content.Context
+import androidx.media3.common.MediaItem
+import androidx.media3.common.PlaybackException
+import androidx.media3.common.Player
+import androidx.media3.datasource.DefaultHttpDataSource
+import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import app.nuta.core.logging.NutaLogger
+import app.nuta.core.models.PlayerState
+import app.nuta.core.models.PlayerStatus
+import app.nuta.core.models.Track
+import app.nuta.domain.AudioPlayer
+import app.nuta.youtube.YouTubeMediaService
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
+
+class Media3AudioPlayer(
+    context: Context,
+    private val scope: CoroutineScope,
+    private val youtube: YouTubeMediaService,
+    private val logger: NutaLogger,
+) : AudioPlayer {
+    private val stateFlow = MutableStateFlow(PlayerState())
+    override val state: StateFlow<PlayerState> = stateFlow.asStateFlow()
+    private val loadMutex = Mutex()
+    private var ticker: Job? = null
+    private val player = ExoPlayer.Builder(context)
+        .setMediaSourceFactory(DefaultMediaSourceFactory(DefaultHttpDataSource.Factory().setUserAgent(USER_AGENT).setAllowCrossProtocolRedirects(true)))
+        .build()
+
+    init {
+        player.addListener(object : Player.Listener {
+            override fun onPlaybackStateChanged(playbackState: Int) {
+                when (playbackState) {
+                    Player.STATE_READY -> if (player.playWhenReady) stateFlow.value = stateFlow.value.copy(status = PlayerStatus.PLAYING)
+                    Player.STATE_ENDED -> scope.launch { advanceAfterEnd() }
+                    Player.STATE_BUFFERING -> if (stateFlow.value.currentTrack != null) stateFlow.value = stateFlow.value.copy(status = PlayerStatus.LOADING)
+                }
+            }
+            override fun onIsPlayingChanged(isPlaying: Boolean) {
+                if (isPlaying) { stateFlow.value = stateFlow.value.copy(status = PlayerStatus.PLAYING); startTicker() }
+                else if (player.playbackState == Player.STATE_READY && stateFlow.value.status == PlayerStatus.PLAYING) stateFlow.value = stateFlow.value.copy(status = PlayerStatus.PAUSED)
+            }
+            override fun onPlayerError(error: PlaybackException) {
+                stateFlow.value = stateFlow.value.copy(status = PlayerStatus.ERROR, errorMessage = error.errorCodeName)
+                logger.error("Media3Player", "playback_failed", "Media3 zgłosił błąd odtwarzania", throwable = error)
+            }
+        })
+        scope.coroutineContext[Job]?.invokeOnCompletion { player.release() }
+    }
+
+    override suspend fun setQueue(tracks: List<Track>, startIndex: Int) {
+        require(startIndex in tracks.indices || tracks.isEmpty())
+        withContext(Dispatchers.Main) { player.stop(); player.clearMediaItems() }
+        stateFlow.value = PlayerState(queue = tracks, currentIndex = if (tracks.isEmpty()) -1 else startIndex)
+    }
+    override suspend fun appendToQueue(tracks: List<Track>) { if (tracks.isNotEmpty()) stateFlow.value = stateFlow.value.copy(queue = stateFlow.value.queue + tracks) }
+
+    override suspend fun play() {
+        val track = stateFlow.value.currentTrack ?: return
+        if (stateFlow.value.status == PlayerStatus.PAUSED) { withContext(Dispatchers.Main) { player.play() }; return }
+        loadMutex.withLock {
+            stateFlow.value = stateFlow.value.copy(status = PlayerStatus.LOADING, positionMs = 0, errorMessage = null)
+            runCatching { youtube.resolve(track) }.onSuccess { resolution ->
+                val url = resolution.stream.url.use { it }
+                withContext(Dispatchers.Main) {
+                    player.setMediaItem(MediaItem.fromUri(url)); player.prepare(); player.play()
+                }
+                logger.info("Media3Player", "playback_prepared", "Przekazano strumień YouTube do Media3", fields = mapOf("codec" to resolution.stream.codec))
+            }.onFailure { error ->
+                stateFlow.value = stateFlow.value.copy(status = PlayerStatus.ERROR, errorMessage = error.message)
+                logger.error("Media3Player", "resolution_failed", "Nie udało się przygotować strumienia YouTube", throwable = error)
+            }
+        }
+    }
+    override suspend fun pause() = withContext(Dispatchers.Main) { player.pause() }
+    override suspend fun stop() { ticker?.cancel(); withContext(Dispatchers.Main) { player.stop() }; stateFlow.value = stateFlow.value.copy(status = PlayerStatus.IDLE, positionMs = 0) }
+    override suspend fun seekTo(positionMs: Long) { withContext(Dispatchers.Main) { player.seekTo(positionMs.coerceIn(0, stateFlow.value.durationMs)) } }
+    override suspend fun next() = move(stateFlow.value.currentIndex + 1)
+    override suspend fun previous() = move(stateFlow.value.currentIndex - 1)
+    override suspend fun playAt(index: Int) = move(index)
+    override suspend fun simulateError() { stateFlow.value = stateFlow.value.copy(status = PlayerStatus.ERROR, errorMessage = "Symulowany błąd") }
+
+    private suspend fun move(index: Int) { if (index !in stateFlow.value.queue.indices) return; withContext(Dispatchers.Main) { player.stop() }; stateFlow.value = stateFlow.value.copy(currentIndex = index, status = PlayerStatus.IDLE, positionMs = 0, errorMessage = null); play() }
+    private suspend fun advanceAfterEnd() { val next = stateFlow.value.currentIndex + 1; if (next in stateFlow.value.queue.indices) move(next) else stateFlow.value = stateFlow.value.copy(status = PlayerStatus.ENDED) }
+    private fun startTicker() { ticker?.cancel(); ticker = scope.launch { while (isActive) { delay(500); val position = withContext(Dispatchers.Main) { player.currentPosition }; stateFlow.value = stateFlow.value.copy(positionMs = position.coerceAtLeast(0)) } } }
+    companion object { private const val USER_AGENT = "Mozilla/5.0 (Linux; Android 15) AppleWebKit/537.36 Chrome/128.0 Mobile Safari/537.36" }
+}

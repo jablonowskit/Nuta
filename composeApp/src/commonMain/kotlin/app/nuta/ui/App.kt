@@ -239,7 +239,7 @@ fun NutaApp(container: AppContainer, onSpotifyLogin: (() -> Unit)? = null) {
                     loadError = null
                 }
                 if (compact) {
-                    CompactPlayerBar(playerState, container, openQueue)
+                    CompactPlayerBar(playerState, container, similarModeActive, { similarModeActive = it }, openQueue)
                     BottomNavigation(destination) {
                         destination = it
                         selectedPlaylist = null
@@ -604,11 +604,13 @@ private fun LogRow(item: LogEvent) {
 }
 
 @Composable
-private fun CompactPlayerBar(state: PlayerState, container: AppContainer, onOpenQueue: () -> Unit) {
+private fun CompactPlayerBar(state: PlayerState, container: AppContainer, similarModeActive: Boolean, onSimilarModeChange: (Boolean) -> Unit, onOpenQueue: () -> Unit) {
     val scope = rememberCoroutineScope()
     val track = state.currentTrack
+    var radioLoading by remember { mutableStateOf(false) }
+    Column(Modifier.fillMaxWidth().height(116.dp).background(Color(0xFF131A20)).padding(horizontal = 10.dp, vertical = 5.dp)) {
     Row(
-        Modifier.fillMaxWidth().height(76.dp).background(Color(0xFF131A20)).padding(horizontal = 10.dp),
+        Modifier.fillMaxWidth().weight(1f),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(Modifier.size(46.dp).clickable { onOpenQueue() }) { Cover(track?.title ?: "N") }
@@ -620,6 +622,35 @@ private fun CompactPlayerBar(state: PlayerState, container: AppContainer, onOpen
         Text("◀", modifier = Modifier.clickable(enabled = track != null) { scope.launch { container.audioPlayer.previous() } }.padding(10.dp), color = if (track != null) Color.White else Color(0xFF55616A))
         Text(if (state.status == PlayerStatus.PLAYING) "Ⅱ" else "▶", modifier = Modifier.clickable(enabled = track != null) { scope.launch { if (state.status == PlayerStatus.PLAYING) container.audioPlayer.pause() else container.audioPlayer.play() } }.padding(12.dp), color = MaterialTheme.colors.primary, fontSize = 18.sp)
         Text("▶", modifier = Modifier.clickable(enabled = track != null) { scope.launch { container.audioPlayer.next() } }.padding(10.dp), color = if (track != null) Color.White else Color(0xFF55616A))
+    }
+    Row(Modifier.fillMaxWidth().height(38.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(formatTime(state.positionMs), color = Color(0xFF8D9BA6), fontSize = 10.sp)
+        Slider(
+            value = if (state.durationMs > 0) state.positionMs.coerceAtMost(state.durationMs).toFloat() else 0f,
+            onValueChange = { scope.launch { container.audioPlayer.seekTo(it.toLong()) } },
+            valueRange = 0f..state.durationMs.coerceAtLeast(1).toFloat(), enabled = track != null,
+            modifier = Modifier.weight(1f).padding(horizontal = 5.dp),
+        )
+        Text(formatTime(state.durationMs), color = Color(0xFF8D9BA6), fontSize = 10.sp)
+        Text(
+            if (radioLoading) "…" else "♬+",
+            color = if (similarModeActive) Color.White else MaterialTheme.colors.primary,
+            modifier = Modifier.padding(start = 8.dp).background(if (similarModeActive) Color(0xFF2F6B45) else Color.Transparent, RoundedCornerShape(6.dp))
+                .clickable(enabled = track != null && !radioLoading) {
+                    if (similarModeActive) onSimilarModeChange(false) else track?.let { seed ->
+                        scope.launch {
+                            radioLoading = true
+                            runCatching { container.spotifyRepository.getTrackRadio(seed) }.onSuccess { recommendations ->
+                                container.audioPlayer.setQueue((listOf(seed) + recommendations).distinctBy(Track::id))
+                                container.audioPlayer.play(); onSimilarModeChange(true); onOpenQueue()
+                            }
+                            radioLoading = false
+                        }
+                    }
+                }.padding(horizontal = 10.dp, vertical = 6.dp),
+            fontWeight = FontWeight.Bold,
+        )
+    }
     }
 }
 
