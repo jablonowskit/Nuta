@@ -867,7 +867,8 @@ private fun CompactPlayerBar(
         Row(Modifier.align(Alignment.Center), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
             Text("⏮", modifier = Modifier.clickable(enabled = track != null) { scope.launch { container.audioPlayer.previous() } }.padding(6.dp), color = if (track != null) Color.White else Color(0xFF55616A), fontWeight = FontWeight.Bold)
             Text("◀◀", modifier = Modifier.clickable(enabled = track != null) { scope.launch { container.audioPlayer.seekTo((state.positionMs - 10_000).coerceAtLeast(0)) } }.padding(6.dp), color = if (track != null) Color.White else Color(0xFF55616A), fontSize = 12.sp, fontWeight = FontWeight.Bold)
-            Text(if (state.status == PlayerStatus.PLAYING) "Ⅱ" else "▶", modifier = Modifier.clickable(enabled = track != null) { scope.launch { if (state.status == PlayerStatus.PLAYING) container.audioPlayer.pause() else container.audioPlayer.play() } }.padding(8.dp), color = MaterialTheme.colors.primary, fontSize = 18.sp)
+            if (state.status == PlayerStatus.LOADING) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = MaterialTheme.colors.primary)
+            else Text(if (state.status == PlayerStatus.PLAYING) "Ⅱ" else "▶", modifier = Modifier.clickable(enabled = track != null) { scope.launch { if (state.status == PlayerStatus.PLAYING) container.audioPlayer.pause() else container.audioPlayer.play() } }.padding(8.dp), color = MaterialTheme.colors.primary, fontSize = 18.sp)
             Text("▶▶", modifier = Modifier.clickable(enabled = track != null) { scope.launch { container.audioPlayer.seekTo((state.positionMs + 10_000).coerceAtMost(state.durationMs)) } }.padding(6.dp), color = if (track != null) Color.White else Color(0xFF55616A), fontSize = 12.sp, fontWeight = FontWeight.Bold)
             Text("⏭", modifier = Modifier.clickable(enabled = track != null) { scope.launch { container.audioPlayer.next() } }.padding(6.dp), color = if (track != null) Color.White else Color(0xFF55616A), fontWeight = FontWeight.Bold)
             Text(
@@ -965,8 +966,9 @@ private fun PlayerBar(
         Spacer(Modifier.width(14.dp))
         OutlinedButton(onClick = { scope.launch { container.audioPlayer.previous() } }, enabled = track != null, modifier = Modifier.size(42.dp), contentPadding = PaddingValues(0.dp)) { Text("⏮") }
         Spacer(Modifier.width(6.dp))
-        Button(onClick = { scope.launch { if (state.status == PlayerStatus.PLAYING) container.audioPlayer.pause() else container.audioPlayer.play() } }, enabled = track != null, modifier = Modifier.size(42.dp), contentPadding = PaddingValues(0.dp)) {
-            Text(if (state.status == PlayerStatus.PLAYING) "⏸" else "▶")
+        Button(onClick = { scope.launch { if (state.status == PlayerStatus.PLAYING) container.audioPlayer.pause() else container.audioPlayer.play() } }, enabled = track != null && state.status != PlayerStatus.LOADING, modifier = Modifier.size(42.dp), contentPadding = PaddingValues(0.dp)) {
+            if (state.status == PlayerStatus.LOADING) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = MaterialTheme.colors.onPrimary)
+            else Text(if (state.status == PlayerStatus.PLAYING) "⏸" else "▶")
         }
         Spacer(Modifier.width(6.dp))
         OutlinedButton(onClick = { scope.launch { container.audioPlayer.stop() } }, enabled = track != null && state.status != PlayerStatus.IDLE, modifier = Modifier.size(42.dp), contentPadding = PaddingValues(0.dp)) { Text("⏹") }
@@ -1036,7 +1038,17 @@ private fun PlayerBar(
         )
         Text(formatTime(state.durationMs), color = Color(0xFF8D9BA6), fontSize = 11.sp)
         Spacer(Modifier.width(14.dp))
-        Text(state.status.name.lowercase(), color = if (state.status == PlayerStatus.ERROR) Color(0xFFFF7B7B) else MaterialTheme.colors.primary, fontSize = 11.sp)
+        Text(
+            when (state.status) {
+                PlayerStatus.LOADING -> "buforowanie…"
+                PlayerStatus.PLAYING -> "odtwarzanie"
+                PlayerStatus.PAUSED -> "pauza"
+                PlayerStatus.ERROR -> "błąd"
+                else -> state.status.name.lowercase()
+            },
+            color = if (state.status == PlayerStatus.ERROR) Color(0xFFFF7B7B) else MaterialTheme.colors.primary,
+            fontSize = 11.sp,
+        )
         radioMessage?.let {
             Spacer(Modifier.width(8.dp))
             Text(it, color = if (it.startsWith("Nie udało")) Color(0xFFFF7B7B) else Color(0xFF8FE9AD), fontSize = 11.sp, maxLines = 1)
