@@ -583,6 +583,8 @@ Docker domyślnie przechowuje profil logowania Spotify w nazwanym wolumenie `nut
 
 Projekt jest kompilowany i testowany wyłącznie w Dockerze. Nie uruchamiamy `gradlew`, `gradlew.bat`, Javy, testów ani aplikacji bezpośrednio na hoście. Do budowy używamy `scripts/build.ps1`, a do uruchamiania `scripts/run.ps1`. Host służy do edycji plików i sterowania Dockerem; zależności projektu nie są na nim instalowane.
 
+Android również budujemy wyłącznie w Dockerze: `scripts/build-android.ps1`. Gotowe APK trafia domyślnie do `artifacts/android/Nuta-debug.apk`. Wdrożenie na działający emulator lub telefon wykonuje `scripts/deploy-android.ps1`; parametr `-Build` najpierw uruchamia budowę. Skrypt używa `adb install -r`, zachowuje dane i sesję Spotify oraz celowo nie odinstalowuje aplikacji automatycznie po błędzie podpisu.
+
 Przy starcie Nuta automatycznie sprawdza sesję Spotify zapisaną w wolumenie `nuta-session`. WebView zaczyna od `open.spotify.com` i pokazuje pełne logowanie dopiero wtedy, gdy Spotify zwróci sesję anonimową. Token dostępu pozostaje tylko w pamięci procesu; na dysku utrwalany jest profil WebView z cookies.
 
 Ponieważ profil JCEF nie odtwarza niezawodnie sesyjnych cookies między kontenerami, testowa wersja Nuta posiada dodatkowy `SpotifyCookieSessionStore`. Cookies domen Spotify są eksportowane przez API JCEF i zapisywane jako zwykły JSON z uprawnieniami właściciela w wolumenie `nuta-session`. Przed pierwszą nawigacją są przywracane do JCEF. W logach nie zapisujemy nazw ani wartości cookies. To rozwiązanie jest wyłącznie do testów i przed wydaniem produkcyjnym musi zostać zastąpione bezpiecznym magazynem systemowym.
