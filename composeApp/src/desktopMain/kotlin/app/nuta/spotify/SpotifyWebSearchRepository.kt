@@ -197,6 +197,7 @@ class SpotifyWebSearchRepository(
                 },
                 album = item["albumOfTrack"]?.jsonObject?.get("name")?.jsonPrimitive?.contentOrNull.orEmpty(),
                 durationMs = durationMs,
+                imageUrl = spotifyImageUrl(item["albumOfTrack"] ?: item),
             )
         }.distinctBy(Track::id).take(10)
     }
@@ -208,7 +209,7 @@ class SpotifyWebSearchRepository(
             val current = if (uri?.startsWith("spotify:playlist:") == true) {
                 val name = element["name"]?.jsonPrimitive?.contentOrNull
                     ?: element["title"]?.jsonObject?.get("transformedLabel")?.jsonPrimitive?.contentOrNull
-                name?.let { Playlist(uri.substringAfterLast(':'), it, playlistDescription(element), emptyList()) }
+                name?.let { Playlist(uri.substringAfterLast(':'), it, playlistDescription(element), emptyList(), spotifyImageUrl(element)) }
             } else null
             listOfNotNull(current) + element.values.flatMap(::collectPlaylists)
         }
@@ -245,7 +246,19 @@ class SpotifyWebSearchRepository(
             uri.substringAfterLast(':'), title, artists,
             item["albumOfTrack"]?.jsonObject?.get("name")?.jsonPrimitive?.contentOrNull.orEmpty(),
             durationMs,
+            spotifyImageUrl(item["albumOfTrack"] ?: item),
         )
+    }
+
+    private fun spotifyImageUrl(element: kotlinx.serialization.json.JsonElement): String? = when (element) {
+        is JsonPrimitive -> element.contentOrNull?.takeIf { it.startsWith("https://") && ("scdn.co" in it || "spotifycdn" in it) }
+        is JsonArray -> element.firstNotNullOfOrNull(::spotifyImageUrl)
+        is JsonObject -> {
+            val priority = listOf("sources", "images", "coverArt", "image")
+            priority.firstNotNullOfOrNull { key -> element[key]?.let(::spotifyImageUrl) }
+                ?: element.values.firstNotNullOfOrNull(::spotifyImageUrl)
+        }
+        else -> null
     }
 
     private fun mapLibraryTrack(element: kotlinx.serialization.json.JsonElement): Track? {

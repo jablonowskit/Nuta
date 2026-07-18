@@ -18,6 +18,7 @@ interface AudioPlayer {
     val state: StateFlow<PlayerState>
     suspend fun setQueue(tracks: List<Track>, startIndex: Int = 0)
     suspend fun appendToQueue(tracks: List<Track>)
+    suspend fun shuffleUpcoming()
     suspend fun play()
     suspend fun pause()
     suspend fun stop()

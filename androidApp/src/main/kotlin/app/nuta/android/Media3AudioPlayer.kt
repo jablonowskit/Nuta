@@ -72,6 +72,12 @@ class Media3AudioPlayer(
         stateFlow.value = PlayerState(queue = tracks, currentIndex = if (tracks.isEmpty()) -1 else startIndex)
     }
     override suspend fun appendToQueue(tracks: List<Track>) { if (tracks.isNotEmpty()) stateFlow.value = stateFlow.value.copy(queue = stateFlow.value.queue + tracks) }
+    override suspend fun shuffleUpcoming() {
+        val state = stateFlow.value
+        if (state.currentIndex !in state.queue.indices) return
+        stateFlow.value = state.copy(queue = state.queue.take(state.currentIndex + 1) + state.queue.drop(state.currentIndex + 1).shuffled())
+        logger.info("Media3Player", "queue_shuffled", "Przetasowano pozostałe utwory kolejki")
+    }
 
     override suspend fun play() {
         val track = stateFlow.value.currentTrack ?: return
