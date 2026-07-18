@@ -273,48 +273,40 @@ Plugin nadal loguje przez WebView. Dlatego może mieć te same problemy z reCAPT
 
 ## Wnioski dla Nuta
 
-Nie należy kopiować pluginu 1:1 bez świadomej decyzji. Możliwe kierunki są dwa:
+DECYZJA PROJEKTU (2026-07-18): **OAuth jest wykluczony.** Celem jest parytet ze
+Spotube. Poniżej pozostawiono OAuth wyłącznie jako odrzucony kontekst.
 
-### Kierunek A — oficjalny OAuth PKCE
+### Kierunek A — oficjalny OAuth PKCE (ODRZUCONY decyzją projektu)
 
-```text
-systemowa przeglądarka
-    ↓
-Spotify OAuth Authorization Code + PKCE
-    ↓
-localhost callback
-    ↓
-access token Web API
-```
+Oficjalny OAuth Authorization Code + PKCE w przeglądarce systemowej byłby
+publicznym, wspieranym mechanizmem, ale **nie jest brany pod uwagę** — wymagałby
+przepisania klienta na publiczne Web API i rezygnacji z prywatnego GraphQL.
+Zostawione tu tylko po to, żeby kolejny LLM nie proponował tego ponownie.
 
-Zalety:
+### Kierunek B — zgodność z pluginem Spotube (WYBRANY)
 
-- publiczny i wspierany mechanizm,
-- brak odczytywania `sp_dc`,
-- brak prywatnego TOTP,
-- brak zależności od `/api/token` Web Playera.
+To jest docelowy kierunek. Trzeba zaimplementować:
 
-Wady:
+- **WebView2 / Edge jako silnik logowania na Windows** (a NIE JCEF) — to jest
+  element, który realnie odblokowuje challenge Spotify; wymaga natywnego mostu
+  Windows (JNI/COM). Sam protokół Spotify jest identyczny jak w obecnej Nuta,
+  więc różnicę robi silnik/profil przeglądarki, nie protokół,
+- webview TYLKO do logowania,
+- wykrywanie zakończenia logowania (ścieżka `/status`),
+- odczyt `sp_dc` (i `sp_t`) z cookies webview,
+- `/api/token` wywoływany **poza** webview kotlinowym `HttpClient`
+  (sp_dc + User-Agent + TOTP z Gista + czas serwera),
+- prywatne GraphQL (jak teraz),
+- odświeżanie tokenu na timerze przed wygaśnięciem.
 
-- trzeba przepisać klienta Spotify na publiczne Web API,
-- nie wszystkie dane używane przez obecny prywatny GraphQL będą dostępne identycznie.
-
-### Kierunek B — zgodność z pluginem Spotube
-
-Trzeba zaimplementować:
-
-- WebView z obsługą cookies,
-- wykrywanie zakończenia logowania,
-- odczyt `sp_dc` i `sp_t`,
-- pobieranie czasu serwera Spotify,
-- generowanie TOTP,
-- pobieranie wersji i sekretu TOTP,
-- prywatny `/api/token`,
-- prywatne GraphQL,
-- odświeżanie tokenu.
-
-Ten kierunek może szybciej zadziałać, ale ma wysokie ryzyko awarii, problemy z reCAPTCHA i większe ryzyko bezpieczeństwa. W Nuta nie wolno logować cookies, TOTP ani tokenów, a dane sesyjne powinny być przechowywane w magazynie platformowym lub szyfrowane.
+Uwaga bezpieczeństwa: w Nuta NIE wolno logować cookies, TOTP ani tokenów (błąd,
+który plugin Spotube popełnia w `getToken`), a dane sesyjne powinny trafiać do
+magazynu platformowego lub być szyfrowane.
 
 ## Rekomendacja
 
-Docelowo preferować OAuth PKCE. Mechanizm Spotube można traktować wyłącznie jako materiał referencyjny do zrozumienia obecnego prywatnego przepływu Spotify, nie jako bezpieczny kontrakt API.
+Realizować **Kierunek B (parytet Spotube)** zgodnie z decyzją projektu. Sedno to
+zamiana silnika logowania JCEF → WebView2/Edge plus odwrócenie flow (token liczony
+poza webview). OAuth pozostaje wykluczony. Szczegóły diagnozy, dlaczego JCEF jest
+odrzucany po stronie serwera, są w `docs/LLM_HANDOFF.md`
+(sekcja „ROZSTRZYGNIĘCIE — dowód wizualny z 2026-07-18").

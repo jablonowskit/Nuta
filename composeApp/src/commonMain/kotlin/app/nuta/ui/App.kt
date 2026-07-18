@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.WindowInsets
@@ -26,6 +27,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.Button
 import androidx.compose.material.ButtonDefaults
 import androidx.compose.material.Card
+import androidx.compose.material.Checkbox
 import androidx.compose.material.CircularProgressIndicator
 import androidx.compose.material.Divider
 import androidx.compose.material.MaterialTheme
@@ -42,6 +44,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -60,6 +63,7 @@ import app.nuta.core.models.Playlist
 import app.nuta.core.models.SearchResult
 import app.nuta.core.models.Track
 import app.nuta.settings.BufferSize
+import app.nuta.settings.LoudnessNormalization
 import app.nuta.settings.CodecPreference
 import app.nuta.settings.StreamQuality
 import kotlinx.coroutines.launch
@@ -82,6 +86,9 @@ private data class SearchViewState(
     val error: String? = null,
     val lastExecutedQuery: String = "",
     val youtubeStatus: String? = null,
+    val searchTracks: Boolean = true,
+    val searchArtists: Boolean = true,
+    val searchPlaylists: Boolean = true,
 )
 
 @Composable
@@ -117,6 +124,7 @@ fun NutaApp(container: AppContainer, onSpotifyLogin: (() -> Unit)? = null) {
         var destination by remember { mutableStateOf(Destination.HOME) }
         var selectedPlaylist by remember { mutableStateOf<Playlist?>(null) }
         var playlists by remember { mutableStateOf<List<Playlist>>(emptyList()) }
+        var savedPlaylists by remember { mutableStateOf<List<Playlist>>(emptyList()) }
         var loading by remember { mutableStateOf(true) }
         var loadError by remember { mutableStateOf<String?>(null) }
         var searchState by remember { mutableStateOf(SearchViewState()) }
@@ -126,7 +134,10 @@ fun NutaApp(container: AppContainer, onSpotifyLogin: (() -> Unit)? = null) {
         var likedError by remember { mutableStateOf<String?>(null) }
         var similarModeActive by remember { mutableStateOf(false) }
         var similarModeLoading by remember { mutableStateOf(false) }
+        var currentTrackLiked by remember { mutableStateOf(false) }
+        var favoriteLoading by remember { mutableStateOf(false) }
         val scope = rememberCoroutineScope()
+        val displayedTrackLiked = currentTrackLiked || playerState.currentTrack?.id?.let { id -> likedTracks.any { it.id == id } } == true
 
         fun selectPlaylist(playlist: Playlist) {
             scope.launch {
@@ -153,6 +164,12 @@ fun NutaApp(container: AppContainer, onSpotifyLogin: (() -> Unit)? = null) {
             runCatching { container.spotifyRepository.getPlaylists() }
                 .onSuccess { playlists = it }
                 .onFailure { loadError = it.message }
+            runCatching { container.spotifyRepository.getSavedPlaylists() }
+                .onSuccess { savedPlaylists = it }
+                .onFailure {
+                    loadError = "Nie udało się pobrać zapisanych playlist Spotify: ${it.message ?: "nieznany błąd"}"
+                    container.logger.warn("SpotifyLibrary", "saved_playlists_failed", "Nie udało się pobrać zapisanych playlist", fields = mapOf("reason" to (it.message ?: "unknown")))
+                }
             loading = false
         }
 
@@ -182,7 +199,7 @@ fun NutaApp(container: AppContainer, onSpotifyLogin: (() -> Unit)? = null) {
         }
 
         LaunchedEffect(destination, container.spotifyRepository) {
-            if (destination != Destination.LIKED || likedLoaded || likedLoading) return@LaunchedEffect
+            if (destination != Destination.PLAYLISTS && destination != Destination.LIKED || likedLoaded || likedLoading) return@LaunchedEffect
             likedLoading = true
             likedError = null
             runCatching { container.spotifyRepository.getLikedTracks() }
@@ -192,6 +209,51 @@ fun NutaApp(container: AppContainer, onSpotifyLogin: (() -> Unit)? = null) {
                 }
                 .onFailure { likedError = it.message ?: "Nie udało się pobrać ulubionych" }
             likedLoading = false
+        }
+
+        LaunchedEffect(playerState.currentTrack?.id, container.spotifyRepository) {
+            val trackId = playerState.currentTrack?.id
+            currentTrackLiked = false
+            if (trackId == null) return@LaunchedEffect
+            favoriteLoading = true
+            runCatching { container.spotifyRepository.isTrackLiked(trackId) }
+                .onSuccess { liked ->
+                    if (playerState.currentTrack?.id == trackId) currentTrackLiked = liked
+                }
+                .onFailure { error ->
+                    container.logger.warn(
+                        "SpotifyLiked", "liked_status_failed", "Nie udało się sprawdzić, czy utwór jest w ulubionych",
+                        fields = mapOf("reason" to (error::class.simpleName ?: "unknown")),
+                    )
+                }
+            if (playerState.currentTrack?.id == trackId) favoriteLoading = false
+        }
+
+        val toggleCurrentTrackLiked = {
+            val track = playerState.currentTrack
+            if (track != null && !favoriteLoading) {
+                val targetLiked = !currentTrackLiked
+                scope.launch {
+                    favoriteLoading = true
+                    runCatching { container.spotifyRepository.setTrackLiked(track.id, targetLiked) }
+                        .onSuccess {
+                            if (playerState.currentTrack?.id == track.id) currentTrackLiked = targetLiked
+                            likedTracks = if (targetLiked) {
+                                (listOf(track) + likedTracks).distinctBy(Track::id)
+                            } else {
+                                likedTracks.filterNot { it.id == track.id }
+                            }
+                        }
+                        .onFailure { error ->
+                            container.logger.warn(
+                                "SpotifyLiked", "liked_update_failed", "Nie udało się zmienić ulubionego utworu",
+                                fields = mapOf("reason" to (error::class.simpleName ?: "unknown")),
+                            )
+                        }
+                    if (playerState.currentTrack?.id == track.id) favoriteLoading = false
+                }
+            }
+            Unit
         }
 
         Surface(modifier = Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing), color = MaterialTheme.colors.background) {
@@ -221,7 +283,7 @@ fun NutaApp(container: AppContainer, onSpotifyLogin: (() -> Unit)? = null) {
                                     onSpotifyLogin = onSpotifyLogin,
                                     onSelectPlaylist = ::selectPlaylist,
                                 )
-                                Destination.PLAYLISTS -> PlaylistsScreen(playlists, ::selectPlaylist)
+                                Destination.PLAYLISTS -> PlaylistsScreen(savedPlaylists, ::selectPlaylist)
                                 Destination.LIKED -> LikedScreen(likedTracks, likedLoading, likedError, playerState, container)
                                 Destination.SEARCH -> SearchScreen(
                                     container = container,
@@ -236,21 +298,35 @@ fun NutaApp(container: AppContainer, onSpotifyLogin: (() -> Unit)? = null) {
                         }
                     }
                 }
-                Divider(color = Color(0xFF2A343D))
                 val openQueue = {
                     destination = Destination.QUEUE
                     selectedPlaylist = null
                     loadError = null
                 }
                 if (compact) {
-                    CompactPlayerBar(playerState, container, similarModeActive, { similarModeActive = it }, openQueue)
+                    if (destination == Destination.QUEUE) {
+                        Divider(color = Color(0xFF2A343D))
+                        CompactPlayerBar(playerState, container, similarModeActive, { similarModeActive = it }, openQueue, displayedTrackLiked, favoriteLoading, toggleCurrentTrackLiked)
+                    }
                     BottomNavigation(destination) {
                         destination = it
                         selectedPlaylist = null
                         loadError = null
                         loading = false
                     }
-                } else PlayerBar(playerState, container, similarModeActive, onSimilarModeChange = { similarModeActive = it }, onOpenQueue = openQueue)
+                } else if (destination == Destination.QUEUE) {
+                    Divider(color = Color(0xFF2A343D))
+                    PlayerBar(
+                        state = playerState,
+                        container = container,
+                        similarModeActive = similarModeActive,
+                        onSimilarModeChange = { similarModeActive = it },
+                        onOpenQueue = openQueue,
+                        isLiked = displayedTrackLiked,
+                        favoriteLoading = favoriteLoading,
+                        onToggleLiked = toggleCurrentTrackLiked,
+                    )
+                }
             }
             }
         }
@@ -274,8 +350,8 @@ private fun TopBar(compact: Boolean) {
 @Composable
 private fun BottomNavigation(selected: Destination, onSelect: (Destination) -> Unit) {
     val labels = mapOf(
-        Destination.HOME to "Start", Destination.PLAYLISTS to "Listy", Destination.LIKED to "Lubię",
-        Destination.SEARCH to "Szukaj", Destination.QUEUE to "Kolejka", Destination.SETTINGS to "Ustaw.",
+        Destination.HOME to "Start", Destination.PLAYLISTS to "Biblioteka", Destination.LIKED to "Lubię",
+        Destination.SEARCH to "Szukaj", Destination.QUEUE to "Player", Destination.SETTINGS to "Ustaw.",
     )
     Row(Modifier.fillMaxWidth().height(58.dp).background(Color(0xFF131A20)).padding(horizontal = 4.dp)) {
         Destination.entries.filter { it != Destination.DIAGNOSTICS }.forEach { item ->
@@ -323,6 +399,18 @@ private fun SettingsScreen(container: AppContainer) {
                     options = listOf(BufferSize.SMALL to "Mały", BufferSize.STANDARD to "Standard", BufferSize.LARGE to "Duży"),
                     selected = settings.bufferSize,
                 ) { container.playbackSettings.update(settings.copy(bufferSize = it)) }
+            }
+        }
+        item {
+            SettingsGroup("Wyrównaj głośność", "Domyślnie wyłączone; korekcja może zmienić dynamikę utworu") {
+                SettingOptions(
+                    options = listOf(
+                        LoudnessNormalization.OFF to "Wyłączone",
+                        LoudnessNormalization.GENTLE to "Łagodne",
+                        LoudnessNormalization.NORMAL to "Normalne",
+                    ),
+                    selected = settings.loudnessNormalization,
+                ) { container.playbackSettings.update(settings.copy(loudnessNormalization = it)) }
             }
         }
         item {
@@ -396,6 +484,7 @@ private fun HomeScreen(
     onSpotifyLogin: (() -> Unit)?,
     onSelectPlaylist: (Playlist) -> Unit,
 ) {
+    val recommendations = playlists.take(6)
     ScrollableLazyColumn(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item {
         Heading("Dla Ciebie", "Rekomendacje z głównej strony Spotify")
@@ -403,19 +492,19 @@ private fun HomeScreen(
         BoxWithConstraints(Modifier.fillMaxWidth()) {
             if (maxWidth < 520.dp) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    StatCard("Playlisty", playlists.size.toString(), Modifier.weight(1f), compact = true)
-                    StatCard("Utwory", playlists.flatMap { it.tracks }.distinctBy { it.id }.size.toString(), Modifier.weight(1f), compact = true)
+                    StatCard("Propozycje", recommendations.size.toString(), Modifier.weight(1f), compact = true)
+                    StatCard("Utwory", recommendations.flatMap { it.tracks }.distinctBy { it.id }.size.toString(), Modifier.weight(1f), compact = true)
                 }
             } else Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                StatCard("Playlisty", playlists.size.toString(), Modifier.weight(1f))
-                StatCard("Utwory", playlists.flatMap { it.tracks }.distinctBy { it.id }.size.toString(), Modifier.weight(1f))
+                StatCard("Propozycje", recommendations.size.toString(), Modifier.weight(1f))
+                StatCard("Utwory", recommendations.flatMap { it.tracks }.distinctBy { it.id }.size.toString(), Modifier.weight(1f))
                 StatCard("Player", playerState.status.name.lowercase(), Modifier.weight(1f))
             }
         }
         Spacer(Modifier.height(24.dp))
         }
-        if (playlists.isEmpty()) item { EmptyState("Spotify nie zwrócił rekomendowanych playlist") }
-        items(playlists, key = { "home-${it.id}" }) { playlist ->
+        if (recommendations.isEmpty()) item { EmptyState("Spotify nie zwrócił rekomendacji") }
+        items(recommendations, key = { "home-${it.id}" }) { playlist ->
             PlaylistCard(playlist) { onSelectPlaylist(playlist) }
         }
         item {
@@ -450,7 +539,7 @@ private fun StatCard(label: String, value: String, modifier: Modifier, compact: 
 @Composable
 private fun PlaylistsScreen(playlists: List<Playlist>, onSelect: (Playlist) -> Unit) {
     Column(Modifier.fillMaxSize()) {
-        Heading("Playlisty", "Biblioteka demonstracyjna")
+        Heading("Biblioteka", "Twoje playlisty i ulubione utwory Spotify")
         Spacer(Modifier.height(20.dp))
         if (playlists.isEmpty()) EmptyState("Brak playlist") else ScrollableLazyColumn(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             items(playlists, key = { it.id }) { playlist -> PlaylistCard(playlist) { onSelect(playlist) } }
@@ -490,12 +579,12 @@ private fun PlaylistDetails(playlist: Playlist, playerState: PlayerState, contai
         Spacer(Modifier.height(16.dp))
         ScrollableLazyColumn(Modifier.fillMaxSize()) {
             items(playlist.tracks, key = { it.id }) { track ->
-                TrackRow(track, playerState.currentTrack?.id == track.id) {
+                TrackRow(track, playerState.currentTrack?.id == track.id, onPlay = {
                     scope.launch {
                         container.audioPlayer.setQueue(playlist.tracks, playlist.tracks.indexOf(track))
                         container.audioPlayer.play()
                     }
-                }
+                })
             }
         }
     }
@@ -527,12 +616,12 @@ private fun LikedScreen(
                 Spacer(Modifier.height(14.dp))
                 ScrollableLazyColumn(Modifier.fillMaxSize(), scrollToIndex = tracks.indexOfFirst { it.id == playerState.currentTrack?.id }.takeIf { it >= 0 }) {
                     items(tracks, key = { "liked-${it.id}" }) { track ->
-                        TrackRow(track, playerState.currentTrack?.id == track.id) {
+                        TrackRow(track, playerState.currentTrack?.id == track.id, onPlay = {
                             scope.launch {
                                 container.audioPlayer.setQueue(tracks, tracks.indexOf(track))
                                 container.audioPlayer.play()
                             }
-                        }
+                        })
                     }
                 }
             }
@@ -541,7 +630,13 @@ private fun LikedScreen(
 }
 
 @Composable
-private fun TrackRow(track: Track, active: Boolean, onPlay: () -> Unit) {
+private fun TrackRow(
+    track: Track,
+    active: Boolean,
+    onPlay: () -> Unit,
+    titleAction: (@Composable () -> Unit)? = null,
+    subtitleAction: (@Composable () -> Unit)? = null,
+) {
     BoxWithConstraints(Modifier.fillMaxWidth()) {
     val compact = maxWidth < 520.dp
     Row(
@@ -553,11 +648,17 @@ private fun TrackRow(track: Track, active: Boolean, onPlay: () -> Unit) {
     ) {
         Text(if (active) "▶" else "♪", color = if (active) MaterialTheme.colors.primary else Color(0xFF7D8B95), modifier = Modifier.width(28.dp))
         Column(Modifier.weight(1f)) {
-            Text(track.title, fontWeight = if (active) FontWeight.Bold else FontWeight.Normal)
-            Text(track.artists.joinToString(), color = Color(0xFF8F9CA6), fontSize = 12.sp)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(track.title, modifier = Modifier.weight(1f), fontWeight = if (active) FontWeight.Bold else FontWeight.Normal)
+                titleAction?.invoke()
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(track.artists.joinToString(), modifier = Modifier.weight(1f), color = Color(0xFF8F9CA6), fontSize = 12.sp)
+                Text(formatTime(track.durationMs), color = Color(0xFF8F9CA6), fontSize = 12.sp, modifier = Modifier.padding(end = 8.dp))
+                subtitleAction?.invoke()
+            }
         }
         if (!compact) Text(track.album, color = Color(0xFF8F9CA6), fontSize = 12.sp, modifier = Modifier.width(170.dp), maxLines = 1, overflow = TextOverflow.Ellipsis)
-        Text(formatTime(track.durationMs), color = Color(0xFF8F9CA6), fontSize = 12.sp)
     }
     }
 }
@@ -571,12 +672,19 @@ private fun SearchScreen(
 ) {
     val scope = rememberCoroutineScope()
     val playerState by container.audioPlayer.state.collectAsState()
+    val currentState by rememberUpdatedState(state)
+    fun playTrack(track: Track) {
+        scope.launch {
+            container.audioPlayer.setQueue(listOf(track), 0)
+            container.audioPlayer.play()
+        }
+    }
 
     LaunchedEffect(state.query, container.spotifyRepository) {
         val submittedQuery = state.query
         if (submittedQuery == state.lastExecutedQuery) return@LaunchedEffect
         if (submittedQuery.isBlank()) {
-            onStateChange(state.copy(
+            onStateChange(currentState.copy(
                 result = SearchResult(emptyList(), emptyList()),
                 error = null,
                 lastExecutedQuery = submittedQuery,
@@ -585,12 +693,20 @@ private fun SearchScreen(
         }
         delay(400)
         runCatching { container.spotifyRepository.search(submittedQuery) }
-            .onSuccess { onStateChange(state.copy(result = it, error = null, lastExecutedQuery = submittedQuery)) }
-            .onFailure { onStateChange(state.copy(error = it.message ?: "Nieznany błąd wyszukiwania", lastExecutedQuery = submittedQuery)) }
+            .onSuccess {
+                if (currentState.query == submittedQuery) {
+                    onStateChange(currentState.copy(result = it, error = null, lastExecutedQuery = submittedQuery))
+                }
+            }
+            .onFailure {
+                if (currentState.query == submittedQuery) {
+                    onStateChange(currentState.copy(error = it.message ?: "Nieznany błąd wyszukiwania", lastExecutedQuery = submittedQuery))
+                }
+            }
     }
 
     Column(Modifier.fillMaxSize()) {
-        Heading("Wyszukiwanie", "Przeszukuje lokalne dane demonstracyjne")
+        Heading("Wyszukiwanie", "Wyszukuje utwory, wykonawców i playlisty Spotify")
         Spacer(Modifier.height(16.dp))
         OutlinedTextField(
             value = state.query,
@@ -599,37 +715,71 @@ private fun SearchScreen(
             modifier = Modifier.fillMaxWidth(),
             singleLine = true,
         )
-        Spacer(Modifier.height(18.dp))
-        state.youtubeStatus?.let {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            SearchScopeCheckbox("Utwory", state.searchTracks) { onStateChange(state.copy(searchTracks = it)) }
+            SearchScopeCheckbox("Wykonawcy", state.searchArtists) { onStateChange(state.copy(searchArtists = it)) }
+            SearchScopeCheckbox("Playlisty", state.searchPlaylists) { onStateChange(state.copy(searchPlaylists = it)) }
+        }
+        Spacer(Modifier.height(10.dp))
+        state.youtubeStatus?.takeIf { false }?.let {
             Card(backgroundColor = Color(0xFF202B32), modifier = Modifier.fillMaxWidth()) {
                 Text(it, color = Color(0xFF8FE9AD), modifier = Modifier.padding(14.dp))
             }
             Spacer(Modifier.height(14.dp))
         }
-        if (state.error != null) ErrorState(state.error) else if (state.query.isNotBlank() && state.result.tracks.isEmpty() && state.result.playlists.isEmpty()) {
+        val visibleTracks = state.result.tracks.filter { track ->
+            (state.searchTracks && track.title.contains(state.query, ignoreCase = true)) ||
+                (state.searchArtists && track.artists.any { it.contains(state.query, ignoreCase = true) })
+        }
+        val visiblePlaylists = if (state.searchPlaylists) state.result.playlists else emptyList()
+        if (state.error != null) ErrorState(state.error) else if (state.query.isNotBlank() && visibleTracks.isEmpty() && visiblePlaylists.isEmpty()) {
             EmptyState("Brak wyników dla „${state.query}”")
         } else {
             ScrollableLazyColumn(Modifier.fillMaxSize()) {
-                if (state.result.playlists.isNotEmpty()) {
+                if (visiblePlaylists.isNotEmpty()) {
                     item { SectionLabel("PLAYLISTY") }
-                    items(state.result.playlists, key = { "p-${it.id}" }) { PlaylistCard(it) { onPlaylist(it) } }
+                    items(visiblePlaylists, key = { "p-${it.id}" }) { PlaylistCard(it) { onPlaylist(it) } }
                     item { Spacer(Modifier.height(18.dp)) }
                 }
-                if (state.result.tracks.isNotEmpty()) {
+                if (visibleTracks.isNotEmpty()) {
                     item { SectionLabel("UTWORY") }
-                    items(state.result.tracks, key = { "t-${it.id}" }) { track ->
-                        TrackRow(track, playerState.currentTrack?.id == track.id) {
+                    items(visibleTracks, key = { "t-${it.id}" }) { track ->
+                        TrackRow(track, playerState.currentTrack?.id == track.id, onPlay = {
                             scope.launch {
                                 onStateChange(state.copy(youtubeStatus = "Player: przygotowywanie strumienia YouTube…"))
-                                container.audioPlayer.setQueue(state.result.tracks, state.result.tracks.indexOf(track))
-                                container.audioPlayer.play()
+                                playTrack(track)
                                 onStateChange(state.copy(youtubeStatus = null))
                             }
-                        }
+                        }, titleAction = {
+                            OutlinedButton(onClick = {
+                                scope.launch {
+                                    onStateChange(state.copy(youtubeStatus = "Player: przygotowywanie strumienia YouTubeâ€¦"))
+                                    playTrack(track)
+                                    onStateChange(state.copy(youtubeStatus = null))
+                                }
+                        }, modifier = Modifier.size(32.dp).clickable { }, contentPadding = PaddingValues(0.dp), border = null) { Text("▶") }
+                            }, subtitleAction = {
+                            Box(
+                                modifier = Modifier.size(32.dp).clickable { scope.launch { container.audioPlayer.appendToQueue(listOf(track)) } },
+                                contentAlignment = Alignment.Center,
+                            ) { Text("＋") }
+                        })
                     }
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun SearchScopeCheckbox(label: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Checkbox(checked = checked, onCheckedChange = onCheckedChange)
+        Text(label, fontSize = 12.sp, color = Color(0xFFD5DCE1))
     }
 }
 
@@ -683,7 +833,16 @@ private fun LogRow(item: LogEvent) {
 }
 
 @Composable
-private fun CompactPlayerBar(state: PlayerState, container: AppContainer, similarModeActive: Boolean, onSimilarModeChange: (Boolean) -> Unit, onOpenQueue: () -> Unit) {
+private fun CompactPlayerBar(
+    state: PlayerState,
+    container: AppContainer,
+    similarModeActive: Boolean,
+    onSimilarModeChange: (Boolean) -> Unit,
+    onOpenQueue: () -> Unit,
+    isLiked: Boolean,
+    favoriteLoading: Boolean,
+    onToggleLiked: () -> Unit,
+) {
     val scope = rememberCoroutineScope()
     val track = state.currentTrack
     var radioLoading by remember { mutableStateOf(false) }
@@ -700,12 +859,18 @@ private fun CompactPlayerBar(state: PlayerState, container: AppContainer, simila
         }
     }
     Box(Modifier.fillMaxWidth().height(40.dp)) {
-        Row(Modifier.align(Alignment.Center), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.align(Alignment.Center), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
             Text("⏮", modifier = Modifier.clickable(enabled = track != null) { scope.launch { container.audioPlayer.previous() } }.padding(6.dp), color = if (track != null) Color.White else Color(0xFF55616A), fontWeight = FontWeight.Bold)
             Text("◀◀", modifier = Modifier.clickable(enabled = track != null) { scope.launch { container.audioPlayer.seekTo((state.positionMs - 10_000).coerceAtLeast(0)) } }.padding(6.dp), color = if (track != null) Color.White else Color(0xFF55616A), fontSize = 12.sp, fontWeight = FontWeight.Bold)
             Text(if (state.status == PlayerStatus.PLAYING) "Ⅱ" else "▶", modifier = Modifier.clickable(enabled = track != null) { scope.launch { if (state.status == PlayerStatus.PLAYING) container.audioPlayer.pause() else container.audioPlayer.play() } }.padding(8.dp), color = MaterialTheme.colors.primary, fontSize = 18.sp)
             Text("▶▶", modifier = Modifier.clickable(enabled = track != null) { scope.launch { container.audioPlayer.seekTo((state.positionMs + 10_000).coerceAtMost(state.durationMs)) } }.padding(6.dp), color = if (track != null) Color.White else Color(0xFF55616A), fontSize = 12.sp, fontWeight = FontWeight.Bold)
             Text("⏭", modifier = Modifier.clickable(enabled = track != null) { scope.launch { container.audioPlayer.next() } }.padding(6.dp), color = if (track != null) Color.White else Color(0xFF55616A), fontWeight = FontWeight.Bold)
+            Text(
+                if (favoriteLoading) "…" else if (isLiked) "♥" else "♡",
+                modifier = Modifier.clickable(enabled = track != null && !favoriteLoading) { onToggleLiked() }.padding(6.dp),
+                color = if (isLiked) Color(0xFFFF4D67) else if (track != null) Color.White else Color(0xFF55616A),
+                fontSize = 18.sp,
+            )
             Text(
                 "⇄",
                 color = when { state.shuffleEnabled -> Color.White; state.queue.size > 1 -> MaterialTheme.colors.primary; else -> Color(0xFF55616A) },
@@ -736,8 +901,10 @@ private fun CompactPlayerBar(state: PlayerState, container: AppContainer, simila
                         scope.launch {
                             radioLoading = true
                             runCatching { container.spotifyRepository.getTrackRadio(seed) }.onSuccess { recommendations ->
-                                container.audioPlayer.setQueue((listOf(seed) + recommendations).distinctBy(Track::id))
-                                container.audioPlayer.play(); onSimilarModeChange(true); onOpenQueue()
+                                val additions = recommendations.filterNot { candidate -> state.queue.any { it.id == candidate.id } }
+                                if (state.queue.isEmpty()) container.audioPlayer.setQueue(listOf(seed) + additions, 0)
+                                else container.audioPlayer.appendToQueue(additions)
+                                onSimilarModeChange(true); onOpenQueue()
                             }
                             radioLoading = false
                         }
@@ -772,35 +939,48 @@ private fun PlayerBar(
     similarModeActive: Boolean,
     onSimilarModeChange: (Boolean) -> Unit,
     onOpenQueue: () -> Unit,
+    isLiked: Boolean,
+    favoriteLoading: Boolean,
+    onToggleLiked: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
     val track = state.currentTrack
     var radioLoading by remember { mutableStateOf(false) }
     var radioMessage by remember { mutableStateOf<String?>(null) }
     Row(
-        Modifier.fillMaxWidth().height(98.dp).background(Color(0xFF131A20)).padding(horizontal = 18.dp),
+        Modifier.fillMaxWidth().height(82.dp).background(Color(0xFF131A20)).padding(horizontal = 18.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Cover(track?.title ?: "N", track?.imageUrl)
         Spacer(Modifier.width(12.dp))
         Column(Modifier.width(230.dp)) {
-            Text(track?.title ?: "Nic nie odtwarzamy", maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.Bold)
-            Text(playerSubtitle(track, state), color = Color(0xFF8D9BA6), fontSize = 12.sp, maxLines = 1)
+            Text(track?.title ?: "Nic nie odtwarzamy", maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.Bold, lineHeight = 16.sp)
+            Text(playerSubtitle(track, state), color = Color(0xFF8D9BA6), fontSize = 12.sp, maxLines = 1, lineHeight = 14.sp)
         }
         Spacer(Modifier.width(14.dp))
-        OutlinedButton(onClick = { scope.launch { container.audioPlayer.previous() } }, enabled = track != null) { Text("⏮") }
+        OutlinedButton(onClick = { scope.launch { container.audioPlayer.previous() } }, enabled = track != null, modifier = Modifier.size(42.dp), contentPadding = PaddingValues(0.dp)) { Text("⏮") }
         Spacer(Modifier.width(6.dp))
-        Button(onClick = { scope.launch { if (state.status == PlayerStatus.PLAYING) container.audioPlayer.pause() else container.audioPlayer.play() } }, enabled = track != null) {
+        Button(onClick = { scope.launch { if (state.status == PlayerStatus.PLAYING) container.audioPlayer.pause() else container.audioPlayer.play() } }, enabled = track != null, modifier = Modifier.size(42.dp), contentPadding = PaddingValues(0.dp)) {
             Text(if (state.status == PlayerStatus.PLAYING) "⏸" else "▶")
         }
         Spacer(Modifier.width(6.dp))
-        OutlinedButton(onClick = { scope.launch { container.audioPlayer.stop() } }, enabled = track != null && state.status != PlayerStatus.IDLE) { Text("⏹") }
+        OutlinedButton(onClick = { scope.launch { container.audioPlayer.stop() } }, enabled = track != null && state.status != PlayerStatus.IDLE, modifier = Modifier.size(42.dp), contentPadding = PaddingValues(0.dp)) { Text("⏹") }
         Spacer(Modifier.width(6.dp))
-        OutlinedButton(onClick = { scope.launch { container.audioPlayer.next() } }, enabled = track != null) { Text("⏭") }
+        OutlinedButton(onClick = { scope.launch { container.audioPlayer.next() } }, enabled = track != null, modifier = Modifier.size(42.dp), contentPadding = PaddingValues(0.dp)) { Text("⏭") }
+        Spacer(Modifier.width(6.dp))
+        OutlinedButton(
+            onClick = onToggleLiked,
+            enabled = track != null && !favoriteLoading,
+            modifier = Modifier.size(42.dp),
+            contentPadding = PaddingValues(0.dp),
+            colors = ButtonDefaults.outlinedButtonColors(contentColor = if (isLiked) Color(0xFFFF4D67) else Color.White),
+        ) { Text(if (favoriteLoading) "…" else if (isLiked) "♥" else "♡", fontSize = 18.sp) }
         Spacer(Modifier.width(6.dp))
         OutlinedButton(
             onClick = { scope.launch { container.audioPlayer.shuffleUpcoming(); onOpenQueue() } },
             enabled = state.queue.size > 1,
+            modifier = Modifier.size(42.dp),
+            contentPadding = PaddingValues(0.dp),
             colors = ButtonDefaults.outlinedButtonColors(
                 backgroundColor = if (state.shuffleEnabled) Color(0xFF2F6B45) else Color.Transparent,
                 contentColor = if (state.shuffleEnabled) Color.White else MaterialTheme.colors.primary,
@@ -820,9 +1000,10 @@ private fun PlayerBar(
                     radioMessage = null
                     runCatching { container.spotifyRepository.getTrackRadio(seed) }
                         .onSuccess { recommendations ->
-                            val queue = (listOf(seed) + recommendations).distinctBy(Track::id)
-                            container.audioPlayer.setQueue(queue)
-                            container.audioPlayer.play()
+                            val queue = recommendations
+                            val additions = recommendations.filterNot { candidate -> state.queue.any { it.id == candidate.id } }
+                            if (state.queue.isEmpty()) container.audioPlayer.setQueue(listOf(seed) + additions, 0)
+                            else container.audioPlayer.appendToQueue(additions)
                             radioMessage = "Dodano ${queue.size} podobnych utworów"
                             onSimilarModeChange(true)
                             onOpenQueue()
@@ -832,6 +1013,8 @@ private fun PlayerBar(
                 }
             },
             enabled = track != null && !radioLoading,
+            modifier = Modifier.size(42.dp),
+            contentPadding = PaddingValues(0.dp),
             colors = ButtonDefaults.outlinedButtonColors(
                 backgroundColor = if (similarModeActive) Color(0xFF2F6B45) else Color.Transparent,
                 contentColor = if (similarModeActive) Color.White else MaterialTheme.colors.primary,
@@ -861,7 +1044,7 @@ private fun QueueScreen(state: PlayerState, container: AppContainer) {
     val scope = rememberCoroutineScope()
     Column(Modifier.fillMaxSize()) {
         Heading(
-            "Aktualna kolejka",
+            "Player",
             if (state.queue.isEmpty()) "Kolejka jest pusta" else "${state.queue.size} utworów • odtwarzany ${state.currentIndex + 1}",
         )
         Spacer(Modifier.height(14.dp))

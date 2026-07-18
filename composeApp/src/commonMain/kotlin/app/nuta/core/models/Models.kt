@@ -40,10 +40,10 @@ data class PlayerState(
 
 enum class Destination(val label: String) {
     HOME("Start"),
-    PLAYLISTS("Playlisty"),
+    PLAYLISTS("Biblioteka"),
     LIKED("Ulubione"),
     SEARCH("Wyszukiwanie"),
-    QUEUE("Kolejka"),
+    QUEUE("Player"),
     SETTINGS("Ustawienia"),
     DIAGNOSTICS("Diagnostyka"),
 }
