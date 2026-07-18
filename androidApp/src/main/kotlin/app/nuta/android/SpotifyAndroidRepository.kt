@@ -111,14 +111,26 @@ class SpotifyAndroidRepository(
                 connection.connectTimeout = 15_000
                 connection.readTimeout = 20_000
                 connection.doOutput = true
+                connection.setRequestProperty("User-Agent", BROWSER_USER_AGENT)
+                connection.setRequestProperty("Accept", "application/json")
                 connection.setRequestProperty("Content-Type", "application/json")
                 connection.setRequestProperty("App-Platform", "WebPlayer")
+                connection.setRequestProperty("Origin", "https://open.spotify.com")
+                connection.setRequestProperty("Referer", "https://open.spotify.com/")
                 token.value.use { connection.setRequestProperty("Authorization", "Bearer $it") }
                 connection.outputStream.use { it.write(body.toByteArray()) }
                 val status = connection.responseCode
                 val response = (if (status in 200..299) connection.inputStream else connection.errorStream)
                     ?.bufferedReader()?.use { it.readText() }.orEmpty()
-                require(status in 200..299) { "Spotify GraphQL HTTP $status" }
+                if (status !in 200..299) {
+                    logger.warn(
+                        "SpotifyAndroid",
+                        "graphql_rejected",
+                        "Spotify odrzuciło zapytanie GraphQL",
+                        fields = mapOf("statusCode" to status.toString(), "response" to response.take(300)),
+                    )
+                    error("Spotify GraphQL HTTP $status: ${response.take(120)}")
+                }
                 json.parseToJsonElement(response)
             } finally {
                 connection.disconnect()
@@ -169,5 +181,6 @@ class SpotifyAndroidRepository(
         private const val HOME_HASH = "76243c78b0e20ecdbe41b794dec8cbe73f75e585b0a7201b8d2e84578412847a"
         private const val PLAYLIST_HASH = "a65e12194ed5fc443a1cdebed5fabe33ca5b07b987185d63c72483867ad13cb4"
         private const val LIBRARY_HASH = "087278b20b743578a6262c2b0b4bcd20d879c503cc359a2285baf083ef944240"
+        private const val BROWSER_USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/128.0 Safari/537.36"
     }
 }
