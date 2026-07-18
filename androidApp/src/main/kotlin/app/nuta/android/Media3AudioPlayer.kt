@@ -75,7 +75,7 @@ class Media3AudioPlayer(
     override suspend fun shuffleUpcoming() {
         val state = stateFlow.value
         if (state.currentIndex !in state.queue.indices) return
-        stateFlow.value = state.copy(queue = state.queue.take(state.currentIndex + 1) + state.queue.drop(state.currentIndex + 1).shuffled())
+        stateFlow.value = state.copy(queue = state.queue.take(state.currentIndex + 1) + state.queue.drop(state.currentIndex + 1).shuffled(), shuffleEnabled = true)
         logger.info("Media3Player", "queue_shuffled", "Przetasowano pozostałe utwory kolejki")
     }
 
