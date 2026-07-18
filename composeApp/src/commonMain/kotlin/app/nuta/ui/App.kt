@@ -625,11 +625,29 @@ private fun CompactPlayerBar(state: PlayerState, container: AppContainer, simila
     }
     Row(Modifier.fillMaxWidth().height(38.dp), verticalAlignment = Alignment.CenterVertically) {
         Text(formatTime(state.positionMs), color = Color(0xFF8D9BA6), fontSize = 10.sp)
+        Text(
+            "↶10",
+            modifier = Modifier.clickable(enabled = track != null) {
+                scope.launch { container.audioPlayer.seekTo((state.positionMs - 10_000).coerceAtLeast(0)) }
+            }.padding(horizontal = 5.dp, vertical = 6.dp),
+            color = if (track != null) Color.White else Color(0xFF55616A),
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Bold,
+        )
         Slider(
             value = if (state.durationMs > 0) state.positionMs.coerceAtMost(state.durationMs).toFloat() else 0f,
             onValueChange = { scope.launch { container.audioPlayer.seekTo(it.toLong()) } },
             valueRange = 0f..state.durationMs.coerceAtLeast(1).toFloat(), enabled = track != null,
-            modifier = Modifier.weight(1f).padding(horizontal = 5.dp),
+            modifier = Modifier.weight(1f).padding(horizontal = 2.dp),
+        )
+        Text(
+            "10↷",
+            modifier = Modifier.clickable(enabled = track != null) {
+                scope.launch { container.audioPlayer.seekTo((state.positionMs + 10_000).coerceAtMost(state.durationMs)) }
+            }.padding(horizontal = 5.dp, vertical = 6.dp),
+            color = if (track != null) Color.White else Color(0xFF55616A),
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Bold,
         )
         Text(formatTime(state.durationMs), color = Color(0xFF8D9BA6), fontSize = 10.sp)
         Text(
