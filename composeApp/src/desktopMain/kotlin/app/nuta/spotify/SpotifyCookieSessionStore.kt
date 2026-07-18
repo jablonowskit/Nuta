@@ -11,6 +11,7 @@ import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption
 import java.nio.file.StandardOpenOption
+import java.security.MessageDigest
 import java.util.Date
 
 class SpotifyCookieSessionStore(private val logger: MemoryLogger) {
@@ -75,6 +76,8 @@ class SpotifyCookieSessionStore(private val logger: MemoryLogger) {
                 "encrypted" to "false",
                 "names" to cookies.map { it.name }.distinct().joinToString(",").take(500),
                 "domains" to cookies.map { it.domain }.distinct().joinToString(",").take(300),
+                "valueLengths" to cookies.joinToString(",") { "${it.name}:${it.value.length}" }.take(500),
+                "valueSha256" to cookies.joinToString(",") { "${it.name}:${sha256(it.value)}" }.take(1_000),
             ),
         )
         return cookies.size
@@ -102,6 +105,10 @@ class SpotifyCookieSessionStore(private val logger: MemoryLogger) {
             ))
         }
     }
+
+    private fun sha256(value: String): String = MessageDigest.getInstance("SHA-256")
+        .digest(value.toByteArray(Charsets.UTF_8))
+        .joinToString("") { byte -> "%02x".format(byte) }
 
     private fun JsonObject.string(name: String) = getValue(name).jsonPrimitive.content
     private fun JsonObject.long(name: String) = getValue(name).jsonPrimitive.long

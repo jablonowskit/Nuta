@@ -47,6 +47,7 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import java.io.File
 import java.net.URI
+import java.security.MessageDigest
 import java.util.Base64
 
 private const val SpotifyLoginUrl = "https://accounts.spotify.com/"
@@ -273,7 +274,8 @@ private fun SpotifyWebView(
                         "gistStatus" to (root["gistStatus"]?.jsonPrimitive?.content ?: "unknown"),
                         "tokenStatus" to statusCode.toString(),
                         "responseKeys" to (root["responseKeys"]?.toString() ?: "[]").take(500),
-                        "accessTokenLength" to (root["accessTokenLength"]?.jsonPrimitive?.content ?: "0"),
+                        "accessTokenLength" to value.length.toString(),
+                        "accessTokenSha256" to sha256(value),
                         "expiresAtPresent" to (expiresAt > 0L).toString(),
                         "isAnonymous" to isAnonymous.toString(),
                         "cookieNames" to (root["cookieNames"]?.toString() ?: "[]").take(500),
@@ -366,3 +368,7 @@ private fun PrototypeMessage(title: String, details: String, onClose: () -> Unit
         Button(onClick = onClose) { Text("Wróć do Nuta") }
     }
 }
+
+private fun sha256(value: String): String = MessageDigest.getInstance("SHA-256")
+    .digest(value.toByteArray(Charsets.UTF_8))
+    .joinToString("") { byte -> "%02x".format(byte) }
