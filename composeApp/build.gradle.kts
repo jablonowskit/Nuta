@@ -65,9 +65,10 @@ compose.desktop {
         nativeDistributions {
             targetFormats(org.jetbrains.compose.desktop.application.dsl.TargetFormat.Exe)
             packageName = "Nuta"
-            packageVersion = "0.1.0"
+            packageVersion = "0.1.1"
             description = "Nuta music player"
             vendor = "Nuta"
+            modules("java.net.http")
 
             windows {
                 // Diagnostic build: keep stderr/stdout visible when the bundled JVM fails.
