@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -14,6 +15,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
@@ -187,19 +191,21 @@ fun NutaApp(container: AppContainer, onSpotifyLogin: (() -> Unit)? = null) {
             likedLoading = false
         }
 
-        Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colors.background) {
+        Surface(modifier = Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing), color = MaterialTheme.colors.background) {
+            BoxWithConstraints(Modifier.fillMaxSize()) {
+            val compact = maxWidth < 700.dp
             Column(Modifier.fillMaxSize()) {
-                TopBar()
+                TopBar(compact)
                 Row(Modifier.weight(1f).fillMaxWidth()) {
-                    Sidebar(destination) {
+                    if (!compact) Sidebar(destination) {
                         destination = it
                         selectedPlaylist = null
                         loadError = null
                         loading = false
                         container.logger.debug("Navigation", "destination_changed", "Zmieniono ekran", fields = mapOf("destination" to it.name))
                     }
-                    Divider(Modifier.fillMaxHeight().width(1.dp), color = Color(0xFF2A343D))
-                    Box(Modifier.weight(1f).fillMaxHeight().padding(24.dp)) {
+                    if (!compact) Divider(Modifier.fillMaxHeight().width(1.dp), color = Color(0xFF2A343D))
+                    Box(Modifier.weight(1f).fillMaxHeight().padding(if (compact) 12.dp else 24.dp)) {
                         when {
                             loading -> CircularProgressIndicator(Modifier.align(Alignment.Center))
                             loadError != null -> ErrorState(loadError ?: "Nieznany błąd")
@@ -227,27 +233,57 @@ fun NutaApp(container: AppContainer, onSpotifyLogin: (() -> Unit)? = null) {
                     }
                 }
                 Divider(color = Color(0xFF2A343D))
-                PlayerBar(playerState, container, similarModeActive, onSimilarModeChange = { similarModeActive = it }, onOpenQueue = {
+                val openQueue = {
                     destination = Destination.QUEUE
                     selectedPlaylist = null
                     loadError = null
-                })
+                }
+                if (compact) {
+                    CompactPlayerBar(playerState, container, openQueue)
+                    BottomNavigation(destination) {
+                        destination = it
+                        selectedPlaylist = null
+                        loadError = null
+                        loading = false
+                    }
+                } else PlayerBar(playerState, container, similarModeActive, onSimilarModeChange = { similarModeActive = it }, onOpenQueue = openQueue)
+            }
             }
         }
     }
 }
 
 @Composable
-private fun TopBar() {
+private fun TopBar(compact: Boolean) {
     Row(
         Modifier.fillMaxWidth().height(56.dp).background(Color(0xFF131A20)).padding(horizontal = 20.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text("Nuta", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colors.primary)
         Spacer(Modifier.width(12.dp))
-        Text("Linux GUI • dane demonstracyjne", color = Color(0xFF8D9BA6), fontSize = 13.sp)
+        if (!compact) Text("Spotify Web + YouTube", color = Color(0xFF8D9BA6), fontSize = 13.sp)
         Spacer(Modifier.weight(1f))
-        Text("DEMO", color = MaterialTheme.colors.secondary, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+        Text(if (compact) "ANDROID" else "NUTA", color = MaterialTheme.colors.secondary, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+    }
+}
+
+@Composable
+private fun BottomNavigation(selected: Destination, onSelect: (Destination) -> Unit) {
+    val labels = mapOf(
+        Destination.HOME to "Start", Destination.PLAYLISTS to "Listy", Destination.LIKED to "Lubię",
+        Destination.SEARCH to "Szukaj", Destination.QUEUE to "Kolejka", Destination.DIAGNOSTICS to "Logi",
+    )
+    Row(Modifier.fillMaxWidth().height(58.dp).background(Color(0xFF131A20)).padding(horizontal = 4.dp)) {
+        Destination.entries.forEach { item ->
+            val active = item == selected
+            Box(
+                Modifier.weight(1f).fillMaxHeight().clickable { onSelect(item) }
+                    .background(if (active) Color(0xFF24332B) else Color.Transparent),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(labels.getValue(item), color = if (active) MaterialTheme.colors.primary else Color(0xFFC5CFD7), fontSize = 10.sp, fontWeight = if (active) FontWeight.Bold else FontWeight.Normal)
+            }
+        }
     }
 }
 
@@ -285,10 +321,17 @@ private fun HomeScreen(
         item {
         Heading("Dla Ciebie", "Rekomendacje z głównej strony Spotify")
         Spacer(Modifier.height(24.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            StatCard("Playlisty", playlists.size.toString(), Modifier.weight(1f))
-            StatCard("Utwory", playlists.flatMap { it.tracks }.distinctBy { it.id }.size.toString(), Modifier.weight(1f))
-            StatCard("Player", playerState.status.name.lowercase(), Modifier.weight(1f))
+        BoxWithConstraints(Modifier.fillMaxWidth()) {
+            if (maxWidth < 520.dp) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    StatCard("Playlisty", playlists.size.toString(), Modifier.weight(1f), compact = true)
+                    StatCard("Utwory", playlists.flatMap { it.tracks }.distinctBy { it.id }.size.toString(), Modifier.weight(1f), compact = true)
+                }
+            } else Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                StatCard("Playlisty", playlists.size.toString(), Modifier.weight(1f))
+                StatCard("Utwory", playlists.flatMap { it.tracks }.distinctBy { it.id }.size.toString(), Modifier.weight(1f))
+                StatCard("Player", playerState.status.name.lowercase(), Modifier.weight(1f))
+            }
         }
         Spacer(Modifier.height(24.dp))
         }
@@ -315,12 +358,12 @@ private fun HomeScreen(
 }
 
 @Composable
-private fun StatCard(label: String, value: String, modifier: Modifier) {
+private fun StatCard(label: String, value: String, modifier: Modifier, compact: Boolean = false) {
     Card(modifier, backgroundColor = MaterialTheme.colors.surface, shape = RoundedCornerShape(12.dp)) {
-        Column(Modifier.padding(20.dp)) {
+        Column(Modifier.padding(if (compact) 12.dp else 20.dp)) {
             Text(label, color = Color(0xFF8D9BA6), fontSize = 13.sp)
             Spacer(Modifier.height(8.dp))
-            Text(value, fontSize = 25.sp, fontWeight = FontWeight.Bold)
+            Text(value, fontSize = if (compact) 20.sp else 25.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }
 }
@@ -338,6 +381,8 @@ private fun PlaylistsScreen(playlists: List<Playlist>, onSelect: (Playlist) -> U
 
 @Composable
 private fun PlaylistCard(playlist: Playlist, onClick: () -> Unit) {
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+    val compact = maxWidth < 520.dp
     Card(
         Modifier.fillMaxWidth().clickable(onClick = onClick),
         backgroundColor = MaterialTheme.colors.surface,
@@ -347,11 +392,12 @@ private fun PlaylistCard(playlist: Playlist, onClick: () -> Unit) {
             Cover(playlist.name)
             Spacer(Modifier.width(14.dp))
             Column(Modifier.weight(1f)) {
-                Text(playlist.name, fontWeight = FontWeight.Bold)
+                Text(playlist.name, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 Text(playlist.description, color = Color(0xFF94A2AD), fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
-            Text("${playlist.tracks.size} utworów", color = Color(0xFF7F8E99), fontSize = 12.sp)
+            if (!compact) Text("${playlist.tracks.size} utworów", color = Color(0xFF7F8E99), fontSize = 12.sp)
         }
+    }
     }
 }
 
@@ -417,6 +463,8 @@ private fun LikedScreen(
 
 @Composable
 private fun TrackRow(track: Track, active: Boolean, onPlay: () -> Unit) {
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+    val compact = maxWidth < 520.dp
     Row(
         Modifier.fillMaxWidth()
             .background(if (active) Color(0xFF203129) else Color.Transparent, RoundedCornerShape(8.dp))
@@ -429,8 +477,9 @@ private fun TrackRow(track: Track, active: Boolean, onPlay: () -> Unit) {
             Text(track.title, fontWeight = if (active) FontWeight.Bold else FontWeight.Normal)
             Text(track.artists.joinToString(), color = Color(0xFF8F9CA6), fontSize = 12.sp)
         }
-        Text(track.album, color = Color(0xFF8F9CA6), fontSize = 12.sp, modifier = Modifier.width(170.dp), maxLines = 1, overflow = TextOverflow.Ellipsis)
+        if (!compact) Text(track.album, color = Color(0xFF8F9CA6), fontSize = 12.sp, modifier = Modifier.width(170.dp), maxLines = 1, overflow = TextOverflow.Ellipsis)
         Text(formatTime(track.durationMs), color = Color(0xFF8F9CA6), fontSize = 12.sp)
+    }
     }
 }
 
@@ -551,6 +600,26 @@ private fun LogRow(item: LogEvent) {
         }
         Text(item.message, color = Color(0xFFD5DCE1), fontSize = 12.sp)
         if (item.fields.isNotEmpty()) Text(item.fields.entries.joinToString("  ") { "${it.key}=${it.value}" }, color = Color(0xFF6F7F89), fontSize = 10.sp)
+    }
+}
+
+@Composable
+private fun CompactPlayerBar(state: PlayerState, container: AppContainer, onOpenQueue: () -> Unit) {
+    val scope = rememberCoroutineScope()
+    val track = state.currentTrack
+    Row(
+        Modifier.fillMaxWidth().height(76.dp).background(Color(0xFF131A20)).padding(horizontal = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(Modifier.size(46.dp).clickable { onOpenQueue() }) { Cover(track?.title ?: "N") }
+        Spacer(Modifier.width(10.dp))
+        Column(Modifier.weight(1f).clickable { onOpenQueue() }) {
+            Text(track?.title ?: "Nic nie odtwarzamy", maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+            Text(track?.artists?.joinToString() ?: "Wybierz utwór", color = Color(0xFF8D9BA6), fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+        Text("◀", modifier = Modifier.clickable(enabled = track != null) { scope.launch { container.audioPlayer.previous() } }.padding(10.dp), color = if (track != null) Color.White else Color(0xFF55616A))
+        Text(if (state.status == PlayerStatus.PLAYING) "Ⅱ" else "▶", modifier = Modifier.clickable(enabled = track != null) { scope.launch { if (state.status == PlayerStatus.PLAYING) container.audioPlayer.pause() else container.audioPlayer.play() } }.padding(12.dp), color = MaterialTheme.colors.primary, fontSize = 18.sp)
+        Text("▶", modifier = Modifier.clickable(enabled = track != null) { scope.launch { container.audioPlayer.next() } }.padding(10.dp), color = if (track != null) Color.White else Color(0xFF55616A))
     }
 }
 
