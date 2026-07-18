@@ -67,14 +67,14 @@ class NutaYouTubeMediaService(
     }
 
     private suspend fun search(track: Track): List<YouTubeMatch> {
-        val query = listOf(track.artists.firstOrNull().orEmpty(), track.title, "official audio")
-            .filter(String::isNotBlank).joinToString(" ")
-        val encoded = URLEncoder.encode(query, StandardCharsets.UTF_8)
-        val html = getText("https://www.youtube.com/results?search_query=$encoded&hl=en&gl=US")
-        val candidates = extractObjects(html, "\"videoRenderer\":")
-            .mapNotNull(::parseCandidate)
+        val base = listOf(track.artists.firstOrNull().orEmpty(), track.title).filter(String::isNotBlank).joinToString(" ")
+        val candidates = listOf("$base official audio", "$base lyrics").flatMap { query ->
+            val encoded = URLEncoder.encode(query, StandardCharsets.UTF_8)
+            val html = getText("https://www.youtube.com/results?search_query=$encoded&hl=en&gl=US")
+            extractObjects(html, "\"videoRenderer\":").mapNotNull(::parseCandidate)
+        }
             .distinctBy(YouTubeCandidate::videoId)
-            .take(20)
+            .take(30)
         val matches = candidates.map { candidate -> rank(track, candidate) }.sortedByDescending(YouTubeMatch::score)
         logger.info(
             "YouTubeSearch", "youtube_search_completed", "Zakończono wyszukiwanie kandydatów",
@@ -118,6 +118,10 @@ class NutaYouTubeMediaService(
             }
         }
         if (candidate.isOfficial) { score += 15; reasons += "official" }
+        val lyric = Regex("\\blyrics?\\b").containsMatchIn(actualTitle)
+        val officialLyric = lyric && ("official lyric" in actualTitle || "official lyrics" in actualTitle)
+        if (officialLyric) { score += 12; reasons += "official_lyrics" }
+        else if (lyric) { score += 5; reasons += "lyrics" }
         val penalties = mapOf(" live" to 35, "cover" to 35, "remix" to 25, "karaoke" to 40, "sped up" to 35, "slowed" to 30, "nightcore" to 40)
         penalties.forEach { (word, penalty) -> if (word in " $haystack") { score -= penalty; reasons += "penalty_${word.trim().replace(' ', '_')}" } }
         return YouTubeMatch(candidate, score, reasons)

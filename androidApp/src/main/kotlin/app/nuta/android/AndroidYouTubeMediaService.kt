@@ -50,10 +50,12 @@ class AndroidYouTubeMediaService(
     }
 
     private suspend fun search(track: Track): List<YouTubeMatch> {
-        val query = listOf(track.artists.firstOrNull().orEmpty(), track.title, "official audio").filter(String::isNotBlank).joinToString(" ")
-        val html = request("https://www.youtube.com/results?search_query=${URLEncoder.encode(query, "UTF-8")}&hl=en&gl=US")
-        return extractObjects(html, "\"videoRenderer\":").mapNotNull(::candidate).distinctBy(YouTubeCandidate::videoId)
-            .take(20).map { rank(track, it) }.sortedByDescending(YouTubeMatch::score)
+        val base = listOf(track.artists.firstOrNull().orEmpty(), track.title).filter(String::isNotBlank).joinToString(" ")
+        val candidates = listOf("$base official audio", "$base lyrics").flatMap { query ->
+            val html = request("https://www.youtube.com/results?search_query=${URLEncoder.encode(query, "UTF-8")}&hl=en&gl=US")
+            extractObjects(html, "\"videoRenderer\":").mapNotNull(::candidate)
+        }
+        return candidates.distinctBy(YouTubeCandidate::videoId).take(30).map { rank(track, it) }.sortedByDescending(YouTubeMatch::score)
     }
 
     private fun candidate(raw: String): YouTubeCandidate? = runCatching {
@@ -73,6 +75,10 @@ class AndroidYouTubeMediaService(
         if (artist.isNotBlank() && artist in haystack) { score += 30; reasons += "artist" }
         candidate.durationMs?.let { val diff = kotlin.math.abs(it - track.durationMs); if (diff <= 3_000) score += 25 else if (diff <= 10_000) score += 12 else if (diff >= 45_000) score -= 25 }
         if (candidate.isOfficial) score += 15
+        val lyric = Regex("\\blyrics?\\b").containsMatchIn(actual)
+        val officialLyric = lyric && ("official lyric" in actual || "official lyrics" in actual)
+        if (officialLyric) { score += 12; reasons += "official_lyrics" }
+        else if (lyric) { score += 5; reasons += "lyrics" }
         listOf(" live" to 35, "cover" to 35, "remix" to 25, "karaoke" to 40, "sped up" to 35, "slowed" to 30).forEach { (word, penalty) -> if (word in " $haystack") score -= penalty }
         return YouTubeMatch(candidate, score, reasons)
     }
