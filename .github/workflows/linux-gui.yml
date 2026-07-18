@@ -1,4 +1,4 @@
-name: Linux GUI
+name: Nuta GUI
 
 on:
   push:
