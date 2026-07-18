@@ -4,6 +4,8 @@
 
     <application
         android:allowBackup="false"
+        android:icon="@drawable/ic_nuta_launcher"
+        android:roundIcon="@drawable/ic_nuta_launcher"
         android:label="Nuta"
         android:supportsRtl="true"
         android:theme="@style/Theme.Nuta">

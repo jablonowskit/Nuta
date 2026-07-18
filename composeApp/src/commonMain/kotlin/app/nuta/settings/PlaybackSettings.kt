@@ -7,11 +7,13 @@ import kotlinx.coroutines.flow.asStateFlow
 enum class StreamQuality { AUTO, DATA_SAVER, STANDARD, BEST }
 enum class CodecPreference { AUTO, AAC, OPUS }
 enum class BufferSize { SMALL, STANDARD, LARGE }
+enum class LoudnessNormalization { OFF, GENTLE, NORMAL }
 
 data class YouTubePlaybackSettings(
     val quality: StreamQuality = StreamQuality.BEST,
     val codec: CodecPreference = CodecPreference.AAC,
     val bufferSize: BufferSize = BufferSize.STANDARD,
+    val loudnessNormalization: LoudnessNormalization = LoudnessNormalization.OFF,
 )
 
 interface PlaybackSettingsStore {

@@ -306,12 +306,118 @@ więc typ konta nie wpływa na błąd 400. Premium nie jest potrzebne — audio 
 i tak pochodzi z YouTube (`NutaYouTubeMediaService` + `MpvAudioPlayer`), nie ze
 Spotify.
 
-### Rekomendacja docelowa (bez zmian)
+### Rekomendacja docelowa
 
-Najpewniejsze rozwiązanie to ominięcie osadzonego challenge: OAuth PKCE w
-przeglądarce systemowej. Eliminuje reCAPTCHA w JCEF, third-party cookies i cały
-prywatny flow. Poprawka flagi third-party cookies jest tylko szybkim testem
-hipotezy, nie docelową architekturą.
+DECYZJA PROJEKTU (2026-07-18): **OAuth jest wykluczony.** Cel = parytet ze
+Spotube (WebView2/Edge + webview tylko do logowania + `/api/token` poza webview).
+Szczegóły w sekcji „DECYZJA PROJEKTU (2026-07-18): OAuth WYKLUCZONY". Poprawka
+flagi third-party cookies była tylko testem hipotezy (nieudanym), nie docelową
+architekturą.
+
+## ROZSTRZYGNIĘCIE — dowód wizualny z 2026-07-18 (build z fixem)
+
+WAŻNE: build z flagą `TrackingProtection3pcd` został przetestowany i wynik jest
+**negatywny** — flaga nie zmieniła zachowania (komunikaty „Third-party cookie
+will be blocked" i błąd 400 nadal występują). Zrzuty ekranu z ręcznego logowania
+pokazały pełny, jednoznaczny ciąg:
+
+```text
+1. Ekran "We need to make sure that you're a human"
+2. reCAPTCHA v2 checkbox "I'm not a robot" -> ZIELONA FAJKA (zaliczona) + Continue
+3. Po kliknieciu Continue -> "Something went wrong. Try again later."
+```
+
+To odpowiada logowi `challenge-orchestrator ... status=400`.
+
+### Ostateczny wniosek
+
+- reCAPTCHA **przechodzi** (Google akceptuje rozwiązanie — zielona fajka). Problem
+  NIE leży w rozwiązywaniu captchy ani po stronie Google.
+- Błąd pojawia się **po** poprawnym rozwiązaniu, gdy wynik trafia do backendu
+  challenge Spotify — to **serwer Spotify odrzuca** klienta (400 →
+  „Something went wrong").
+- Sam fakt, że Google pokazał **trudny challenge obrazkowy** przed checkboxem,
+  oznacza, że osadzony JCEF jest oceniany jako **wysokie ryzyko / bot-podobny**.
+- To jest **wielowarstwowe odrzucenie osadzonej przeglądarki JCEF**, a nie
+  pojedynczy przełącznik do przestawienia.
+
+### Cookies — zdegradowane jako trop
+
+Komunikaty „Third-party cookie will be blocked" pojawiają się także w normalnym
+Chrome (ostrzeżenie deprecjacyjne) i **nie są dowodem** przyczyny. KCEF nie
+wystawia czystej kontroli third-party cookies (`KCEFCookieManager` służy tylko do
+odczytu/zapisu, brak `cookie_controls_mode`). Dalsze dłubanie przy cookies/flagach
+w JCEF jest małoobiecujące — nie warto na tym tracić kolejnych rebuildów.
+
+### DECYZJA PROJEKTU (2026-07-18): OAuth WYKLUCZONY — cel to parytet ze Spotube
+
+OAuth PKCE / publiczne Web API są **wykluczone decyzją projektu**. NIE proponować
+OAuth. Celem jest odtworzenie działającego rozwiązania wtyczki Spotube
+(`spotube-plugin-spotify`).
+
+Kluczowa obserwacja diagnostyczna: Spotube na Windows loguje się przez
+**WebView2/Edge**, a nie JCEF — i dlatego przechodzi challenge (zaufany
+silnik/profil). Problem Nuta to **silnik osadzonej przeglądarki** (JCEF jest
+odrzucany po stronie serwera Spotify), a NIE architektura logowania przez webview
+jako taka.
+
+Dwa elementy do odtworzenia jak w Spotube:
+
+1. **Silnik: WebView2 (Edge) zamiast JCEF/KCEF na Windows.** To jest sedno — to
+   on pozwala przejść challenge. Wymaga natywnego mostu Windows (WebView2 przez
+   JNI/COM albo inna biblioteka webview dla Compose/JVM). Nie da się tego załatwić
+   zmianą importu w `compose-webview-multiplatform 2.0.3` (desktop = KCEF/JCEF).
+2. **Flow Spotube: webview TYLKO do logowania.** Po wykryciu ścieżki `/status`
+   eksportować cookies (`sp_dc`) z webview, a `/api/token` wywoływać **poza**
+   webview kotlinowym `HttpClient` (sp_dc + User-Agent + TOTP z Gista +
+   server-time). To odwraca obecny model Nuta, który robi `/api/token` przez JS
+   `fetch` wewnątrz JCEF.
+
+Ryzyko/uczciwie: przejście na WebView2 to realna praca natywna (JNI/COM), nie
+trywialna podmiana. Ale to jedyna droga zgodna z decyzją projektu (bez OAuth) i
+zgodna z tym, co faktycznie działa w Spotube. Dłubanie przy flagach/cookies w
+JCEF zostało wyczerpane i nie działa (patrz wyżej).
+
+## Dlaczego challenge pojawił się na Windows, a nie na Linux
+
+Obserwacja użytkownika: ta sama aplikacja logowała się na **Linuksie bez
+challenge reCAPTCHA**, a na **Windows challenge się pojawił** (400). Oba desktopy
+używają tej samej biblioteki i tego samego silnika KCEF/JCEF.
+
+### Kluczowy wniosek
+
+Challenge Spotify jest **oparty na ocenie ryzyka, nie deterministyczny**. Nie
+odpala się „zawsze dla JCEF" ani „nigdy dla Linuksa". Skoro identyczny flow JCEF
+przeszedł na Linuksie bez challenge, Spotify **na pewno nie blokuje kategorycznie
+JCEF** — gdyby wykrywał silnik, blokowałby na obu OS. Różnica leży w środowisku i
+reputacji, nie w engine. To kolejny dowód przeciw tezie o detekcji JCEF.
+
+### Najbardziej prawdopodobne przyczyny różnicy (malejąco)
+
+1. **Ciepły vs zimny profil.** Profil WebView jest trwały (`persistSessionCookies
+   = true`, `cachePath` w `nuta-spotify-webview/cache`). Na Linuksie po wielu
+   testach profil miał cookies/historię/wcześniejsze logowanie. Windows to była
+   świeża instalacja z pustym profilem → nowe, nierozpoznane urządzenie → wysokie
+   ryzyko → challenge.
+2. **Zaufane urządzenie / wcześniejsze logowanie** w profilu Linux obniża ryzyko.
+3. **Reputacja IP/sieci.** reCAPTCHA mocno waży IP. Linux u użytkownika działa w
+   Dockerze (`scripts/run.ps1`) — wyjście sieciowe może różnić się od natywnego
+   Windows; inny albo „ogrzany" IP zmienia score.
+4. **Różnice buildu Chromium/JBR per OS** (KCEF pobiera osobne buildy) — realne,
+   ale drugorzędne wobec profilu i reputacji.
+
+### Konsekwencja dla hipotezy third-party cookies
+
+Na Linuksie `challenge.spotify.com` nigdy się nie załadował, więc blokada
+third-party cookies **nie została tam wywołana** — a nie „nie istnieje". Ta sama
+blokada prawdopodobnie siedzi też w wersji Linux, tylko nie zaszkodziła, bo
+logowanie nie wymagało challenge.
+
+### Zastrzeżenie / co zweryfikować
+
+Nie ma logu z Linuksa. Możliwe też, że challenge tam wystąpił, ale **przeszedł**
+(cookies/reputacja OK), a nie że go nie było. Rozstrzygnięcie: porównać log Linux
+pod kątem `challenge.spotify.com` oraz `Third-party cookie will be blocked`.
 
 ## Różnica JCEF vs WebView2
 
@@ -498,21 +604,31 @@ Jeżeli chcemy sprawdzić hipotezę o kolejności, można przeprojektować Nuta 
 
 To nadal będzie prywatny mechanizm Spotify i nie gwarantuje przejścia reCAPTCHA.
 
-### Docelowa architektura
+### Docelowa architektura — parytet ze Spotube (OAuth WYKLUCZONY)
 
-Preferować:
+DECYZJA PROJEKTU (2026-07-18): OAuth NIE jest brany pod uwagę. Nie proponować
+przeglądarki systemowej ani publicznego Web API. Cel to odtworzyć mechanizm
+wtyczki Spotube:
 
 ```text
-systemowa przeglądarka
+WebView2 / Edge (zaufany silnik, przechodzi challenge)
+  ↓  webview TYLKO do logowania
+wykrycie ścieżki /status
   ↓
-Spotify OAuth Authorization Code + PKCE
+eksport cookies z webview (sp_dc)
   ↓
-localhost/deep-link callback
+kotlinowy HttpClient POZA webview
+  ↓  sp_dc + User-Agent + TOTP (Gist) + server-time
+/api/token
   ↓
-publiczne Spotify Web API
+prywatny Spotify GraphQL (jak teraz)
 ```
 
-To eliminuje zależność od JCEF, `sp_dc`, prywatnego TOTP i `/api/token`, ale wymaga przepisania klienta Spotify z prywatnego GraphQL na publiczne Web API.
+Sedno różnicy wobec działającego Spotube: **silnik logowania**. Spotube używa
+WebView2/Edge (challenge przechodzi), Nuta używa JCEF (challenge odrzucany po
+stronie serwera). Przejście na WebView2 wymaga natywnego mostu Windows (JNI/COM)
+— to realna praca, nie podmiana importu. Drugi element to odwrócenie flow: token
+liczony poza webview, nie przez JS `fetch` w JCEF.
 
 ## Ważne ostrzeżenia dla kolejnego LLM
 

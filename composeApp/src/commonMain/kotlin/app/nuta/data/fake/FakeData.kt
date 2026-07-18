@@ -26,15 +26,24 @@ object DemoLibrary {
 }
 
 class FakeSpotifyRepository(private val logger: NutaLogger) : SpotifyRepository {
+    private val likedTrackIds = DemoLibrary.tracks.mapTo(mutableSetOf(), Track::id)
+
     override suspend fun getPlaylists(): List<Playlist> {
         logger.debug("FakeSpotifyRepository", "playlists_loaded", "Załadowano demonstracyjne playlisty", fields = mapOf("count" to DemoLibrary.playlists.size.toString()))
         return DemoLibrary.playlists
     }
+    override suspend fun getSavedPlaylists(): List<Playlist> = getPlaylists()
 
     override suspend fun getPlaylistTracks(playlistId: String): List<Track> =
         DemoLibrary.playlists.firstOrNull { it.id == playlistId }?.tracks.orEmpty()
 
-    override suspend fun getLikedTracks(): List<Track> = DemoLibrary.tracks
+    override suspend fun getLikedTracks(): List<Track> = DemoLibrary.tracks.filter { it.id in likedTrackIds }
+
+    override suspend fun isTrackLiked(trackId: String): Boolean = trackId in likedTrackIds
+
+    override suspend fun setTrackLiked(trackId: String, liked: Boolean) {
+        if (liked) likedTrackIds += trackId else likedTrackIds -= trackId
+    }
 
     override suspend fun search(query: String): SearchResult {
         val normalized = query.trim().lowercase()
