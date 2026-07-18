@@ -10,3 +10,5 @@
 - Nie instaluj na hoście zależności projektu ani narzędzi potrzebnych do kompilacji.
 - Jeżeli weryfikacja nie jest możliwa w istniejącym obrazie, popraw Dockerfile lub skrypty zamiast uruchamiać narzędzia lokalnie.
 
+- wyjatek do dignozu aplikacji windows mozesz uruchamiac jave i sama aplikacje na hoscie
+

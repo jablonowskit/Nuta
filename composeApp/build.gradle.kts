@@ -68,6 +68,11 @@ compose.desktop {
             packageVersion = "0.1.0"
             description = "Nuta music player"
             vendor = "Nuta"
+
+            windows {
+                // Diagnostic build: keep stderr/stdout visible when the bundled JVM fails.
+                console = true
+            }
         }
     }
 }
