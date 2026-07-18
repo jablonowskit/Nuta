@@ -28,6 +28,8 @@ data class PlayerState(
     val currentIndex: Int = -1,
     val positionMs: Long = 0,
     val errorMessage: String? = null,
+    val streamBitrate: Int? = null,
+    val streamCodec: String? = null,
 ) {
     val currentTrack: Track? get() = queue.getOrNull(currentIndex)
     val durationMs: Long get() = currentTrack?.durationMs ?: 0L
