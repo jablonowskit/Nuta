@@ -37,7 +37,7 @@ class FakeAudioPlayer(
     override suspend fun shuffleUpcoming() {
         val state = _state.value
         if (state.currentIndex !in state.queue.indices) return
-        _state.value = state.copy(queue = state.queue.take(state.currentIndex + 1) + state.queue.drop(state.currentIndex + 1).shuffled())
+        _state.value = state.copy(queue = state.queue.take(state.currentIndex + 1) + state.queue.drop(state.currentIndex + 1).shuffled(), shuffleEnabled = true)
         logger.info("FakeAudioPlayer", "queue_shuffled", "Przetasowano pozostałe utwory kolejki")
     }
 

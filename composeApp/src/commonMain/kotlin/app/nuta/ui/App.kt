@@ -687,22 +687,36 @@ private fun CompactPlayerBar(state: PlayerState, container: AppContainer, simila
     val scope = rememberCoroutineScope()
     val track = state.currentTrack
     var radioLoading by remember { mutableStateOf(false) }
-    Column(Modifier.fillMaxWidth().height(116.dp).background(Color(0xFF131A20)).padding(horizontal = 10.dp, vertical = 5.dp)) {
+    Column(Modifier.fillMaxWidth().height(164.dp).background(Color(0xFF131A20)).padding(horizontal = 10.dp, vertical = 5.dp)) {
     Row(
-        Modifier.fillMaxWidth().weight(1f),
+        Modifier.fillMaxWidth().height(76.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(Modifier.size(46.dp).clickable { onOpenQueue() }) { Cover(track?.title ?: "N", track?.imageUrl, Modifier.fillMaxSize()) }
+        Box(Modifier.size(60.dp).clickable { onOpenQueue() }) { Cover(track?.title ?: "N", track?.imageUrl, Modifier.fillMaxSize()) }
         Spacer(Modifier.width(10.dp))
         Column(Modifier.weight(1f).clickable { onOpenQueue() }) {
-            Text(track?.title ?: "Nic nie odtwarzamy", maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.Bold, fontSize = 14.sp)
-            Text(playerSubtitle(track, state), color = Color(0xFF8D9BA6), fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(track?.title ?: "Nic nie odtwarzamy", maxLines = 2, overflow = TextOverflow.Clip, softWrap = true, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+            Text(track?.artists?.joinToString() ?: "Wybierz utwór", color = Color(0xFF8D9BA6), fontSize = 11.sp, maxLines = 2, overflow = TextOverflow.Clip, softWrap = true)
         }
-        Text("⏮", modifier = Modifier.clickable(enabled = track != null) { scope.launch { container.audioPlayer.previous() } }.padding(6.dp), color = if (track != null) Color.White else Color(0xFF55616A), fontWeight = FontWeight.Bold)
-        Text("↶10", modifier = Modifier.clickable(enabled = track != null) { scope.launch { container.audioPlayer.seekTo((state.positionMs - 10_000).coerceAtLeast(0)) } }.padding(6.dp), color = if (track != null) Color.White else Color(0xFF55616A), fontSize = 11.sp, fontWeight = FontWeight.Bold)
-        Text(if (state.status == PlayerStatus.PLAYING) "Ⅱ" else "▶", modifier = Modifier.clickable(enabled = track != null) { scope.launch { if (state.status == PlayerStatus.PLAYING) container.audioPlayer.pause() else container.audioPlayer.play() } }.padding(8.dp), color = MaterialTheme.colors.primary, fontSize = 18.sp)
-        Text("10↷", modifier = Modifier.clickable(enabled = track != null) { scope.launch { container.audioPlayer.seekTo((state.positionMs + 10_000).coerceAtMost(state.durationMs)) } }.padding(6.dp), color = if (track != null) Color.White else Color(0xFF55616A), fontSize = 11.sp, fontWeight = FontWeight.Bold)
-        Text("⏭", modifier = Modifier.clickable(enabled = track != null) { scope.launch { container.audioPlayer.next() } }.padding(6.dp), color = if (track != null) Color.White else Color(0xFF55616A), fontWeight = FontWeight.Bold)
+    }
+    Box(Modifier.fillMaxWidth().height(40.dp)) {
+        Row(Modifier.align(Alignment.Center), verticalAlignment = Alignment.CenterVertically) {
+            Text("⏮", modifier = Modifier.clickable(enabled = track != null) { scope.launch { container.audioPlayer.previous() } }.padding(6.dp), color = if (track != null) Color.White else Color(0xFF55616A), fontWeight = FontWeight.Bold)
+            Text("◀◀", modifier = Modifier.clickable(enabled = track != null) { scope.launch { container.audioPlayer.seekTo((state.positionMs - 10_000).coerceAtLeast(0)) } }.padding(6.dp), color = if (track != null) Color.White else Color(0xFF55616A), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+            Text(if (state.status == PlayerStatus.PLAYING) "Ⅱ" else "▶", modifier = Modifier.clickable(enabled = track != null) { scope.launch { if (state.status == PlayerStatus.PLAYING) container.audioPlayer.pause() else container.audioPlayer.play() } }.padding(8.dp), color = MaterialTheme.colors.primary, fontSize = 18.sp)
+            Text("▶▶", modifier = Modifier.clickable(enabled = track != null) { scope.launch { container.audioPlayer.seekTo((state.positionMs + 10_000).coerceAtMost(state.durationMs)) } }.padding(6.dp), color = if (track != null) Color.White else Color(0xFF55616A), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+            Text("⏭", modifier = Modifier.clickable(enabled = track != null) { scope.launch { container.audioPlayer.next() } }.padding(6.dp), color = if (track != null) Color.White else Color(0xFF55616A), fontWeight = FontWeight.Bold)
+            Text(
+                "⇄",
+                color = when { state.shuffleEnabled -> Color.White; state.queue.size > 1 -> MaterialTheme.colors.primary; else -> Color(0xFF55616A) },
+                modifier = Modifier.background(if (state.shuffleEnabled) Color(0xFF2F6B45) else Color.Transparent, RoundedCornerShape(6.dp))
+                    .clickable(enabled = state.queue.size > 1) { scope.launch { container.audioPlayer.shuffleUpcoming(); onOpenQueue() } }
+                    .padding(horizontal = 8.dp, vertical = 5.dp),
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold,
+            )
+        }
+        Text(streamDescription(state), color = Color(0xFF8D9BA6), fontSize = 10.sp, maxLines = 1, modifier = Modifier.align(Alignment.CenterEnd))
     }
     Row(Modifier.fillMaxWidth().height(38.dp), verticalAlignment = Alignment.CenterVertically) {
         Text(formatTime(state.positionMs), color = Color(0xFF8D9BA6), fontSize = 10.sp)
@@ -713,14 +727,6 @@ private fun CompactPlayerBar(state: PlayerState, container: AppContainer, simila
             modifier = Modifier.weight(1f).padding(horizontal = 2.dp),
         )
         Text(formatTime(state.durationMs), color = Color(0xFF8D9BA6), fontSize = 10.sp)
-        Text(
-            "🔀",
-            color = if (state.queue.size > 1) MaterialTheme.colors.primary else Color(0xFF55616A),
-            modifier = Modifier.padding(start = 6.dp).clickable(enabled = state.queue.size > 1) {
-                scope.launch { container.audioPlayer.shuffleUpcoming(); onOpenQueue() }
-            }.padding(horizontal = 6.dp, vertical = 6.dp),
-            fontSize = 14.sp,
-        )
         Text(
             if (radioLoading) "…" else "♬+",
             color = if (similarModeActive) Color.White else MaterialTheme.colors.primary,
@@ -745,17 +751,19 @@ private fun CompactPlayerBar(state: PlayerState, container: AppContainer, simila
 
 private fun playerSubtitle(track: Track?, state: PlayerState): String {
     if (track == null) return "Wybierz utwór"
-    val stream = state.streamBitrate?.takeIf { it > 0 }?.let { bitrate ->
-        val codec = when {
-            state.streamCodec.orEmpty().contains("mp4a", ignoreCase = true) -> "AAC"
-            state.streamCodec.orEmpty().contains("opus", ignoreCase = true) -> "Opus"
-            state.streamCodec.isNullOrBlank() -> null
-            else -> state.streamCodec
-        }
-        listOfNotNull(codec, "${(bitrate + 500) / 1_000} kb/s").joinToString(" • ")
-    }
+    val stream = streamDescription(state).takeIf(String::isNotBlank)
     return listOfNotNull(track.artists.joinToString().takeIf(String::isNotBlank), stream).joinToString(" • ")
 }
+
+private fun streamDescription(state: PlayerState): String = state.streamBitrate?.takeIf { it > 0 }?.let { bitrate ->
+    val codec = when {
+        state.streamCodec.orEmpty().contains("mp4a", ignoreCase = true) -> "AAC"
+        state.streamCodec.orEmpty().contains("opus", ignoreCase = true) -> "Opus"
+        state.streamCodec.isNullOrBlank() -> null
+        else -> state.streamCodec
+    }
+    listOfNotNull(codec, "${(bitrate + 500) / 1_000} kb/s").joinToString(" • ")
+}.orEmpty()
 
 @Composable
 private fun PlayerBar(
@@ -790,7 +798,14 @@ private fun PlayerBar(
         Spacer(Modifier.width(6.dp))
         OutlinedButton(onClick = { scope.launch { container.audioPlayer.next() } }, enabled = track != null) { Text("⏭") }
         Spacer(Modifier.width(6.dp))
-        OutlinedButton(onClick = { scope.launch { container.audioPlayer.shuffleUpcoming(); onOpenQueue() } }, enabled = state.queue.size > 1) { Text("🔀") }
+        OutlinedButton(
+            onClick = { scope.launch { container.audioPlayer.shuffleUpcoming(); onOpenQueue() } },
+            enabled = state.queue.size > 1,
+            colors = ButtonDefaults.outlinedButtonColors(
+                backgroundColor = if (state.shuffleEnabled) Color(0xFF2F6B45) else Color.Transparent,
+                contentColor = if (state.shuffleEnabled) Color.White else MaterialTheme.colors.primary,
+            ),
+        ) { Text("⇄", fontWeight = FontWeight.Bold) }
         Spacer(Modifier.width(6.dp))
         OutlinedButton(
             onClick = {
