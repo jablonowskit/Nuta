@@ -77,9 +77,13 @@ class Media3AudioPlayer(
         val track = stateFlow.value.currentTrack ?: return
         if (stateFlow.value.status == PlayerStatus.PAUSED) { withContext(Dispatchers.Main) { player.play() }; return }
         loadMutex.withLock {
-            stateFlow.value = stateFlow.value.copy(status = PlayerStatus.LOADING, positionMs = 0, errorMessage = null)
+            stateFlow.value = stateFlow.value.copy(status = PlayerStatus.LOADING, positionMs = 0, errorMessage = null, streamBitrate = null, streamCodec = null)
             runCatching { youtube.resolve(track) }.onSuccess { resolution ->
                 val url = resolution.stream.url.use { it }
+                stateFlow.value = stateFlow.value.copy(
+                    streamBitrate = resolution.stream.bitrate,
+                    streamCodec = resolution.stream.codec,
+                )
                 withContext(Dispatchers.Main) {
                     player.setMediaItem(MediaItem.fromUri(url)); player.prepare(); player.play()
                 }
@@ -102,7 +106,7 @@ class Media3AudioPlayer(
     override suspend fun playAt(index: Int) = move(index)
     override suspend fun simulateError() { stateFlow.value = stateFlow.value.copy(status = PlayerStatus.ERROR, errorMessage = "Symulowany błąd") }
 
-    private suspend fun move(index: Int) { if (index !in stateFlow.value.queue.indices) return; withContext(Dispatchers.Main) { player.stop() }; stateFlow.value = stateFlow.value.copy(currentIndex = index, status = PlayerStatus.IDLE, positionMs = 0, errorMessage = null); play() }
+    private suspend fun move(index: Int) { if (index !in stateFlow.value.queue.indices) return; withContext(Dispatchers.Main) { player.stop() }; stateFlow.value = stateFlow.value.copy(currentIndex = index, status = PlayerStatus.IDLE, positionMs = 0, errorMessage = null, streamBitrate = null, streamCodec = null); play() }
     private suspend fun advanceAfterEnd() { val next = stateFlow.value.currentIndex + 1; if (next in stateFlow.value.queue.indices) move(next) else stateFlow.value = stateFlow.value.copy(status = PlayerStatus.ENDED) }
     private fun startTicker() { ticker?.cancel(); ticker = scope.launch { while (isActive) { delay(500); val position = withContext(Dispatchers.Main) { player.currentPosition }; stateFlow.value = stateFlow.value.copy(positionMs = position.coerceAtLeast(0)) } } }
     companion object {

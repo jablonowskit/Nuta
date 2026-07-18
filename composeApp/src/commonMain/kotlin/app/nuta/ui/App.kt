@@ -696,7 +696,7 @@ private fun CompactPlayerBar(state: PlayerState, container: AppContainer, simila
         Spacer(Modifier.width(10.dp))
         Column(Modifier.weight(1f).clickable { onOpenQueue() }) {
             Text(track?.title ?: "Nic nie odtwarzamy", maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.Bold, fontSize = 14.sp)
-            Text(track?.artists?.joinToString() ?: "Wybierz utwór", color = Color(0xFF8D9BA6), fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(playerSubtitle(track, state), color = Color(0xFF8D9BA6), fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         Text("⏮", modifier = Modifier.clickable(enabled = track != null) { scope.launch { container.audioPlayer.previous() } }.padding(6.dp), color = if (track != null) Color.White else Color(0xFF55616A), fontWeight = FontWeight.Bold)
         Text("↶10", modifier = Modifier.clickable(enabled = track != null) { scope.launch { container.audioPlayer.seekTo((state.positionMs - 10_000).coerceAtLeast(0)) } }.padding(6.dp), color = if (track != null) Color.White else Color(0xFF55616A), fontSize = 11.sp, fontWeight = FontWeight.Bold)
@@ -735,6 +735,20 @@ private fun CompactPlayerBar(state: PlayerState, container: AppContainer, simila
     }
 }
 
+private fun playerSubtitle(track: Track?, state: PlayerState): String {
+    if (track == null) return "Wybierz utwór"
+    val stream = state.streamBitrate?.takeIf { it > 0 }?.let { bitrate ->
+        val codec = when {
+            state.streamCodec.orEmpty().contains("mp4a", ignoreCase = true) -> "AAC"
+            state.streamCodec.orEmpty().contains("opus", ignoreCase = true) -> "Opus"
+            state.streamCodec.isNullOrBlank() -> null
+            else -> state.streamCodec
+        }
+        listOfNotNull(codec, "${(bitrate + 500) / 1_000} kb/s").joinToString(" • ")
+    }
+    return listOfNotNull(track.artists.joinToString().takeIf(String::isNotBlank), stream).joinToString(" • ")
+}
+
 @Composable
 private fun PlayerBar(
     state: PlayerState,
@@ -755,7 +769,7 @@ private fun PlayerBar(
         Spacer(Modifier.width(12.dp))
         Column(Modifier.width(230.dp)) {
             Text(track?.title ?: "Nic nie odtwarzamy", maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.Bold)
-            Text(track?.artists?.joinToString() ?: "Wybierz utwór z playlisty", color = Color(0xFF8D9BA6), fontSize = 12.sp, maxLines = 1)
+            Text(playerSubtitle(track, state), color = Color(0xFF8D9BA6), fontSize = 12.sp, maxLines = 1)
         }
         Spacer(Modifier.width(14.dp))
         OutlinedButton(onClick = { scope.launch { container.audioPlayer.previous() } }, enabled = track != null) { Text("⏮") }
