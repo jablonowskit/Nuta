@@ -29,7 +29,7 @@ object AppServices {
         private set
 
     val audioPlayer = MutableStateFlow<Media3AudioPlayer?>(null)
-    val playerError = MutableStateFlow<String?>(null)
+    val playerConnectFailed = MutableStateFlow(false)
 
     @Synchronized
     fun start(context: Context) {
@@ -46,7 +46,7 @@ object AppServices {
                     audioPlayer.value = Media3AudioPlayer(controller, scope, youtubeMediaService, logger, context.getSharedPreferences("playback-queue", Context.MODE_PRIVATE))
                 }
                 .onFailure { error ->
-                    playerError.value = "Nie udało się połączyć z usługą odtwarzania"
+                    playerConnectFailed.value = true
                     logger.error("Playback", "controller_connect_failed", "Nie udało się połączyć z usługą odtwarzania", throwable = error)
                 }
         }, ContextCompat.getMainExecutor(context))

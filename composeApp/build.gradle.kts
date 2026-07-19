@@ -36,6 +36,7 @@ kotlin {
                 implementation(compose.foundation)
                 implementation(compose.material)
                 implementation(compose.ui)
+                api(compose.components.resources)
                 implementation(libs.coroutines.core)
                 implementation(libs.serialization.json)
             }
@@ -62,6 +63,11 @@ kotlin {
             }
         }
     }
+}
+
+compose.resources {
+    publicResClass = true
+    packageOfResClass = "app.nuta.resources"
 }
 
 compose.desktop {
