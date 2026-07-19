@@ -53,6 +53,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalDensity
 import app.nuta.AppContainer
@@ -124,7 +125,7 @@ private fun ScrollableLazyColumn(
 fun NutaApp(container: AppContainer, onSpotifyLogin: (() -> Unit)? = null) {
     val settings by container.playbackSettings.settings.collectAsState()
     val density = LocalDensity.current
-    CompositionLocalProvider(LocalDensity provides density.copy(fontScale = settings.fontScale)) {
+    CompositionLocalProvider(LocalDensity provides Density(density.density, settings.fontScale)) {
     MaterialTheme(colors = NutaColors) {
         NutaAppContent(container, onSpotifyLogin)
     }
@@ -350,8 +351,6 @@ private fun NutaAppContent(container: AppContainer, onSpotifyLogin: (() -> Unit)
             }
         }
     }
-}
-
 @Composable
 private fun TopBar(compact: Boolean) {
     Row(
