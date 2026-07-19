@@ -1,7 +1,12 @@
 package app.nuta.ui
 
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.keyframes
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.ui.draw.alpha
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -760,6 +765,26 @@ private fun TrackQueueButton(onClick: () -> Unit) {
 }
 
 @Composable
+private fun BufferingIndicator(color: Color = MaterialTheme.colors.primary) {
+    val transition = rememberInfiniteTransition()
+    val alpha by transition.animateFloat(
+        initialValue = 0.25f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            keyframes {
+                durationMillis = 900
+                0.25f at 0
+                1f at 300
+                0.25f at 900
+            },
+        ),
+    )
+    Row(Modifier.size(32.dp), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
+        repeat(3) { Text("●", color = color, fontSize = 7.sp, modifier = Modifier.alpha(alpha)) }
+    }
+}
+
+@Composable
 private fun SearchScreen(
     container: AppContainer,
     state: SearchViewState,
@@ -970,7 +995,7 @@ private fun CompactPlayerBar(
             Text("◀◀", modifier = Modifier.size(32.dp).clickable(enabled = track != null) { scope.launch { container.audioPlayer.seekTo((state.positionMs - 10_000).coerceAtLeast(0)) } }, color = if (track != null) Color.White else Color(0xFF55616A), fontSize = 12.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
             if (state.status == PlayerStatus.LOADING) {
                 Box(Modifier.size(32.dp), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(Modifier.size(23.dp), strokeWidth = 3.dp, color = MaterialTheme.colors.primary)
+                    BufferingIndicator()
                 }
             } else Text(if (state.status == PlayerStatus.PLAYING) "Ⅱ" else "▶", modifier = Modifier.size(32.dp).clickable(enabled = track != null) { scope.launch { if (state.status == PlayerStatus.PLAYING) container.audioPlayer.pause() else container.audioPlayer.play() } }, color = MaterialTheme.colors.primary, fontSize = 18.sp, textAlign = TextAlign.Center)
             Text("▶▶", modifier = Modifier.size(32.dp).clickable(enabled = track != null) { scope.launch { container.audioPlayer.seekTo((state.positionMs + 10_000).coerceAtMost(state.durationMs)) } }, color = if (track != null) Color.White else Color(0xFF55616A), fontSize = 12.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
@@ -1070,7 +1095,7 @@ private fun PlayerBar(
         OutlinedButton(onClick = { scope.launch { container.audioPlayer.previous() } }, enabled = track != null, modifier = Modifier.size(42.dp), contentPadding = PaddingValues(0.dp)) { Text("⏮") }
         Spacer(Modifier.width(6.dp))
         Button(onClick = { scope.launch { if (state.status == PlayerStatus.PLAYING) container.audioPlayer.pause() else container.audioPlayer.play() } }, enabled = track != null && state.status != PlayerStatus.LOADING, modifier = Modifier.size(42.dp), contentPadding = PaddingValues(0.dp)) {
-            if (state.status == PlayerStatus.LOADING) CircularProgressIndicator(Modifier.size(23.dp), strokeWidth = 3.dp, color = MaterialTheme.colors.onPrimary)
+            if (state.status == PlayerStatus.LOADING) BufferingIndicator(MaterialTheme.colors.onPrimary)
             else Text(if (state.status == PlayerStatus.PLAYING) "⏸" else "▶")
         }
         Spacer(Modifier.width(6.dp))
