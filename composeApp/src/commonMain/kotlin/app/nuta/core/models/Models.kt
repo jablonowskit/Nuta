@@ -17,9 +17,16 @@ data class Playlist(
     val imageUrl: String? = null,
 )
 
+data class Artist(
+    val id: String,
+    val name: String,
+    val imageUrl: String? = null,
+)
+
 data class SearchResult(
     val tracks: List<Track>,
     val playlists: List<Playlist>,
+    val artists: List<Artist> = emptyList(),
 )
 
 enum class PlayerStatus { IDLE, LOADING, PLAYING, PAUSED, ENDED, ERROR }

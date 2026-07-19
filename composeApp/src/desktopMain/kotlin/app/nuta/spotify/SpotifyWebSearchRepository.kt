@@ -2,6 +2,7 @@ package app.nuta.spotify
 
 import app.nuta.core.logging.NutaLogger
 import app.nuta.core.models.Playlist
+import app.nuta.core.models.Artist
 import app.nuta.core.models.SearchResult
 import app.nuta.core.models.Track
 import app.nuta.core.security.SecretValue
@@ -139,9 +140,10 @@ class SpotifyWebSearchRepository(
         logger.debug("SpotifySearch", "search_started", "Rozpoczęto wyszukiwanie utworów", operationId, mapOf("queryLength" to query.length.toString()))
         return try {
             val token = validToken()
-            val tracks = searchTracks(query, token)
+            val payload = searchPayload(query, token)
+            val tracks = payload.tracks
             logger.info("SpotifySearch", "search_completed", "Zakończono wyszukiwanie utworów", operationId, mapOf("results" to tracks.size.toString()))
-            SearchResult(tracks, emptyList())
+            SearchResult(tracks, collectPlaylists(payload.root).distinctBy(Playlist::id).take(30), collectArtists(payload.root).take(30))
         } catch (error: Throwable) {
             logger.error("SpotifySearch", "search_failed", "Wyszukiwanie Spotify nie powiodło się", operationId, throwable = error)
             throw error
@@ -183,6 +185,12 @@ class SpotifyWebSearchRepository(
     }
 
     private suspend fun searchTracks(query: String, token: SpotifyWebToken): List<Track> {
+        return searchPayload(query, token).tracks
+    }
+
+    private data class SearchPayload(val tracks: List<Track>, val root: JsonObject)
+
+    private suspend fun searchPayload(query: String, token: SpotifyWebToken): SearchPayload {
         val body = JsonObject(mapOf(
             "variables" to JsonObject(mapOf(
                 "searchTerm" to JsonPrimitive(query), "offset" to JsonPrimitive(0), "limit" to JsonPrimitive(10),
@@ -197,8 +205,8 @@ class SpotifyWebSearchRepository(
             )))),
         )).toString()
         val root = postJson("https://api-partner.spotify.com/pathfinder/v2/query", body, token).jsonObject
-        val items = root["data"]?.jsonObject?.get("searchV2")?.jsonObject?.get("tracksV2")?.jsonObject?.get("items") as? JsonArray ?: return emptyList()
-        return items.mapNotNull { element ->
+        val items = root["data"]?.jsonObject?.get("searchV2")?.jsonObject?.get("tracksV2")?.jsonObject?.get("items") as? JsonArray
+        val tracks = items.orEmpty().mapNotNull { element ->
             val item = element.jsonObject["item"]?.jsonObject?.get("data")?.jsonObject ?: return@mapNotNull null
             val uri = item["uri"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
             val id = uri.substringAfterLast(':').takeIf(String::isNotBlank) ?: return@mapNotNull null
@@ -219,7 +227,20 @@ class SpotifyWebSearchRepository(
                 imageUrl = spotifyImageUrl(item["albumOfTrack"] ?: item),
             )
         }.distinctBy(Track::id).take(10)
+        return SearchPayload(tracks, root)
     }
+
+    private fun collectArtists(element: kotlinx.serialization.json.JsonElement): List<Artist> = when (element) {
+        is JsonArray -> element.flatMap(::collectArtists)
+        is JsonObject -> {
+            val uri = element["uri"]?.jsonPrimitive?.contentOrNull
+            val current = if (uri?.startsWith("spotify:artist:") == true) {
+                element["name"]?.jsonPrimitive?.contentOrNull?.let { Artist(uri.substringAfterLast(':'), it, spotifyImageUrl(element)) }
+            } else null
+            listOfNotNull(current) + element.values.flatMap(::collectArtists)
+        }
+        else -> emptyList()
+    }.distinctBy(Artist::id)
 
     private fun collectPlaylists(element: kotlinx.serialization.json.JsonElement): List<Playlist> = when (element) {
         is JsonArray -> element.flatMap(::collectPlaylists)
