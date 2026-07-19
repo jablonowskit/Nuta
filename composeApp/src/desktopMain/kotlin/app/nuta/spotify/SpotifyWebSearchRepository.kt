@@ -143,7 +143,10 @@ class SpotifyWebSearchRepository(
             val payload = searchPayload(query, token)
             val tracks = payload.tracks
             logger.info("SpotifySearch", "search_completed", "Zakończono wyszukiwanie utworów", operationId, mapOf("results" to tracks.size.toString()))
-            SearchResult(tracks, collectPlaylists(payload.root).distinctBy(Playlist::id).take(30), collectArtists(payload.root).take(30))
+            val artists = (collectArtists(payload.root) + tracks.flatMap { track ->
+                track.artists.map { name -> Artist(name.hashCode().toString(), name) }
+            }).distinctBy(Artist::id).take(30)
+            SearchResult(tracks, collectPlaylists(payload.root).distinctBy(Playlist::id).take(30), artists)
         } catch (error: Throwable) {
             logger.error("SpotifySearch", "search_failed", "Wyszukiwanie Spotify nie powiodło się", operationId, throwable = error)
             throw error
