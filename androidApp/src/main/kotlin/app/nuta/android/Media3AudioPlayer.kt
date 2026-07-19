@@ -64,6 +64,8 @@ class Media3AudioPlayer(
                 logger.error("Media3Player", "playback_failed", "Media3 zgłosił błąd odtwarzania", throwable = error)
             }
         })
+        PlaybackQueueBridge.onNext = { scope.launch { next() } }
+        PlaybackQueueBridge.onPrevious = { scope.launch { previous() } }
     }
 
     override suspend fun setQueue(tracks: List<Track>, startIndex: Int) {
@@ -126,7 +128,8 @@ class Media3AudioPlayer(
     private suspend fun move(index: Int) {
         if (index !in stateFlow.value.queue.indices) return
         stateFlow.value = stateFlow.value.copy(currentIndex = index, status = PlayerStatus.IDLE, positionMs = 0, errorMessage = null, streamBitrate = null, streamCodec = null)
-        withContext(Dispatchers.Main) { player.stop() }
+        // pause zamiast stop: stop przełącza sesję w IDLE i zwija powiadomienie/lock screen na czas rozwiązywania streamu
+        withContext(Dispatchers.Main) { player.pause() }
         play()
     }
 

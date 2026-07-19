@@ -1,5 +1,7 @@
 package app.nuta.android
 
+import androidx.media3.common.ForwardingPlayer
+import androidx.media3.common.Player
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
@@ -18,7 +20,26 @@ class PlaybackService : MediaSessionService() {
             .setMediaSourceFactory(DefaultMediaSourceFactory(DefaultHttpDataSource.Factory().setUserAgent(USER_AGENT).setAllowCrossProtocolRedirects(true)))
             .setLoadControl(loadControl(settingsStore.settings.value.bufferSize))
             .build()
-        mediaSession = MediaSession.Builder(this, player).build()
+        mediaSession = MediaSession.Builder(this, QueueAwarePlayer(player)).build()
+    }
+
+    private class QueueAwarePlayer(player: Player) : ForwardingPlayer(player) {
+        override fun getAvailableCommands(): Player.Commands = super.getAvailableCommands().buildUpon()
+            .addAll(
+                Player.COMMAND_SEEK_TO_NEXT,
+                Player.COMMAND_SEEK_TO_PREVIOUS,
+                Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM,
+                Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM,
+            )
+            .build()
+
+        override fun isCommandAvailable(command: Int): Boolean = getAvailableCommands().contains(command)
+        override fun hasNextMediaItem(): Boolean = true
+        override fun hasPreviousMediaItem(): Boolean = true
+        override fun seekToNext() { PlaybackQueueBridge.onNext?.invoke() }
+        override fun seekToNextMediaItem() { PlaybackQueueBridge.onNext?.invoke() }
+        override fun seekToPrevious() { PlaybackQueueBridge.onPrevious?.invoke() }
+        override fun seekToPreviousMediaItem() { PlaybackQueueBridge.onPrevious?.invoke() }
     }
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? = mediaSession
