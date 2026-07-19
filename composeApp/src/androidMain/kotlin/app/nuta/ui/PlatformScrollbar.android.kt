@@ -26,7 +26,9 @@ actual fun PlatformVerticalScrollbar(state: LazyListState, modifier: Modifier): 
         val maxOffset = (totalItems - visibleItems).coerceAtLeast(1)
         val firstVisible = state.firstVisibleItemIndex.coerceIn(0, maxOffset)
         val thumbTop = (viewportHeight - thumbHeight) * firstVisible / maxOffset
-        val x = size.width - 5.dp.toPx()
+        val minScrollbarWidth = 8.dp.toPx()
+        val drawableWidth = size.width.coerceAtLeast(minScrollbarWidth)
+        val x = (drawableWidth - 5.dp.toPx()).coerceIn(4.dp.toPx(), drawableWidth - 4.dp.toPx())
 
         drawRoundRect(
             color = Color.White.copy(alpha = 0.16f),
