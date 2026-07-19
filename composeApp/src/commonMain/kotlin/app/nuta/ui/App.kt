@@ -146,6 +146,7 @@ fun NutaApp(container: AppContainer, onSpotifyLogin: (() -> Unit)? = null) {
 @Composable
 private fun NutaAppContent(container: AppContainer, onSpotifyLogin: (() -> Unit)?) {
         val playerState by container.audioPlayer.state.collectAsState()
+        val playbackSettings by container.playbackSettings.settings.collectAsState()
         var destination by remember { mutableStateOf(Destination.HOME) }
         var selectedPlaylist by remember { mutableStateOf<Playlist?>(null) }
         var playlists by remember { mutableStateOf<List<Playlist>>(emptyList()) }
@@ -321,6 +322,7 @@ private fun NutaAppContent(container: AppContainer, onSpotifyLogin: (() -> Unit)
                                 Destination.HOME -> HomeScreen(
                                     playlists = playlists,
                                     playerState = playerState,
+                                    recommendationsCount = playbackSettings.homeRecommendations,
                                     openPlaylists = { destination = Destination.PLAYLISTS },
                                     onSpotifyLogin = onSpotifyLogin,
                                     onSelectPlaylist = ::selectPlaylist,
@@ -467,6 +469,14 @@ private fun SettingsScreen(container: AppContainer) {
             }
         }
         item {
+            SettingsGroup(stringResource(Res.string.home_recs_title), stringResource(Res.string.home_recs_desc)) {
+                SettingOptions(
+                    options = listOf(6 to "6", 10 to "10", 20 to "20", 30 to "30"),
+                    selected = settings.homeRecommendations,
+                ) { container.playbackSettings.update(settings.copy(homeRecommendations = it)) }
+            }
+        }
+        item {
             SettingsGroup(stringResource(Res.string.loudness_title), stringResource(Res.string.loudness_desc)) {
                 SettingOptions(
                     options = listOf(
@@ -558,11 +568,12 @@ private fun destinationLabel(destination: Destination): String = stringResource(
 private fun HomeScreen(
     playlists: List<Playlist>,
     playerState: PlayerState,
+    recommendationsCount: Int,
     openPlaylists: () -> Unit,
     onSpotifyLogin: (() -> Unit)?,
     onSelectPlaylist: (Playlist) -> Unit,
 ) {
-    val recommendations = playlists.take(6)
+    val recommendations = playlists.take(recommendationsCount)
     ScrollableLazyColumn(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item {
         Heading(stringResource(Res.string.home_title), stringResource(Res.string.home_subtitle))
@@ -755,7 +766,7 @@ private fun TrackRow(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (active && loading) {
-            CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = MaterialTheme.colors.primary)
+            Text("⏳", fontSize = 14.sp, modifier = Modifier.width(28.dp), textAlign = TextAlign.Center)
         } else {
             Text(if (active) "▶" else "♪", color = if (active) MaterialTheme.colors.primary else Color(0xFF7D8B95), modifier = Modifier.width(28.dp))
         }
@@ -1027,9 +1038,7 @@ private fun CompactPlayerBar(
             Text("⏮", modifier = Modifier.size(32.dp).clickable(enabled = track != null) { scope.launch { container.audioPlayer.previous() } }, color = if (track != null) Color.White else Color(0xFF55616A), fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
             Text("◀◀", modifier = Modifier.size(32.dp).clickable(enabled = track != null) { scope.launch { container.audioPlayer.seekTo((state.positionMs - 10_000).coerceAtLeast(0)) } }, color = if (track != null) Color.White else Color(0xFF55616A), fontSize = 12.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
             if (state.status == PlayerStatus.LOADING) {
-                Box(Modifier.size(32.dp), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(Modifier.size(28.dp), strokeWidth = 3.dp, color = MaterialTheme.colors.primary)
-                }
+                Text("⏳", modifier = Modifier.size(32.dp), color = MaterialTheme.colors.primary, fontSize = 18.sp, textAlign = TextAlign.Center)
             } else Text(if (state.status == PlayerStatus.PLAYING) "Ⅱ" else "▶", modifier = Modifier.size(32.dp).clickable(enabled = track != null) { scope.launch { if (state.status == PlayerStatus.PLAYING) container.audioPlayer.pause() else container.audioPlayer.play() } }, color = MaterialTheme.colors.primary, fontSize = 18.sp, textAlign = TextAlign.Center)
             Text("▶▶", modifier = Modifier.size(32.dp).clickable(enabled = track != null) { scope.launch { container.audioPlayer.seekTo((state.positionMs + 10_000).coerceAtMost(state.durationMs)) } }, color = if (track != null) Color.White else Color(0xFF55616A), fontSize = 12.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
             Text("⏭", modifier = Modifier.size(32.dp).clickable(enabled = track != null) { scope.launch { container.audioPlayer.next() } }, color = if (track != null) Color.White else Color(0xFF55616A), fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
@@ -1132,7 +1141,7 @@ private fun PlayerBar(
         OutlinedButton(onClick = { scope.launch { container.audioPlayer.previous() } }, enabled = track != null, modifier = Modifier.size(42.dp), contentPadding = PaddingValues(0.dp)) { Text("⏮") }
         Spacer(Modifier.width(6.dp))
         Button(onClick = { scope.launch { if (state.status == PlayerStatus.PLAYING) container.audioPlayer.pause() else container.audioPlayer.play() } }, enabled = track != null && state.status != PlayerStatus.LOADING, modifier = Modifier.size(42.dp), contentPadding = PaddingValues(0.dp)) {
-            if (state.status == PlayerStatus.LOADING) CircularProgressIndicator(Modifier.size(28.dp), strokeWidth = 3.dp, color = MaterialTheme.colors.onPrimary)
+            if (state.status == PlayerStatus.LOADING) Text("⏳")
             else Text(if (state.status == PlayerStatus.PLAYING) "⏸" else "▶")
         }
         Spacer(Modifier.width(6.dp))

@@ -15,6 +15,7 @@ data class YouTubePlaybackSettings(
     val codec: CodecPreference = CodecPreference.AAC,
     val bufferSize: BufferSize = BufferSize.STANDARD,
     val loudnessNormalization: LoudnessNormalization = LoudnessNormalization.OFF,
+    val homeRecommendations: Int = 6,
 )
 
 interface PlaybackSettingsStore {

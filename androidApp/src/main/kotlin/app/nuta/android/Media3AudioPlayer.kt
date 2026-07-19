@@ -42,14 +42,13 @@ class Media3AudioPlayer(
         player.addListener(object : Player.Listener {
             override fun onPlaybackStateChanged(playbackState: Int) {
                 when (playbackState) {
-                    Player.STATE_READY -> if (player.playWhenReady) stateFlow.value = stateFlow.value.copy(status = PlayerStatus.PLAYING)
                     Player.STATE_ENDED -> scope.launch { advanceAfterEnd() }
-                    Player.STATE_BUFFERING -> if (stateFlow.value.currentTrack != null) stateFlow.value = stateFlow.value.copy(status = PlayerStatus.LOADING)
+                    else -> refreshPlayingState()
                 }
             }
             override fun onIsPlayingChanged(isPlaying: Boolean) {
-                if (isPlaying) { stateFlow.value = stateFlow.value.copy(status = PlayerStatus.PLAYING); startTicker() }
-                else if (player.playbackState == Player.STATE_READY && stateFlow.value.status == PlayerStatus.PLAYING) stateFlow.value = stateFlow.value.copy(status = PlayerStatus.PAUSED)
+                if (isPlaying) startTicker()
+                refreshPlayingState()
             }
             override fun onPlayerError(error: PlaybackException) {
                 stateFlow.value = stateFlow.value.copy(status = PlayerStatus.ERROR, errorMessage = error.errorCodeName)
@@ -72,14 +71,19 @@ class Media3AudioPlayer(
                 PlaybackQueueBridge.hasPrevious.value = state.currentIndex - 1 in state.queue.indices
             }
         }
-        scope.launch {
-            PlaybackQueueBridge.buffering.collect { buffering ->
-                if (buffering) {
-                    if (stateFlow.value.currentTrack != null) stateFlow.value = stateFlow.value.copy(status = PlayerStatus.LOADING)
-                } else if (stateFlow.value.status == PlayerStatus.LOADING && withContext(Dispatchers.Main) { player.isPlaying }) {
-                    stateFlow.value = stateFlow.value.copy(status = PlayerStatus.PLAYING)
-                }
-            }
+        // jedyne źródło prawdy o LOADING/PLAYING/PAUSED: reaguje zarówno na eventy playera jak i na
+        // prawdziwy stan buforowania z serwisu, niezależnie od kolejności ich napłynięcia
+        scope.launch { PlaybackQueueBridge.buffering.collect { refreshPlayingState() } }
+    }
+
+    /** Jedyne miejsce, które ustawia LOADING/PLAYING/PAUSED — unika wyścigu między eventami playera a bridge.buffering. */
+    private fun refreshPlayingState() {
+        if (stateFlow.value.currentTrack == null) return
+        when {
+            PlaybackQueueBridge.buffering.value -> stateFlow.value = stateFlow.value.copy(status = PlayerStatus.LOADING)
+            player.isPlaying -> stateFlow.value = stateFlow.value.copy(status = PlayerStatus.PLAYING)
+            player.playbackState == Player.STATE_READY && stateFlow.value.status == PlayerStatus.PLAYING ->
+                stateFlow.value = stateFlow.value.copy(status = PlayerStatus.PAUSED)
         }
     }
 
