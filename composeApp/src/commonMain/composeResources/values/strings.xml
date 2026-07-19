@@ -1,0 +1,106 @@
+<resources>
+    <!-- Navigation -->
+    <string name="nav_home">Home</string>
+    <string name="nav_playlists">Library</string>
+    <string name="nav_liked">Liked</string>
+    <string name="nav_liked_short">Liked</string>
+    <string name="nav_search">Search</string>
+    <string name="nav_search_short">Search</string>
+    <string name="nav_queue">Player</string>
+    <string name="nav_settings">Settings</string>
+    <string name="nav_settings_short">Settings</string>
+    <string name="nav_diagnostics">Diagnostics</string>
+    <string name="sidebar_navigation">NAVIGATION</string>
+    <string name="sidebar_phase">Phase 1 • Linux-first</string>
+    <string name="app_tagline">Spotify Web + YouTube</string>
+
+    <!-- Home -->
+    <string name="home_title">For you</string>
+    <string name="home_subtitle">Recommendations from your Spotify home page</string>
+    <string name="stat_suggestions">Suggestions</string>
+    <string name="stat_tracks">Tracks</string>
+    <string name="stat_player">Player</string>
+    <string name="home_no_recommendations">Spotify returned no recommendations</string>
+    <string name="spotify_session_title">Spotify session</string>
+    <string name="spotify_session_desc">Recommendations come from your signed-in Spotify Web session.</string>
+    <string name="open_playlists">Open playlists</string>
+    <string name="spotify_login_test">Spotify login test</string>
+
+    <!-- Library / playlists -->
+    <string name="library_title">Library</string>
+    <string name="library_subtitle">Your Spotify playlists and liked songs</string>
+    <string name="no_playlists">No playlists</string>
+    <string name="play_all">Play all</string>
+    <plurals name="track_count">
+        <item quantity="one">%1$d track</item>
+        <item quantity="other">%1$d tracks</item>
+    </plurals>
+    <string name="saved_playlists_failed_prefix">Could not load saved Spotify playlists:</string>
+
+    <!-- Liked -->
+    <string name="liked_title">Liked</string>
+    <string name="liked_empty">No liked songs found</string>
+    <string name="liked_play_all">▶ Play all (%1$d)</string>
+    <string name="liked_fetch_failed">Could not load liked songs</string>
+
+    <!-- Search -->
+    <string name="search_placeholder">Title, artist or playlist</string>
+    <string name="filter_tracks">Tracks</string>
+    <string name="filter_artists">Artists</string>
+    <string name="filter_playlists">Playlists</string>
+    <string name="section_playlists">PLAYLISTS</string>
+    <string name="section_tracks">TRACKS</string>
+    <string name="search_no_results">No results for “%1$s”</string>
+    <string name="search_unknown_error">Unknown search error</string>
+    <string name="preparing_stream">Player: preparing the YouTube stream…</string>
+
+    <!-- Settings -->
+    <string name="settings_title">Playback settings</string>
+    <string name="settings_subtitle">YouTube stream quality and Media3 buffer</string>
+    <string name="font_size_title">Font size</string>
+    <string name="font_size_desc">Scale the interface between 50% and 100%</string>
+    <string name="quality_title">Quality</string>
+    <string name="quality_desc">Takes effect from the next track</string>
+    <string name="option_auto">Auto</string>
+    <string name="option_standard">Standard</string>
+    <string name="quality_data_saver">Data saver</string>
+    <string name="quality_best">Best</string>
+    <string name="codec_title">Codec</string>
+    <string name="codec_desc">AAC is the most stable on Android</string>
+    <string name="buffer_title">Buffer</string>
+    <string name="buffer_desc">Buffer changes take effect after restarting the app</string>
+    <string name="buffer_small">Small</string>
+    <string name="buffer_large">Large</string>
+    <string name="loudness_title">Loudness normalization</string>
+    <string name="loudness_desc">Off by default; correction can alter track dynamics</string>
+    <string name="loudness_off">Off</string>
+    <string name="loudness_gentle">Gentle</string>
+    <string name="loudness_normal">Normal</string>
+    <string name="settings_footer">Default: best AAC quality and a standard buffer.</string>
+
+    <!-- Diagnostics -->
+    <string name="diagnostics_title">Diagnostics</string>
+    <string name="diagnostics_subtitle">Structured logs and issue simulation</string>
+    <string name="log_level">Level:</string>
+    <string name="simulate_error">Simulate error</string>
+    <string name="clear">Clear</string>
+    <string name="no_events">No events</string>
+
+    <!-- Player -->
+    <string name="nothing_playing">Nothing is playing</string>
+    <string name="choose_track">Pick a track</string>
+    <string name="queue_empty">Play a track, playlist or radio to build a queue</string>
+    <string name="status_buffering">buffering…</string>
+    <string name="status_playing">playing</string>
+    <string name="status_paused">paused</string>
+    <string name="status_error">error</string>
+    <string name="radio_disabled">Auto-similar disabled</string>
+    <string name="radio_added_prefix">Similar tracks added:</string>
+    <string name="radio_failed_prefix">Could not find similar tracks:</string>
+
+    <!-- Errors -->
+    <string name="error_title">Something went wrong</string>
+    <string name="error_unknown">Unknown error</string>
+    <string name="unknown_error">unknown error</string>
+    <string name="playback_connect_failed">Could not connect to the playback service</string>
+</resources>

@@ -45,12 +45,12 @@ data class PlayerState(
     val durationMs: Long get() = currentTrack?.durationMs ?: 0L
 }
 
-enum class Destination(val label: String) {
-    HOME("Start"),
-    PLAYLISTS("Biblioteka"),
-    LIKED("Ulubione"),
-    SEARCH("Wyszukiwanie"),
-    QUEUE("Player"),
-    SETTINGS("Ustawienia"),
-    DIAGNOSTICS("Diagnostyka"),
+enum class Destination {
+    HOME,
+    PLAYLISTS,
+    LIKED,
+    SEARCH,
+    QUEUE,
+    SETTINGS,
+    DIAGNOSTICS,
 }

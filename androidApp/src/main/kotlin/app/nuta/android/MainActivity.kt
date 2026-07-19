@@ -17,8 +17,11 @@ import androidx.compose.ui.Modifier
 import app.nuta.AppContainer
 import app.nuta.data.fake.FakeSpotifyRepository
 import app.nuta.core.security.SecretValue
+import app.nuta.resources.Res
+import app.nuta.resources.playback_connect_failed
 import app.nuta.spotify.SpotifyWebToken
 import app.nuta.ui.NutaApp
+import org.jetbrains.compose.resources.stringResource
 
 class MainActivity : ComponentActivity() {
 
@@ -35,12 +38,11 @@ class MainActivity : ComponentActivity() {
         }
         setContent {
             val player by AppServices.audioPlayer.collectAsState()
-            val playerError by AppServices.playerError.collectAsState()
+            val connectFailed by AppServices.playerConnectFailed.collectAsState()
             val activePlayer = player
             if (activePlayer == null) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    val error = playerError
-                    if (error != null) Text(error) else CircularProgressIndicator()
+                    if (connectFailed) Text(stringResource(Res.string.playback_connect_failed)) else CircularProgressIndicator()
                 }
                 return@setContent
             }

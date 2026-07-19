@@ -64,6 +64,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalDensity
+import org.jetbrains.compose.resources.pluralStringResource
+import org.jetbrains.compose.resources.stringResource
+import app.nuta.resources.*
 import app.nuta.AppContainer
 import app.nuta.core.logging.LogEvent
 import app.nuta.core.logging.LogLevel
@@ -161,6 +164,10 @@ private fun NutaAppContent(container: AppContainer, onSpotifyLogin: (() -> Unit)
         var favoriteLoading by remember { mutableStateOf(false) }
         val scope = rememberCoroutineScope()
         val displayedTrackLiked = currentTrackLiked || playerState.currentTrack?.id?.let { id -> likedTracks.any { it.id == id } } == true
+        val savedPlaylistsFailedPrefix = stringResource(Res.string.saved_playlists_failed_prefix)
+        val unknownErrorLabel = stringResource(Res.string.unknown_error)
+        val likedFetchFailedLabel = stringResource(Res.string.liked_fetch_failed)
+        val errorUnknownLabel = stringResource(Res.string.error_unknown)
 
         fun selectPlaylist(playlist: Playlist) {
             scope.launch {
@@ -195,7 +202,7 @@ private fun NutaAppContent(container: AppContainer, onSpotifyLogin: (() -> Unit)
             runCatching { container.spotifyRepository.getSavedPlaylists() }
                 .onSuccess { savedPlaylists = it; savedPlaylistsLoaded = true }
                 .onFailure {
-                    loadError = "Nie udało się pobrać zapisanych playlist Spotify: ${it.message ?: "nieznany błąd"}"
+                    loadError = "$savedPlaylistsFailedPrefix ${it.message ?: unknownErrorLabel}"
                     container.logger.warn("SpotifyLibrary", "saved_playlists_failed", "Nie udało się pobrać zapisanych playlist", fields = mapOf("reason" to (it.message ?: "unknown")))
                 }
         }
@@ -241,7 +248,7 @@ private fun NutaAppContent(container: AppContainer, onSpotifyLogin: (() -> Unit)
                     likedTracks = it
                     likedLoaded = true
                 }
-                .onFailure { likedError = it.message ?: "Nie udało się pobrać ulubionych" }
+                .onFailure { likedError = it.message ?: likedFetchFailedLabel }
             likedLoading = false
         }
 
@@ -308,7 +315,7 @@ private fun NutaAppContent(container: AppContainer, onSpotifyLogin: (() -> Unit)
                     Box(Modifier.weight(1f).fillMaxHeight().padding(if (compact) 12.dp else 24.dp)) {
                         when {
                             loading -> CircularProgressIndicator(Modifier.align(Alignment.Center))
-                            loadError != null -> ErrorState(loadError ?: "Nieznany błąd")
+                            loadError != null -> ErrorState(loadError ?: errorUnknownLabel)
                             selectedPlaylist != null -> PlaylistDetails(selectedPlaylist!!, playerState, container)
                             else -> when (destination) {
                                 Destination.HOME -> HomeScreen(
@@ -374,7 +381,7 @@ private fun TopBar(compact: Boolean) {
     ) {
         Text("Nuta", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colors.primary)
         Spacer(Modifier.width(12.dp))
-        if (!compact) Text("Spotify Web + YouTube", color = Color(0xFF8D9BA6), fontSize = 13.sp)
+        if (!compact) Text(stringResource(Res.string.app_tagline), color = Color(0xFF8D9BA6), fontSize = 13.sp)
         Spacer(Modifier.weight(1f))
         Text("NUTA", color = MaterialTheme.colors.secondary, fontWeight = FontWeight.Bold, fontSize = 11.sp)
     }
@@ -383,8 +390,12 @@ private fun TopBar(compact: Boolean) {
 @Composable
 private fun BottomNavigation(selected: Destination, onSelect: (Destination) -> Unit) {
     val labels = mapOf(
-        Destination.HOME to "Start", Destination.PLAYLISTS to "Biblioteka", Destination.LIKED to "Lubię",
-        Destination.SEARCH to "Szukaj", Destination.QUEUE to "Player", Destination.SETTINGS to "Ustaw.",
+        Destination.HOME to stringResource(Res.string.nav_home),
+        Destination.PLAYLISTS to stringResource(Res.string.nav_playlists),
+        Destination.LIKED to stringResource(Res.string.nav_liked_short),
+        Destination.SEARCH to stringResource(Res.string.nav_search_short),
+        Destination.QUEUE to stringResource(Res.string.nav_queue),
+        Destination.SETTINGS to stringResource(Res.string.nav_settings_short),
     )
     Row(Modifier.fillMaxWidth().height(58.dp).background(Color(0xFF131A20)).padding(horizontal = 4.dp)) {
         Destination.entries.filter { it != Destination.DIAGNOSTICS }.forEach { item ->
@@ -411,9 +422,9 @@ private fun BottomNavigation(selected: Destination, onSelect: (Destination) -> U
 private fun SettingsScreen(container: AppContainer) {
     val settings by container.playbackSettings.settings.collectAsState()
     ScrollableLazyColumn(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        item { Heading("Ustawienia odtwarzania", "Jakość strumienia YouTube i bufor Media3") }
+        item { Heading(stringResource(Res.string.settings_title), stringResource(Res.string.settings_subtitle)) }
         item {
-            SettingsGroup("Wielkość czcionki", "Zmniejsz interfejs od 50% do 100%") {
+            SettingsGroup(stringResource(Res.string.font_size_title), stringResource(Res.string.font_size_desc)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text("${(settings.fontScale * 100).toInt()}%", modifier = Modifier.width(48.dp))
                     Slider(
@@ -427,41 +438,41 @@ private fun SettingsScreen(container: AppContainer) {
             }
         }
         item {
-            SettingsGroup("Jakość", "Zmiana działa od następnego utworu") {
+            SettingsGroup(stringResource(Res.string.quality_title), stringResource(Res.string.quality_desc)) {
                 SettingOptions(
                     options = listOf(
-                        StreamQuality.AUTO to "Auto",
-                        StreamQuality.DATA_SAVER to "Oszczędna",
-                        StreamQuality.STANDARD to "Standard",
-                        StreamQuality.BEST to "Najwyższa",
+                        StreamQuality.AUTO to stringResource(Res.string.option_auto),
+                        StreamQuality.DATA_SAVER to stringResource(Res.string.quality_data_saver),
+                        StreamQuality.STANDARD to stringResource(Res.string.option_standard),
+                        StreamQuality.BEST to stringResource(Res.string.quality_best),
                     ),
                     selected = settings.quality,
                 ) { container.playbackSettings.update(settings.copy(quality = it)) }
             }
         }
         item {
-            SettingsGroup("Kodek", "AAC jest najbardziej stabilny na Androidzie") {
+            SettingsGroup(stringResource(Res.string.codec_title), stringResource(Res.string.codec_desc)) {
                 SettingOptions(
-                    options = listOf(CodecPreference.AUTO to "Auto", CodecPreference.AAC to "AAC", CodecPreference.OPUS to "Opus"),
+                    options = listOf(CodecPreference.AUTO to stringResource(Res.string.option_auto), CodecPreference.AAC to "AAC", CodecPreference.OPUS to "Opus"),
                     selected = settings.codec,
                 ) { container.playbackSettings.update(settings.copy(codec = it)) }
             }
         }
         item {
-            SettingsGroup("Bufor", "Zmiana bufora działa po ponownym uruchomieniu aplikacji") {
+            SettingsGroup(stringResource(Res.string.buffer_title), stringResource(Res.string.buffer_desc)) {
                 SettingOptions(
-                    options = listOf(BufferSize.SMALL to "Mały", BufferSize.STANDARD to "Standard", BufferSize.LARGE to "Duży"),
+                    options = listOf(BufferSize.SMALL to stringResource(Res.string.buffer_small), BufferSize.STANDARD to stringResource(Res.string.option_standard), BufferSize.LARGE to stringResource(Res.string.buffer_large)),
                     selected = settings.bufferSize,
                 ) { container.playbackSettings.update(settings.copy(bufferSize = it)) }
             }
         }
         item {
-            SettingsGroup("Wyrównaj głośność", "Domyślnie wyłączone; korekcja może zmienić dynamikę utworu") {
+            SettingsGroup(stringResource(Res.string.loudness_title), stringResource(Res.string.loudness_desc)) {
                 SettingOptions(
                     options = listOf(
-                        LoudnessNormalization.OFF to "Wyłączone",
-                        LoudnessNormalization.GENTLE to "Łagodne",
-                        LoudnessNormalization.NORMAL to "Normalne",
+                        LoudnessNormalization.OFF to stringResource(Res.string.loudness_off),
+                        LoudnessNormalization.GENTLE to stringResource(Res.string.loudness_gentle),
+                        LoudnessNormalization.NORMAL to stringResource(Res.string.loudness_normal),
                     ),
                     selected = settings.loudnessNormalization,
                 ) { container.playbackSettings.update(settings.copy(loudnessNormalization = it)) }
@@ -469,7 +480,7 @@ private fun SettingsScreen(container: AppContainer) {
         }
         item {
             Text(
-                "Domyślne ustawienie: najwyższa jakość AAC i standardowy bufor.",
+                stringResource(Res.string.settings_footer),
                 color = Color(0xFF8D9BA6),
                 fontSize = 12.sp,
                 modifier = Modifier.padding(vertical = 8.dp),
@@ -511,7 +522,7 @@ private fun <T> SettingOptions(options: List<Pair<T, String>>, selected: T, onSe
 @Composable
 private fun Sidebar(selected: Destination, onSelect: (Destination) -> Unit) {
     Column(Modifier.width(190.dp).fillMaxHeight().background(Color(0xFF131A20)).padding(16.dp)) {
-        Text("NAWIGACJA", color = Color(0xFF788792), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+        Text(stringResource(Res.string.sidebar_navigation), color = Color(0xFF788792), fontSize = 11.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(12.dp))
         Destination.entries.forEach { item ->
             val active = item == selected
@@ -521,14 +532,27 @@ private fun Sidebar(selected: Destination, onSelect: (Destination) -> Unit) {
                     .clickable { onSelect(item) }
                     .padding(horizontal = 12.dp, vertical = 11.dp),
             ) {
-                Text(item.label, color = if (active) MaterialTheme.colors.primary else Color(0xFFC5CFD7), fontWeight = if (active) FontWeight.Bold else FontWeight.Normal)
+                Text(destinationLabel(item), color = if (active) MaterialTheme.colors.primary else Color(0xFFC5CFD7), fontWeight = if (active) FontWeight.Bold else FontWeight.Normal)
             }
             Spacer(Modifier.height(4.dp))
         }
         Spacer(Modifier.weight(1f))
-        Text("Faza 1 • Linux-first", color = Color(0xFF66737D), fontSize = 11.sp)
+        Text(stringResource(Res.string.sidebar_phase), color = Color(0xFF66737D), fontSize = 11.sp)
     }
 }
+
+@Composable
+private fun destinationLabel(destination: Destination): String = stringResource(
+    when (destination) {
+        Destination.HOME -> Res.string.nav_home
+        Destination.PLAYLISTS -> Res.string.nav_playlists
+        Destination.LIKED -> Res.string.nav_liked
+        Destination.SEARCH -> Res.string.nav_search
+        Destination.QUEUE -> Res.string.nav_queue
+        Destination.SETTINGS -> Res.string.nav_settings
+        Destination.DIAGNOSTICS -> Res.string.nav_diagnostics
+    },
+)
 
 @Composable
 private fun HomeScreen(
@@ -541,37 +565,37 @@ private fun HomeScreen(
     val recommendations = playlists.take(6)
     ScrollableLazyColumn(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item {
-        Heading("Dla Ciebie", "Rekomendacje z głównej strony Spotify")
+        Heading(stringResource(Res.string.home_title), stringResource(Res.string.home_subtitle))
         Spacer(Modifier.height(24.dp))
         BoxWithConstraints(Modifier.fillMaxWidth()) {
             if (maxWidth < 520.dp) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    StatCard("Propozycje", recommendations.size.toString(), Modifier.weight(1f), compact = true)
-                    StatCard("Utwory", recommendations.flatMap { it.tracks }.distinctBy { it.id }.size.toString(), Modifier.weight(1f), compact = true)
+                    StatCard(stringResource(Res.string.stat_suggestions), recommendations.size.toString(), Modifier.weight(1f), compact = true)
+                    StatCard(stringResource(Res.string.stat_tracks), recommendations.flatMap { it.tracks }.distinctBy { it.id }.size.toString(), Modifier.weight(1f), compact = true)
                 }
             } else Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                StatCard("Propozycje", recommendations.size.toString(), Modifier.weight(1f))
-                StatCard("Utwory", recommendations.flatMap { it.tracks }.distinctBy { it.id }.size.toString(), Modifier.weight(1f))
-                StatCard("Player", playerState.status.name.lowercase(), Modifier.weight(1f))
+                StatCard(stringResource(Res.string.stat_suggestions), recommendations.size.toString(), Modifier.weight(1f))
+                StatCard(stringResource(Res.string.stat_tracks), recommendations.flatMap { it.tracks }.distinctBy { it.id }.size.toString(), Modifier.weight(1f))
+                StatCard(stringResource(Res.string.stat_player), playerState.status.name.lowercase(), Modifier.weight(1f))
             }
         }
         Spacer(Modifier.height(24.dp))
         }
-        if (recommendations.isEmpty()) item { EmptyState("Spotify nie zwrócił rekomendacji") }
+        if (recommendations.isEmpty()) item { EmptyState(stringResource(Res.string.home_no_recommendations)) }
         items(recommendations, key = { "home-${it.id}" }) { playlist ->
             PlaylistCard(playlist) { onSelectPlaylist(playlist) }
         }
         item {
         Card(backgroundColor = MaterialTheme.colors.surface, shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth()) {
             Column(Modifier.padding(24.dp)) {
-                Text("Sesja Spotify", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                Text(stringResource(Res.string.spotify_session_title), fontWeight = FontWeight.Bold, fontSize = 18.sp)
                 Spacer(Modifier.height(8.dp))
-                Text("Rekomendacje są pobierane z zalogowanej sesji Spotify Web.", color = Color(0xFFABB7C0))
+                Text(stringResource(Res.string.spotify_session_desc), color = Color(0xFFABB7C0))
                 Spacer(Modifier.height(18.dp))
-                Button(onClick = openPlaylists) { Text("Otwórz playlisty") }
+                Button(onClick = openPlaylists) { Text(stringResource(Res.string.open_playlists)) }
                 if (onSpotifyLogin != null) {
                     Spacer(Modifier.height(10.dp))
-                    OutlinedButton(onClick = onSpotifyLogin) { Text("Test logowania Spotify") }
+                    OutlinedButton(onClick = onSpotifyLogin) { Text(stringResource(Res.string.spotify_login_test)) }
                 }
             }
         }
@@ -593,9 +617,9 @@ private fun StatCard(label: String, value: String, modifier: Modifier, compact: 
 @Composable
 private fun PlaylistsScreen(playlists: List<Playlist>, onSelect: (Playlist) -> Unit) {
     Column(Modifier.fillMaxSize()) {
-        Heading("Biblioteka", "Twoje playlisty i ulubione utwory Spotify")
+        Heading(stringResource(Res.string.library_title), stringResource(Res.string.library_subtitle))
         Spacer(Modifier.height(20.dp))
-        if (playlists.isEmpty()) EmptyState("Brak playlist") else ScrollableLazyColumn(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        if (playlists.isEmpty()) EmptyState(stringResource(Res.string.no_playlists)) else ScrollableLazyColumn(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             items(playlists, key = { it.id }) { playlist -> PlaylistCard(playlist) { onSelect(playlist) } }
         }
     }
@@ -617,7 +641,7 @@ private fun PlaylistCard(playlist: Playlist, onClick: () -> Unit) {
                 Text(playlist.name, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 Text(playlist.description, color = Color(0xFF94A2AD), fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
-            if (!compact) Text("${playlist.tracks.size} utworów", color = Color(0xFF7F8E99), fontSize = 12.sp)
+            if (!compact) Text(pluralStringResource(Res.plurals.track_count, playlist.tracks.size, playlist.tracks.size), color = Color(0xFF7F8E99), fontSize = 12.sp)
         }
     }
     }
@@ -644,7 +668,7 @@ private fun PlaylistDetails(playlist: Playlist, playerState: PlayerState, contai
     Column(Modifier.fillMaxSize()) {
         Heading(playlist.name, playlist.description)
         Spacer(Modifier.height(16.dp))
-        Button(onClick = { scope.launch { container.audioPlayer.setQueue(playlist.tracks); container.audioPlayer.play() } }) { Text("Odtwórz całość") }
+        Button(onClick = { scope.launch { container.audioPlayer.setQueue(playlist.tracks); container.audioPlayer.play() } }) { Text(stringResource(Res.string.play_all)) }
         Spacer(Modifier.height(16.dp))
         ScrollableLazyColumn(Modifier.fillMaxSize()) {
             items(playlist.tracks, key = { it.id }) { track ->
@@ -676,19 +700,19 @@ private fun LikedScreen(
 ) {
     val scope = rememberCoroutineScope()
     Column(Modifier.fillMaxSize()) {
-        Heading("Ulubione")
+        Heading(stringResource(Res.string.liked_title))
         Spacer(Modifier.height(16.dp))
         when {
             loading -> CircularProgressIndicator(Modifier.align(Alignment.CenterHorizontally))
             error != null -> ErrorState(error)
-            tracks.isEmpty() -> EmptyState("Nie znaleziono ulubionych utworów")
+            tracks.isEmpty() -> EmptyState(stringResource(Res.string.liked_empty))
             else -> {
                 Button(onClick = {
                     scope.launch {
                         container.audioPlayer.setQueue(tracks)
                         container.audioPlayer.play()
                     }
-                }) { Text("▶ Odtwórz wszystkie (${tracks.size})") }
+                }) { Text(stringResource(Res.string.liked_play_all, tracks.size)) }
                 Spacer(Modifier.height(14.dp))
                 ScrollableLazyColumn(Modifier.fillMaxSize(), scrollToIndex = tracks.indexOfFirst { it.id == playerState.currentTrack?.id }.takeIf { it >= 0 }) {
                     items(tracks, key = { "liked-${it.id}" }) { track ->
@@ -801,6 +825,8 @@ private fun SearchScreen(
     val scope = rememberCoroutineScope()
     val playerState by container.audioPlayer.state.collectAsState()
     val currentState by rememberUpdatedState(state)
+    val searchUnknownError = stringResource(Res.string.search_unknown_error)
+    val preparingStreamLabel = stringResource(Res.string.preparing_stream)
     suspend fun playTrack(track: Track) {
         container.audioPlayer.setQueue(listOf(track), 0)
         container.audioPlayer.play()
@@ -825,7 +851,7 @@ private fun SearchScreen(
             }
             .onFailure {
                 if (currentState.query == submittedQuery) {
-                    onStateChange(currentState.copy(error = it.message ?: "Nieznany błąd wyszukiwania", lastExecutedQuery = submittedQuery))
+                    onStateChange(currentState.copy(error = it.message ?: searchUnknownError, lastExecutedQuery = submittedQuery))
                 }
             }
     }
@@ -835,7 +861,7 @@ private fun SearchScreen(
         OutlinedTextField(
             value = state.query,
             onValueChange = { onStateChange(state.copy(query = it)) },
-            label = { Text("Tytuł, wykonawca lub playlista") },
+            label = { Text(stringResource(Res.string.search_placeholder)) },
             modifier = Modifier.fillMaxWidth(),
             singleLine = true,
         )
@@ -845,9 +871,9 @@ private fun SearchScreen(
                     modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    SearchScopeCheckbox("Utwory", state.searchTracks) { onStateChange(state.copy(searchTracks = it)) }
-                    SearchScopeCheckbox("Wykonawcy", state.searchArtists) { onStateChange(state.copy(searchArtists = it)) }
-                    SearchScopeCheckbox("Playlisty", state.searchPlaylists) { onStateChange(state.copy(searchPlaylists = it)) }
+                    SearchScopeCheckbox(stringResource(Res.string.filter_tracks), state.searchTracks) { onStateChange(state.copy(searchTracks = it)) }
+                    SearchScopeCheckbox(stringResource(Res.string.filter_artists), state.searchArtists) { onStateChange(state.copy(searchArtists = it)) }
+                    SearchScopeCheckbox(stringResource(Res.string.filter_playlists), state.searchPlaylists) { onStateChange(state.copy(searchPlaylists = it)) }
                 }
             } else {
                 Row(
@@ -855,9 +881,9 @@ private fun SearchScreen(
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    SearchScopeCheckbox("Utwory", state.searchTracks) { onStateChange(state.copy(searchTracks = it)) }
-                    SearchScopeCheckbox("Wykonawcy", state.searchArtists) { onStateChange(state.copy(searchArtists = it)) }
-                    SearchScopeCheckbox("Playlisty", state.searchPlaylists) { onStateChange(state.copy(searchPlaylists = it)) }
+                    SearchScopeCheckbox(stringResource(Res.string.filter_tracks), state.searchTracks) { onStateChange(state.copy(searchTracks = it)) }
+                    SearchScopeCheckbox(stringResource(Res.string.filter_artists), state.searchArtists) { onStateChange(state.copy(searchArtists = it)) }
+                    SearchScopeCheckbox(stringResource(Res.string.filter_playlists), state.searchPlaylists) { onStateChange(state.copy(searchPlaylists = it)) }
                 }
             }
         }
@@ -875,27 +901,27 @@ private fun SearchScreen(
         }
         val visiblePlaylists = if (state.searchPlaylists) state.result.playlists else emptyList()
         if (state.error != null) ErrorState(state.error) else if (state.query.isNotBlank() && visibleTracks.isEmpty() && visiblePlaylists.isEmpty()) {
-            EmptyState("Brak wyników dla „${state.query}”")
+            EmptyState(stringResource(Res.string.search_no_results, state.query))
         } else {
             ScrollableLazyColumn(Modifier.fillMaxSize()) {
                 if (visiblePlaylists.isNotEmpty()) {
-                    item { SectionLabel("PLAYLISTY") }
+                    item { SectionLabel(stringResource(Res.string.section_playlists)) }
                     items(visiblePlaylists, key = { "p-${it.id}" }) { PlaylistCard(it) { onPlaylist(it) } }
                     item { Spacer(Modifier.height(18.dp)) }
                 }
                 if (visibleTracks.isNotEmpty()) {
-                    item { SectionLabel("UTWORY") }
+                    item { SectionLabel(stringResource(Res.string.section_tracks)) }
                     items(visibleTracks, key = { "t-${it.id}" }) { track ->
                         TrackRow(track, playerState.currentTrack?.id == track.id, loading = playerState.status == PlayerStatus.LOADING, onPlay = {
                             scope.launch {
-                                onStateChange(state.copy(youtubeStatus = "Player: przygotowywanie strumienia YouTube…"))
+                                onStateChange(state.copy(youtubeStatus = preparingStreamLabel))
                                 playTrack(track)
                                 onStateChange(state.copy(youtubeStatus = null))
                             }
                         }, titleAction = {
                             TrackPlayButton {
                                 scope.launch {
-                                    onStateChange(state.copy(youtubeStatus = "Player: przygotowywanie strumienia YouTubeâ€¦"))
+                                    onStateChange(state.copy(youtubeStatus = preparingStreamLabel))
                                     playTrack(track)
                                     onStateChange(state.copy(youtubeStatus = null))
                                 }
@@ -924,10 +950,10 @@ private fun DiagnosticsScreen(container: AppContainer) {
     val level by container.logger.minimumLevel.collectAsState()
     val scope = rememberCoroutineScope()
     Column(Modifier.fillMaxSize()) {
-        Heading("Diagnostyka", "Logi strukturalne i symulacja problemów")
+        Heading(stringResource(Res.string.diagnostics_title), stringResource(Res.string.diagnostics_subtitle))
         Spacer(Modifier.height(14.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text("Poziom:", color = Color(0xFF9AA7B0))
+            Text(stringResource(Res.string.log_level), color = Color(0xFF9AA7B0))
             listOf(LogLevel.INFO, LogLevel.DEBUG, LogLevel.TRACE).forEach { item ->
                 OutlinedButton(
                     onClick = { container.logger.setMinimumLevel(item) },
@@ -935,12 +961,12 @@ private fun DiagnosticsScreen(container: AppContainer) {
                 ) { Text(item.name) }
             }
             Spacer(Modifier.weight(1f))
-            OutlinedButton(onClick = { scope.launch { container.audioPlayer.simulateError() } }) { Text("Symuluj błąd") }
-            OutlinedButton(onClick = container.logger::clear) { Text("Wyczyść") }
+            OutlinedButton(onClick = { scope.launch { container.audioPlayer.simulateError() } }) { Text(stringResource(Res.string.simulate_error)) }
+            OutlinedButton(onClick = container.logger::clear) { Text(stringResource(Res.string.clear)) }
         }
         Spacer(Modifier.height(14.dp))
         Card(Modifier.fillMaxWidth().weight(1f), backgroundColor = Color(0xFF0C1013), shape = RoundedCornerShape(10.dp)) {
-            if (events.isEmpty()) EmptyState("Brak zdarzeń") else ScrollableLazyColumn(Modifier.padding(10.dp).fillMaxSize(), reverseLayout = true) {
+            if (events.isEmpty()) EmptyState(stringResource(Res.string.no_events)) else ScrollableLazyColumn(Modifier.padding(10.dp).fillMaxSize(), reverseLayout = true) {
                 items(events.reversed()) { LogRow(it) }
             }
         }
@@ -990,10 +1016,10 @@ private fun CompactPlayerBar(
         Spacer(Modifier.width(10.dp))
         Column(Modifier.weight(1f).clickable { onOpenQueue() }) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Text(track?.title ?: "Nic nie odtwarzamy", maxLines = 2, overflow = TextOverflow.Clip, softWrap = true, fontWeight = FontWeight.Bold, fontSize = 14.sp, modifier = Modifier.weight(1f))
+                Text(track?.title ?: stringResource(Res.string.nothing_playing), maxLines = 2, overflow = TextOverflow.Clip, softWrap = true, fontWeight = FontWeight.Bold, fontSize = 14.sp, modifier = Modifier.weight(1f))
                 Text(streamDescription(state), color = Color(0xFF8D9BA6), fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.width(72.dp).padding(start = 4.dp))
             }
-            Text(track?.artists?.joinToString() ?: "Wybierz utwór", color = Color(0xFF8D9BA6), fontSize = 11.sp, maxLines = 2, overflow = TextOverflow.Clip, softWrap = true)
+            Text(track?.artists?.joinToString() ?: stringResource(Res.string.choose_track), color = Color(0xFF8D9BA6), fontSize = 11.sp, maxLines = 2, overflow = TextOverflow.Clip, softWrap = true)
         }
     }
     Box(Modifier.fillMaxWidth().height(40.dp)) {
@@ -1057,8 +1083,7 @@ private fun CompactPlayerBar(
     }
 }
 
-private fun playerSubtitle(track: Track?, state: PlayerState): String {
-    if (track == null) return "Wybierz utwór"
+private fun playerSubtitle(track: Track, state: PlayerState): String {
     val stream = streamDescription(state).takeIf(String::isNotBlank)
     return listOfNotNull(track.artists.joinToString().takeIf(String::isNotBlank), stream).joinToString(" • ")
 }
@@ -1088,6 +1113,11 @@ private fun PlayerBar(
     val track = state.currentTrack
     var radioLoading by remember { mutableStateOf(false) }
     var radioMessage by remember { mutableStateOf<String?>(null) }
+    var radioMessageIsError by remember { mutableStateOf(false) }
+    val radioDisabledLabel = stringResource(Res.string.radio_disabled)
+    val radioAddedPrefix = stringResource(Res.string.radio_added_prefix)
+    val radioFailedPrefix = stringResource(Res.string.radio_failed_prefix)
+    val unknownErrorLabel = stringResource(Res.string.unknown_error)
     Row(
         Modifier.fillMaxWidth().height(82.dp).background(Color(0xFF131A20)).padding(horizontal = 18.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -1095,8 +1125,8 @@ private fun PlayerBar(
         Cover(track?.title ?: "N", track?.imageUrl)
         Spacer(Modifier.width(12.dp))
         Column(Modifier.width(230.dp)) {
-            Text(track?.title ?: "Nic nie odtwarzamy", maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.Bold, lineHeight = 16.sp)
-            Text(playerSubtitle(track, state), color = Color(0xFF8D9BA6), fontSize = 12.sp, maxLines = 1, lineHeight = 14.sp)
+            Text(track?.title ?: stringResource(Res.string.nothing_playing), maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.Bold, lineHeight = 16.sp)
+            Text(track?.let { playerSubtitle(it, state) } ?: stringResource(Res.string.choose_track), color = Color(0xFF8D9BA6), fontSize = 12.sp, maxLines = 1, lineHeight = 14.sp)
         }
         Spacer(Modifier.width(14.dp))
         OutlinedButton(onClick = { scope.launch { container.audioPlayer.previous() } }, enabled = track != null, modifier = Modifier.size(42.dp), contentPadding = PaddingValues(0.dp)) { Text("⏮") }
@@ -1133,7 +1163,8 @@ private fun PlayerBar(
             onClick = {
                 if (similarModeActive) {
                     onSimilarModeChange(false)
-                    radioMessage = "Automatyczne podobne wyłączone"
+                    radioMessage = radioDisabledLabel
+                    radioMessageIsError = false
                     return@OutlinedButton
                 }
                 val seed = track ?: return@OutlinedButton
@@ -1146,11 +1177,15 @@ private fun PlayerBar(
                             val additions = recommendations.filterNot { candidate -> state.queue.any { it.id == candidate.id } }
                             if (state.queue.isEmpty()) container.audioPlayer.setQueue(listOf(seed) + additions, 0)
                             else container.audioPlayer.appendToQueue(additions)
-                            radioMessage = "Dodano ${queue.size} podobnych utworów"
+                            radioMessage = "$radioAddedPrefix ${queue.size}"
+                            radioMessageIsError = false
                             onSimilarModeChange(true)
                             onOpenQueue()
                         }
-                        .onFailure { radioMessage = "Nie udało się znaleźć podobnych — ${it.message ?: "nieznany błąd"}" }
+                        .onFailure {
+                            radioMessage = "$radioFailedPrefix ${it.message ?: unknownErrorLabel}"
+                            radioMessageIsError = true
+                        }
                     radioLoading = false
                 }
             },
@@ -1175,10 +1210,10 @@ private fun PlayerBar(
         Spacer(Modifier.width(14.dp))
         Text(
             when (state.status) {
-                PlayerStatus.LOADING -> "buforowanie…"
-                PlayerStatus.PLAYING -> "odtwarzanie"
-                PlayerStatus.PAUSED -> "pauza"
-                PlayerStatus.ERROR -> "błąd"
+                PlayerStatus.LOADING -> stringResource(Res.string.status_buffering)
+                PlayerStatus.PLAYING -> stringResource(Res.string.status_playing)
+                PlayerStatus.PAUSED -> stringResource(Res.string.status_paused)
+                PlayerStatus.ERROR -> stringResource(Res.string.status_error)
                 else -> state.status.name.lowercase()
             },
             color = if (state.status == PlayerStatus.ERROR) Color(0xFFFF7B7B) else MaterialTheme.colors.primary,
@@ -1186,7 +1221,7 @@ private fun PlayerBar(
         )
         radioMessage?.let {
             Spacer(Modifier.width(8.dp))
-            Text(it, color = if (it.startsWith("Nie udało")) Color(0xFFFF7B7B) else Color(0xFF8FE9AD), fontSize = 11.sp, maxLines = 1)
+            Text(it, color = if (radioMessageIsError) Color(0xFFFF7B7B) else Color(0xFF8FE9AD), fontSize = 11.sp, maxLines = 1)
         }
     }
 }
@@ -1195,10 +1230,10 @@ private fun PlayerBar(
 private fun QueueScreen(state: PlayerState, container: AppContainer) {
     val scope = rememberCoroutineScope()
     Column(Modifier.fillMaxSize()) {
-        Heading("Player")
+        Heading(stringResource(Res.string.nav_queue))
         Spacer(Modifier.height(14.dp))
         if (state.queue.isEmpty()) {
-            EmptyState("Uruchom utwór, playlistę albo radio, aby utworzyć kolejkę")
+            EmptyState(stringResource(Res.string.queue_empty))
         } else {
             ScrollableLazyColumn(Modifier.fillMaxSize(), scrollToIndex = state.currentIndex) {
                     items(state.queue.indices.toList(), key = { index -> "queue-$index-${state.queue[index].id}" }) { index ->
@@ -1274,7 +1309,7 @@ private fun EmptyState(message: String) {
 private fun ErrorState(message: String) {
     Card(backgroundColor = Color(0xFF3A2225), modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(20.dp)) {
-            Text("Wystąpił problem", color = Color(0xFFFFA3A3), fontWeight = FontWeight.Bold)
+            Text(stringResource(Res.string.error_title), color = Color(0xFFFFA3A3), fontWeight = FontWeight.Bold)
             Text(message, color = Color(0xFFE6B9B9))
         }
     }

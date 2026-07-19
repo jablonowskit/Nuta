@@ -1,0 +1,108 @@
+<resources>
+    <!-- Nawigacja -->
+    <string name="nav_home">Start</string>
+    <string name="nav_playlists">Biblioteka</string>
+    <string name="nav_liked">Ulubione</string>
+    <string name="nav_liked_short">Lubię</string>
+    <string name="nav_search">Wyszukiwanie</string>
+    <string name="nav_search_short">Szukaj</string>
+    <string name="nav_queue">Player</string>
+    <string name="nav_settings">Ustawienia</string>
+    <string name="nav_settings_short">Ustaw.</string>
+    <string name="nav_diagnostics">Diagnostyka</string>
+    <string name="sidebar_navigation">NAWIGACJA</string>
+    <string name="sidebar_phase">Faza 1 • Linux-first</string>
+    <string name="app_tagline">Spotify Web + YouTube</string>
+
+    <!-- Start -->
+    <string name="home_title">Dla Ciebie</string>
+    <string name="home_subtitle">Rekomendacje z głównej strony Spotify</string>
+    <string name="stat_suggestions">Propozycje</string>
+    <string name="stat_tracks">Utwory</string>
+    <string name="stat_player">Player</string>
+    <string name="home_no_recommendations">Spotify nie zwrócił rekomendacji</string>
+    <string name="spotify_session_title">Sesja Spotify</string>
+    <string name="spotify_session_desc">Rekomendacje są pobierane z zalogowanej sesji Spotify Web.</string>
+    <string name="open_playlists">Otwórz playlisty</string>
+    <string name="spotify_login_test">Test logowania Spotify</string>
+
+    <!-- Biblioteka / playlisty -->
+    <string name="library_title">Biblioteka</string>
+    <string name="library_subtitle">Twoje playlisty i ulubione utwory Spotify</string>
+    <string name="no_playlists">Brak playlist</string>
+    <string name="play_all">Odtwórz całość</string>
+    <plurals name="track_count">
+        <item quantity="one">%1$d utwór</item>
+        <item quantity="few">%1$d utwory</item>
+        <item quantity="many">%1$d utworów</item>
+        <item quantity="other">%1$d utworu</item>
+    </plurals>
+    <string name="saved_playlists_failed_prefix">Nie udało się pobrać zapisanych playlist Spotify:</string>
+
+    <!-- Ulubione -->
+    <string name="liked_title">Ulubione</string>
+    <string name="liked_empty">Nie znaleziono ulubionych utworów</string>
+    <string name="liked_play_all">▶ Odtwórz wszystkie (%1$d)</string>
+    <string name="liked_fetch_failed">Nie udało się pobrać ulubionych</string>
+
+    <!-- Wyszukiwanie -->
+    <string name="search_placeholder">Tytuł, wykonawca lub playlista</string>
+    <string name="filter_tracks">Utwory</string>
+    <string name="filter_artists">Wykonawcy</string>
+    <string name="filter_playlists">Playlisty</string>
+    <string name="section_playlists">PLAYLISTY</string>
+    <string name="section_tracks">UTWORY</string>
+    <string name="search_no_results">Brak wyników dla „%1$s”</string>
+    <string name="search_unknown_error">Nieznany błąd wyszukiwania</string>
+    <string name="preparing_stream">Player: przygotowywanie strumienia YouTube…</string>
+
+    <!-- Ustawienia -->
+    <string name="settings_title">Ustawienia odtwarzania</string>
+    <string name="settings_subtitle">Jakość strumienia YouTube i bufor Media3</string>
+    <string name="font_size_title">Wielkość czcionki</string>
+    <string name="font_size_desc">Zmniejsz interfejs od 50% do 100%</string>
+    <string name="quality_title">Jakość</string>
+    <string name="quality_desc">Zmiana działa od następnego utworu</string>
+    <string name="option_auto">Auto</string>
+    <string name="option_standard">Standard</string>
+    <string name="quality_data_saver">Oszczędna</string>
+    <string name="quality_best">Najwyższa</string>
+    <string name="codec_title">Kodek</string>
+    <string name="codec_desc">AAC jest najbardziej stabilny na Androidzie</string>
+    <string name="buffer_title">Bufor</string>
+    <string name="buffer_desc">Zmiana bufora działa po ponownym uruchomieniu aplikacji</string>
+    <string name="buffer_small">Mały</string>
+    <string name="buffer_large">Duży</string>
+    <string name="loudness_title">Wyrównaj głośność</string>
+    <string name="loudness_desc">Domyślnie wyłączone; korekcja może zmienić dynamikę utworu</string>
+    <string name="loudness_off">Wyłączone</string>
+    <string name="loudness_gentle">Łagodne</string>
+    <string name="loudness_normal">Normalne</string>
+    <string name="settings_footer">Domyślne ustawienie: najwyższa jakość AAC i standardowy bufor.</string>
+
+    <!-- Diagnostyka -->
+    <string name="diagnostics_title">Diagnostyka</string>
+    <string name="diagnostics_subtitle">Logi strukturalne i symulacja problemów</string>
+    <string name="log_level">Poziom:</string>
+    <string name="simulate_error">Symuluj błąd</string>
+    <string name="clear">Wyczyść</string>
+    <string name="no_events">Brak zdarzeń</string>
+
+    <!-- Player -->
+    <string name="nothing_playing">Nic nie odtwarzamy</string>
+    <string name="choose_track">Wybierz utwór</string>
+    <string name="queue_empty">Uruchom utwór, playlistę albo radio, aby utworzyć kolejkę</string>
+    <string name="status_buffering">buforowanie…</string>
+    <string name="status_playing">odtwarzanie</string>
+    <string name="status_paused">pauza</string>
+    <string name="status_error">błąd</string>
+    <string name="radio_disabled">Automatyczne podobne wyłączone</string>
+    <string name="radio_added_prefix">Dodano podobnych utworów:</string>
+    <string name="radio_failed_prefix">Nie udało się znaleźć podobnych:</string>
+
+    <!-- Błędy -->
+    <string name="error_title">Wystąpił problem</string>
+    <string name="error_unknown">Nieznany błąd</string>
+    <string name="unknown_error">nieznany błąd</string>
+    <string name="playback_connect_failed">Nie udało się połączyć z usługą odtwarzania</string>
+</resources>
