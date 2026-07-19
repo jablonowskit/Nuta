@@ -146,7 +146,8 @@ class SpotifyWebSearchRepository(
             val artists = (collectArtists(payload.root) + tracks.flatMap { track ->
                 track.artists.map { name -> Artist(name.hashCode().toString(), name) }
             }).distinctBy(Artist::id).take(30)
-            SearchResult(tracks, collectPlaylists(payload.root).distinctBy(Playlist::id).take(30), artists)
+            val playlists = (collectPlaylists(payload.root) + searchPlaylists(query, token)).distinctBy(Playlist::id).take(30)
+            SearchResult(tracks, playlists, artists)
         } catch (error: Throwable) {
             logger.error("SpotifySearch", "search_failed", "Wyszukiwanie Spotify nie powiodło się", operationId, throwable = error)
             throw error
@@ -189,6 +190,16 @@ class SpotifyWebSearchRepository(
 
     private suspend fun searchTracks(query: String, token: SpotifyWebToken): List<Track> {
         return searchPayload(query, token).tracks
+    }
+
+    private suspend fun searchPlaylists(query: String, token: SpotifyWebToken): List<Playlist> {
+        val encoded = URLEncoder.encode(query, StandardCharsets.UTF_8)
+        val root = getJson("https://api.spotify.com/v1/search?q=$encoded&type=playlist&limit=10", token).jsonObject
+        return (root["playlists"]?.jsonObject?.get("items") as? JsonArray).orEmpty().mapNotNull { item ->
+            val obj = item.jsonObject
+            val id = obj["id"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
+            Playlist(id, obj["name"]?.jsonPrimitive?.contentOrNull ?: "Playlist", obj["description"]?.jsonPrimitive?.contentOrNull.orEmpty(), emptyList(), (obj["images"] as? JsonArray)?.firstOrNull()?.jsonObject?.get("url")?.jsonPrimitive?.contentOrNull)
+        }
     }
 
     private data class SearchPayload(val tracks: List<Track>, val root: JsonObject)
