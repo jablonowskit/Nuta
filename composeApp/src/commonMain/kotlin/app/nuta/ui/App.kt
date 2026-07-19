@@ -604,7 +604,7 @@ private fun PlaylistDetails(playlist: Playlist, playerState: PlayerState, contai
         Spacer(Modifier.height(16.dp))
         ScrollableLazyColumn(Modifier.fillMaxSize()) {
             items(playlist.tracks, key = { it.id }) { track ->
-                TrackRow(track, playerState.currentTrack?.id == track.id, onPlay = {
+                TrackRow(track, playerState.currentTrack?.id == track.id, loading = playerState.status == PlayerStatus.LOADING, onPlay = {
                     scope.launch {
                         container.audioPlayer.setQueue(playlist.tracks, playlist.tracks.indexOf(track))
                         container.audioPlayer.play()
@@ -625,7 +625,7 @@ private fun LikedScreen(
 ) {
     val scope = rememberCoroutineScope()
     Column(Modifier.fillMaxSize()) {
-        Heading("Ulubione", "Utwory zapisane na Twoim koncie Spotify")
+        Heading("Ulubione")
         Spacer(Modifier.height(16.dp))
         when {
             loading -> CircularProgressIndicator(Modifier.align(Alignment.CenterHorizontally))
@@ -641,7 +641,7 @@ private fun LikedScreen(
                 Spacer(Modifier.height(14.dp))
                 ScrollableLazyColumn(Modifier.fillMaxSize(), scrollToIndex = tracks.indexOfFirst { it.id == playerState.currentTrack?.id }.takeIf { it >= 0 }) {
                     items(tracks, key = { "liked-${it.id}" }) { track ->
-                        TrackRow(track, playerState.currentTrack?.id == track.id, onPlay = {
+                        TrackRow(track, playerState.currentTrack?.id == track.id, loading = playerState.status == PlayerStatus.LOADING, onPlay = {
                             scope.launch {
                                 container.audioPlayer.setQueue(tracks, tracks.indexOf(track))
                                 container.audioPlayer.play()
@@ -658,6 +658,7 @@ private fun LikedScreen(
 private fun TrackRow(
     track: Track,
     active: Boolean,
+    loading: Boolean = false,
     onPlay: () -> Unit,
     titleAction: (@Composable () -> Unit)? = null,
     subtitleAction: (@Composable () -> Unit)? = null,
@@ -671,7 +672,11 @@ private fun TrackRow(
             .padding(horizontal = 12.dp, vertical = 11.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(if (active) "▶" else "♪", color = if (active) MaterialTheme.colors.primary else Color(0xFF7D8B95), modifier = Modifier.width(28.dp))
+        if (active && loading) {
+            CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = MaterialTheme.colors.primary)
+        } else {
+            Text(if (active) "▶" else "♪", color = if (active) MaterialTheme.colors.primary else Color(0xFF7D8B95), modifier = Modifier.width(28.dp))
+        }
         Column(Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(track.title, modifier = Modifier.weight(1f), fontWeight = if (active) FontWeight.Bold else FontWeight.Normal)
@@ -785,7 +790,7 @@ private fun SearchScreen(
                 if (visibleTracks.isNotEmpty()) {
                     item { SectionLabel("UTWORY") }
                     items(visibleTracks, key = { "t-${it.id}" }) { track ->
-                        TrackRow(track, playerState.currentTrack?.id == track.id, onPlay = {
+                        TrackRow(track, playerState.currentTrack?.id == track.id, loading = playerState.status == PlayerStatus.LOADING, onPlay = {
                             scope.launch {
                                 onStateChange(state.copy(youtubeStatus = "Player: przygotowywanie strumienia YouTube…"))
                                 playTrack(track)
@@ -1092,10 +1097,7 @@ private fun PlayerBar(
 private fun QueueScreen(state: PlayerState, container: AppContainer) {
     val scope = rememberCoroutineScope()
     Column(Modifier.fillMaxSize()) {
-        Heading(
-            "Player",
-            if (state.queue.isEmpty()) "Kolejka jest pusta" else "${state.queue.size} utworów • odtwarzany ${state.currentIndex + 1}",
-        )
+        Heading("Player")
         Spacer(Modifier.height(14.dp))
         if (state.queue.isEmpty()) {
             EmptyState("Uruchom utwór, playlistę albo radio, aby utworzyć kolejkę")
