@@ -66,6 +66,15 @@ class Media3AudioPlayer(
         })
         PlaybackQueueBridge.onNext = { scope.launch { next() } }
         PlaybackQueueBridge.onPrevious = { scope.launch { previous() } }
+        scope.launch {
+            PlaybackQueueBridge.buffering.collect { buffering ->
+                if (buffering) {
+                    if (stateFlow.value.currentTrack != null) stateFlow.value = stateFlow.value.copy(status = PlayerStatus.LOADING)
+                } else if (stateFlow.value.status == PlayerStatus.LOADING && withContext(Dispatchers.Main) { player.isPlaying }) {
+                    stateFlow.value = stateFlow.value.copy(status = PlayerStatus.PLAYING)
+                }
+            }
+        }
     }
 
     override suspend fun setQueue(tracks: List<Track>, startIndex: Int) {
