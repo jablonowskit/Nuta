@@ -23,6 +23,11 @@ class PlaybackService : MediaSessionService() {
             .setSeekBackIncrementMs(10_000)
             .setSeekForwardIncrementMs(10_000)
             .build()
+        player.addListener(object : Player.Listener {
+            override fun onPlaybackStateChanged(playbackState: Int) {
+                PlaybackQueueBridge.buffering.value = playbackState == Player.STATE_BUFFERING
+            }
+        })
         val seekBack = CommandButton.Builder(CommandButton.ICON_SKIP_BACK_10)
             .setDisplayName("Cofnij 10 sekund")
             .setPlayerCommand(Player.COMMAND_SEEK_BACK)
