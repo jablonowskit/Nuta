@@ -139,7 +139,10 @@ class SpotifyAndroidRepository(
             mapTrack(item, uri)
         }.distinctBy(Track::id).take(10)
         logger.info("SpotifyAndroid", "search_completed", "Zakończono wyszukiwanie Spotify", fields = mapOf("count" to tracks.size.toString()))
-        return SearchResult(tracks, collectPlaylists(searchRoot), collectArtists(searchRoot))
+        val artists = (collectArtists(root) + tracks.flatMap { track ->
+            track.artists.map { name -> Artist(name.hashCode().toString(), name) }
+        }).distinctBy(Artist::id).take(30)
+        return SearchResult(tracks, collectPlaylists(root).distinctBy(Playlist::id).take(30), artists)
     }
 
     override suspend fun getTrackRadio(seed: Track, limit: Int): List<Track> {
