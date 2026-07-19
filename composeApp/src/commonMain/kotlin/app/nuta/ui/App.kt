@@ -609,6 +609,11 @@ private fun PlaylistDetails(playlist: Playlist, playerState: PlayerState, contai
                         container.audioPlayer.setQueue(playlist.tracks, playlist.tracks.indexOf(track))
                         container.audioPlayer.play()
                     }
+                }, titleAction = {
+                    TrackPlayButton { scope.launch {
+                        container.audioPlayer.setQueue(playlist.tracks, playlist.tracks.indexOf(track))
+                        container.audioPlayer.play()
+                    } }
                 })
             }
         }
@@ -646,6 +651,11 @@ private fun LikedScreen(
                                 container.audioPlayer.setQueue(tracks, tracks.indexOf(track))
                                 container.audioPlayer.play()
                             }
+                        }, titleAction = {
+                            TrackPlayButton { scope.launch {
+                                container.audioPlayer.setQueue(tracks, tracks.indexOf(track))
+                                container.audioPlayer.play()
+                            } }
                         })
                     }
                 }
@@ -691,6 +701,16 @@ private fun TrackRow(
         if (!compact) Text(track.album, color = Color(0xFF8F9CA6), fontSize = 12.sp, modifier = Modifier.width(170.dp), maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
     }
+}
+
+@Composable
+private fun TrackPlayButton(onClick: () -> Unit) {
+    OutlinedButton(
+        onClick = onClick,
+        modifier = Modifier.size(32.dp),
+        contentPadding = PaddingValues(0.dp),
+        border = null,
+    ) { Text("▶") }
 }
 
 @Composable
@@ -1117,14 +1137,10 @@ private fun QueueScreen(state: PlayerState, container: AppContainer) {
                         ) {
                             Text(if (active) "▶" else "${index + 1}.", color = if (active) MaterialTheme.colors.primary else Color(0xFF7D8B95), modifier = Modifier.width(38.dp))
                             Column(Modifier.weight(1f)) {
-                                Text(
-                                    item.title,
-                                    fontWeight = if (active) FontWeight.Bold else FontWeight.Normal,
-                                    maxLines = 3,
-                                    overflow = TextOverflow.Clip,
-                                    softWrap = true,
-                                    modifier = Modifier.fillMaxWidth(),
-                                )
+                                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                                    Text(item.title, fontWeight = if (active) FontWeight.Bold else FontWeight.Normal, maxLines = 3, overflow = TextOverflow.Clip, softWrap = true, modifier = Modifier.weight(1f))
+                                    TrackPlayButton { scope.launch { container.audioPlayer.playAt(index) } }
+                                }
                                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                                     Text(
                                         buildString {
