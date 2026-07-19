@@ -772,9 +772,8 @@ private fun SearchScreen(
         container.audioPlayer.play()
     }
 
-    LaunchedEffect(state.query, container.spotifyRepository) {
+    LaunchedEffect(state.query, state.searchTracks, state.searchArtists, state.searchPlaylists, container.spotifyRepository) {
         val submittedQuery = state.query
-        if (submittedQuery == state.lastExecutedQuery) return@LaunchedEffect
         if (submittedQuery.isBlank()) {
             onStateChange(currentState.copy(
                 result = SearchResult(emptyList(), emptyList()),
