@@ -963,8 +963,11 @@ private fun CompactPlayerBar(
         Row(Modifier.align(Alignment.Center), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
             Text("⏮", modifier = Modifier.size(32.dp).clickable(enabled = track != null) { scope.launch { container.audioPlayer.previous() } }, color = if (track != null) Color.White else Color(0xFF55616A), fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
             Text("◀◀", modifier = Modifier.size(32.dp).clickable(enabled = track != null) { scope.launch { container.audioPlayer.seekTo((state.positionMs - 10_000).coerceAtLeast(0)) } }, color = if (track != null) Color.White else Color(0xFF55616A), fontSize = 12.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
-            if (state.status == PlayerStatus.LOADING) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = MaterialTheme.colors.primary)
-            else Text(if (state.status == PlayerStatus.PLAYING) "Ⅱ" else "▶", modifier = Modifier.size(32.dp).clickable(enabled = track != null) { scope.launch { if (state.status == PlayerStatus.PLAYING) container.audioPlayer.pause() else container.audioPlayer.play() } }, color = MaterialTheme.colors.primary, fontSize = 18.sp, textAlign = TextAlign.Center)
+            if (state.status == PlayerStatus.LOADING) {
+                Box(Modifier.size(32.dp), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = MaterialTheme.colors.primary)
+                }
+            } else Text(if (state.status == PlayerStatus.PLAYING) "Ⅱ" else "▶", modifier = Modifier.size(32.dp).clickable(enabled = track != null) { scope.launch { if (state.status == PlayerStatus.PLAYING) container.audioPlayer.pause() else container.audioPlayer.play() } }, color = MaterialTheme.colors.primary, fontSize = 18.sp, textAlign = TextAlign.Center)
             Text("▶▶", modifier = Modifier.size(32.dp).clickable(enabled = track != null) { scope.launch { container.audioPlayer.seekTo((state.positionMs + 10_000).coerceAtMost(state.durationMs)) } }, color = if (track != null) Color.White else Color(0xFF55616A), fontSize = 12.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
             Text("⏭", modifier = Modifier.size(32.dp).clickable(enabled = track != null) { scope.launch { container.audioPlayer.next() } }, color = if (track != null) Color.White else Color(0xFF55616A), fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
             Text(
