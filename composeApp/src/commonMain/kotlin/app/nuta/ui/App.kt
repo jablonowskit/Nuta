@@ -632,7 +632,7 @@ private fun LikedScreen(
 ) {
     val scope = rememberCoroutineScope()
     Column(Modifier.fillMaxSize()) {
-        Heading("Ulubione")
+        Heading("Ulubione", "Utwory zapisane na Twoim koncie Spotify")
         Spacer(Modifier.height(16.dp))
         when {
             loading -> CircularProgressIndicator(Modifier.align(Alignment.CenterHorizontally))
@@ -1128,7 +1128,7 @@ private fun PlayerBar(
 private fun QueueScreen(state: PlayerState, container: AppContainer) {
     val scope = rememberCoroutineScope()
     Column(Modifier.fillMaxSize()) {
-        Heading("Player")
+        Heading("Player", "Aktualnie odtwarzany utwór i kolejka")
         Spacer(Modifier.height(14.dp))
         if (state.queue.isEmpty()) {
             EmptyState("Uruchom utwór, playlistę albo radio, aby utworzyć kolejkę")
