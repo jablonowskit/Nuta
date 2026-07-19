@@ -17,7 +17,12 @@ actual fun PlatformVerticalScrollbar(state: LazyListState, modifier: Modifier): 
         if (totalItems <= visibleItems || size.height <= 0f) return@drawWithContent
 
         val viewportHeight = size.height
-        val thumbHeight = (viewportHeight * visibleItems / totalItems).coerceIn(32.dp.toPx(), viewportHeight)
+        // On small screens the viewport can be shorter than the preferred
+        // minimum thumb size. Keep both bounds inside the actual viewport so
+        // coerceIn never receives an inverted range.
+        val minThumbHeight = minOf(32.dp.toPx(), viewportHeight)
+        val thumbHeight = (viewportHeight * visibleItems / totalItems)
+            .coerceIn(minThumbHeight, viewportHeight)
         val maxOffset = (totalItems - visibleItems).coerceAtLeast(1)
         val firstVisible = state.firstVisibleItemIndex.coerceIn(0, maxOffset)
         val thumbTop = (viewportHeight - thumbHeight) * firstVisible / maxOffset
