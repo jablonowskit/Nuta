@@ -67,6 +67,12 @@ class Media3AudioPlayer(
         PlaybackQueueBridge.onNext = { scope.launch { next() } }
         PlaybackQueueBridge.onPrevious = { scope.launch { previous() } }
         scope.launch {
+            stateFlow.collect { state ->
+                PlaybackQueueBridge.hasNext.value = state.currentIndex + 1 in state.queue.indices
+                PlaybackQueueBridge.hasPrevious.value = state.currentIndex - 1 in state.queue.indices
+            }
+        }
+        scope.launch {
             PlaybackQueueBridge.buffering.collect { buffering ->
                 if (buffering) {
                     if (stateFlow.value.currentTrack != null) stateFlow.value = stateFlow.value.copy(status = PlayerStatus.LOADING)

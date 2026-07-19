@@ -8,4 +8,8 @@ object PlaybackQueueBridge {
 
     /** Prawdziwy stan buforowania ExoPlayera — sesja maskuje BUFFERING jako READY dla systemowych kontrolek. */
     val buffering = MutableStateFlow(false)
+
+    /** Czy kolejka appki ma następny/poprzedni utwór — dla przycisków systemowych. */
+    val hasNext = MutableStateFlow(false)
+    val hasPrevious = MutableStateFlow(false)
 }
