@@ -632,7 +632,7 @@ private fun LikedScreen(
 ) {
     val scope = rememberCoroutineScope()
     Column(Modifier.fillMaxSize()) {
-        Heading("Ulubione", "Utwory zapisane na Twoim koncie Spotify")
+        Heading("Ulubione")
         Spacer(Modifier.height(16.dp))
         when {
             loading -> CircularProgressIndicator(Modifier.align(Alignment.CenterHorizontally))
@@ -1128,7 +1128,7 @@ private fun PlayerBar(
 private fun QueueScreen(state: PlayerState, container: AppContainer) {
     val scope = rememberCoroutineScope()
     Column(Modifier.fillMaxSize()) {
-        Heading("Player", "Aktualnie odtwarzany utwór i kolejka")
+        Heading("Player")
         Spacer(Modifier.height(14.dp))
         if (state.queue.isEmpty()) {
             EmptyState("Uruchom utwór, playlistę albo radio, aby utworzyć kolejkę")
@@ -1186,11 +1186,13 @@ private fun Cover(seed: String, imageUrl: String? = null, modifier: Modifier = M
 }
 
 @Composable
-private fun Heading(title: String, subtitle: String) {
+private fun Heading(title: String, subtitle: String? = null) {
     Column {
         Text(title, fontSize = 28.sp, fontWeight = FontWeight.Bold)
-        Spacer(Modifier.height(4.dp))
-        Text(subtitle, color = Color(0xFF8D9BA6))
+        subtitle?.takeIf(String::isNotBlank)?.let {
+            Spacer(Modifier.height(4.dp))
+            Text(it, color = Color(0xFF8D9BA6))
+        }
     }
 }
 
