@@ -38,6 +38,7 @@ import androidx.compose.material.Surface
 import androidx.compose.material.Text
 import androidx.compose.material.darkColors
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -53,6 +54,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.platform.LocalDensity
 import app.nuta.AppContainer
 import app.nuta.core.logging.LogEvent
 import app.nuta.core.logging.LogLevel
@@ -120,7 +122,17 @@ private fun ScrollableLazyColumn(
 
 @Composable
 fun NutaApp(container: AppContainer, onSpotifyLogin: (() -> Unit)? = null) {
+    val settings by container.playbackSettings.settings.collectAsState()
+    val density = LocalDensity.current
+    CompositionLocalProvider(LocalDensity provides density.copy(fontScale = settings.fontScale)) {
     MaterialTheme(colors = NutaColors) {
+        NutaAppContent(container, onSpotifyLogin)
+    }
+    }
+}
+
+@Composable
+private fun NutaAppContent(container: AppContainer, onSpotifyLogin: (() -> Unit)?) {
         val playerState by container.audioPlayer.state.collectAsState()
         var destination by remember { mutableStateOf(Destination.HOME) }
         var selectedPlaylist by remember { mutableStateOf<Playlist?>(null) }
@@ -386,6 +398,20 @@ private fun SettingsScreen(container: AppContainer) {
     val settings by container.playbackSettings.settings.collectAsState()
     ScrollableLazyColumn(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item { Heading("Ustawienia odtwarzania", "Jakość strumienia YouTube i bufor Media3") }
+        item {
+            SettingsGroup("Wielkość czcionki", "Zmniejsz interfejs od 50% do 100%") {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("${(settings.fontScale * 100).toInt()}%", modifier = Modifier.width(48.dp))
+                    Slider(
+                        value = settings.fontScale,
+                        onValueChange = { container.playbackSettings.update(settings.copy(fontScale = it.coerceIn(0.5f, 1f))) },
+                        valueRange = 0.5f..1f,
+                        steps = 4,
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+            }
+        }
         item {
             SettingsGroup("Jakość", "Zmiana działa od następnego utworu") {
                 SettingOptions(
