@@ -12,9 +12,13 @@ import app.nuta.core.models.PlayerStatus
 import app.nuta.core.models.Track
 import app.nuta.domain.AudioPlayer
 import app.nuta.youtube.YouTubeMediaService
+import app.nuta.youtube.YouTubeResolution
+import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -37,6 +41,7 @@ class Media3AudioPlayer(
     private val loadMutex = Mutex()
     private var ticker: Job? = null
     private var retryingAfterError = false
+    private val prefetchCache = ConcurrentHashMap<String, Deferred<YouTubeResolution>>()
 
     init {
         player.addListener(object : Player.Listener {
@@ -102,12 +107,33 @@ class Media3AudioPlayer(
         logger.info("Media3Player", "queue_shuffled", "Przetasowano pozostałe utwory kolejki")
     }
 
+    override suspend fun prefetch(tracks: List<Track>) {
+        if (prefetchCache.size > 40) return
+        tracks.take(PREFETCH_LIMIT).forEach { track ->
+            if (track.id == stateFlow.value.currentTrack?.id) return@forEach
+            prefetchCache.computeIfAbsent(track.id) { scope.async { youtube.resolve(track) } }
+        }
+    }
+
+    /** Zużywa wpis z cache prefetchu, jeśli jest świeży; w przeciwnym razie rozwiązuje strumień normalnie. */
+    private suspend fun resolveForPlayback(track: Track): YouTubeResolution {
+        val cached = prefetchCache.remove(track.id)
+        if (cached != null) {
+            val resolution = runCatching { cached.await() }.getOrNull()
+            val expiresAtMs = resolution?.stream?.expiresAtMs
+            if (resolution != null && (expiresAtMs == null || expiresAtMs - System.currentTimeMillis() > PREFETCH_EXPIRY_MARGIN_MS)) {
+                return resolution
+            }
+        }
+        return youtube.resolve(track)
+    }
+
     override suspend fun play() {
         val track = stateFlow.value.currentTrack ?: return
         if (stateFlow.value.status == PlayerStatus.PAUSED) { withContext(Dispatchers.Main) { player.play() }; return }
         loadMutex.withLock {
             stateFlow.value = stateFlow.value.copy(status = PlayerStatus.LOADING, positionMs = 0, errorMessage = null, streamBitrate = null, streamCodec = null)
-            runCatching { youtube.resolve(track) }.onSuccess { resolution ->
+            runCatching { resolveForPlayback(track) }.onSuccess { resolution ->
                 retryingAfterError = false
                 val url = resolution.stream.url.use { it }
                 stateFlow.value = stateFlow.value.copy(
@@ -167,4 +193,9 @@ class Media3AudioPlayer(
     }
     private suspend fun advanceAfterEnd() { val next = stateFlow.value.currentIndex + 1; if (next in stateFlow.value.queue.indices) move(next) else stateFlow.value = stateFlow.value.copy(status = PlayerStatus.ENDED) }
     private fun startTicker() { ticker?.cancel(); ticker = scope.launch { while (isActive) { delay(500); val position = withContext(Dispatchers.Main) { player.currentPosition }; stateFlow.value = stateFlow.value.copy(positionMs = position.coerceAtLeast(0)) } } }
+
+    private companion object {
+        const val PREFETCH_LIMIT = 5
+        const val PREFETCH_EXPIRY_MARGIN_MS = 30_000L
+    }
 }

@@ -32,4 +32,6 @@ interface AudioPlayer {
     suspend fun previous()
     suspend fun playAt(index: Int)
     suspend fun simulateError()
+    /** Eksperymentalne: z góry rozwiąż strumień dla podanych utworów, żeby kliknięcie play było natychmiastowe. No-op domyślnie. */
+    suspend fun prefetch(tracks: List<Track>) {}
 }
