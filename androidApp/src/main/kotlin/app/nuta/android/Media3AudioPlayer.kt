@@ -4,12 +4,14 @@ import android.content.Context
 import android.content.SharedPreferences
 import android.util.Base64
 import androidx.media3.common.MediaItem
+import androidx.media3.common.MediaMetadata
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import androidx.media3.session.MediaSession
 import app.nuta.core.logging.NutaLogger
 import app.nuta.core.models.PlayerState
 import app.nuta.core.models.PlayerStatus
@@ -48,6 +50,7 @@ class Media3AudioPlayer(
         .setMediaSourceFactory(DefaultMediaSourceFactory(DefaultHttpDataSource.Factory().setUserAgent(USER_AGENT).setAllowCrossProtocolRedirects(true)))
         .setLoadControl(loadControl(settingsStore.settings.value.bufferSize))
         .build()
+    private val mediaSession = MediaSession.Builder(context, player).build()
 
     init {
         player.addListener(object : Player.Listener {
@@ -75,7 +78,7 @@ class Media3AudioPlayer(
                 logger.error("Media3Player", "playback_failed", "Media3 zgłosił błąd odtwarzania", throwable = error)
             }
         })
-        scope.coroutineContext[Job]?.invokeOnCompletion { player.release() }
+        scope.coroutineContext[Job]?.invokeOnCompletion { mediaSession.release(); player.release() }
     }
 
     override suspend fun setQueue(tracks: List<Track>, startIndex: Int) {
@@ -106,7 +109,15 @@ class Media3AudioPlayer(
                     streamCodec = resolution.stream.codec,
                 )
                 withContext(Dispatchers.Main) {
-                    player.setMediaItem(MediaItem.fromUri(url)); player.prepare(); player.play()
+                    player.setMediaItem(MediaItem.Builder()
+                        .setUri(url)
+                        .setMediaMetadata(MediaMetadata.Builder()
+                            .setTitle(track.title)
+                            .setArtist(track.artists.joinToString())
+                            .setAlbumTitle(track.album)
+                            .build())
+                        .build())
+                    player.prepare(); player.play()
                 }
                 logger.info("Media3Player", "playback_prepared", "Przekazano strumień YouTube do Media3", fields = mapOf(
                     "codec" to resolution.stream.codec,

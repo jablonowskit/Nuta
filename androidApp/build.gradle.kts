@@ -53,5 +53,6 @@ dependencies {
     implementation(compose.material)
     implementation(libs.serialization.json)
     implementation(libs.androidx.media3.exoplayer)
+    implementation(libs.androidx.media3.session)
     implementation(libs.coil.network.okhttp)
 }
