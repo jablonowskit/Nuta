@@ -495,6 +495,11 @@ private fun SettingsScreen(container: AppContainer) {
                 fontSize = 12.sp,
                 modifier = Modifier.padding(vertical = 8.dp),
             )
+            Text(
+                "Nuta • by jablonowskit",
+                color = Color(0xFF66737D),
+                fontSize = 11.sp,
+            )
         }
     }
 }
@@ -766,7 +771,7 @@ private fun TrackRow(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (active && loading) {
-            Text("⏳", fontSize = 14.sp, modifier = Modifier.width(28.dp), textAlign = TextAlign.Center)
+            Text("⏳︎", fontSize = 14.sp, modifier = Modifier.width(28.dp), textAlign = TextAlign.Center)
         } else {
             Text(if (active) "▶" else "♪", color = if (active) MaterialTheme.colors.primary else Color(0xFF7D8B95), modifier = Modifier.width(28.dp))
         }
@@ -803,7 +808,7 @@ private fun TrackQueueButton(onClick: () -> Unit) {
         modifier = Modifier.size(32.dp),
         contentPadding = PaddingValues(0.dp),
         border = null,
-    ) { Text("＋") }
+    ) { Text("+") }
 }
 
 @Composable
@@ -1036,11 +1041,11 @@ private fun CompactPlayerBar(
     Box(Modifier.fillMaxWidth().height(40.dp)) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
             Text("⏮", modifier = Modifier.size(32.dp).clickable(enabled = track != null) { scope.launch { container.audioPlayer.previous() } }, color = if (track != null) Color.White else Color(0xFF55616A), fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
-            Text("◀◀", modifier = Modifier.size(32.dp).clickable(enabled = track != null) { scope.launch { container.audioPlayer.seekTo((state.positionMs - 10_000).coerceAtLeast(0)) } }, color = if (track != null) Color.White else Color(0xFF55616A), fontSize = 12.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+            Text("⏪︎", modifier = Modifier.size(32.dp).clickable(enabled = track != null) { scope.launch { container.audioPlayer.seekTo((state.positionMs - 10_000).coerceAtLeast(0)) } }, color = if (track != null) Color.White else Color(0xFF55616A), fontSize = 16.sp, textAlign = TextAlign.Center)
             if (state.status == PlayerStatus.LOADING) {
-                Text("⏳", modifier = Modifier.size(32.dp), color = MaterialTheme.colors.primary, fontSize = 18.sp, textAlign = TextAlign.Center)
-            } else Text(if (state.status == PlayerStatus.PLAYING) "Ⅱ" else "▶", modifier = Modifier.size(32.dp).clickable(enabled = track != null) { scope.launch { if (state.status == PlayerStatus.PLAYING) container.audioPlayer.pause() else container.audioPlayer.play() } }, color = MaterialTheme.colors.primary, fontSize = 18.sp, textAlign = TextAlign.Center)
-            Text("▶▶", modifier = Modifier.size(32.dp).clickable(enabled = track != null) { scope.launch { container.audioPlayer.seekTo((state.positionMs + 10_000).coerceAtMost(state.durationMs)) } }, color = if (track != null) Color.White else Color(0xFF55616A), fontSize = 12.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+                Text("⏳︎", modifier = Modifier.size(32.dp), color = MaterialTheme.colors.primary, fontSize = 18.sp, textAlign = TextAlign.Center)
+            } else Text(if (state.status == PlayerStatus.PLAYING) "⏸" else "▶", modifier = Modifier.size(32.dp).clickable(enabled = track != null) { scope.launch { if (state.status == PlayerStatus.PLAYING) container.audioPlayer.pause() else container.audioPlayer.play() } }, color = MaterialTheme.colors.primary, fontSize = 18.sp, textAlign = TextAlign.Center)
+            Text("⏩︎", modifier = Modifier.size(32.dp).clickable(enabled = track != null) { scope.launch { container.audioPlayer.seekTo((state.positionMs + 10_000).coerceAtMost(state.durationMs)) } }, color = if (track != null) Color.White else Color(0xFF55616A), fontSize = 16.sp, textAlign = TextAlign.Center)
             Text("⏭", modifier = Modifier.size(32.dp).clickable(enabled = track != null) { scope.launch { container.audioPlayer.next() } }, color = if (track != null) Color.White else Color(0xFF55616A), fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
             Text(
                 if (favoriteLoading) "…" else if (isLiked) "♥" else "♡",
@@ -1141,7 +1146,7 @@ private fun PlayerBar(
         OutlinedButton(onClick = { scope.launch { container.audioPlayer.previous() } }, enabled = track != null, modifier = Modifier.size(42.dp), contentPadding = PaddingValues(0.dp)) { Text("⏮") }
         Spacer(Modifier.width(6.dp))
         Button(onClick = { scope.launch { if (state.status == PlayerStatus.PLAYING) container.audioPlayer.pause() else container.audioPlayer.play() } }, enabled = track != null && state.status != PlayerStatus.LOADING, modifier = Modifier.size(42.dp), contentPadding = PaddingValues(0.dp)) {
-            if (state.status == PlayerStatus.LOADING) Text("⏳")
+            if (state.status == PlayerStatus.LOADING) Text("⏳︎")
             else Text(if (state.status == PlayerStatus.PLAYING) "⏸" else "▶")
         }
         Spacer(Modifier.width(6.dp))
