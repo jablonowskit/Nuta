@@ -698,11 +698,9 @@ private fun SearchScreen(
     val scope = rememberCoroutineScope()
     val playerState by container.audioPlayer.state.collectAsState()
     val currentState by rememberUpdatedState(state)
-    fun playTrack(track: Track) {
-        scope.launch {
-            container.audioPlayer.setQueue(listOf(track), 0)
-            container.audioPlayer.play()
-        }
+    suspend fun playTrack(track: Track) {
+        container.audioPlayer.setQueue(listOf(track), 0)
+        container.audioPlayer.play()
     }
 
     LaunchedEffect(state.query, container.spotifyRepository) {
