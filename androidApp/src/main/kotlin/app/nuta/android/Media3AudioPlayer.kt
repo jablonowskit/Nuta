@@ -114,7 +114,18 @@ class Media3AudioPlayer(
         if (prefetchCache.size > 40) return
         tracks.take(PREFETCH_LIMIT).forEach { track ->
             if (track.id == stateFlow.value.currentTrack?.id) return@forEach
-            prefetchCache.computeIfAbsent(track.id) { scope.async { youtube.resolve(track) } }
+            prefetchCache.computeIfAbsent(track.id) {
+                val startedAtMs = System.currentTimeMillis()
+                logger.info("Media3Player", "prefetch_started", "Rozpoczęto prefetch strumienia", fields = mapOf("track" to track.title))
+                scope.async {
+                    youtube.resolve(track).also {
+                        logger.info("Media3Player", "prefetch_ready", "Prefetch gotowy", fields = mapOf(
+                            "track" to track.title,
+                            "ms" to (System.currentTimeMillis() - startedAtMs).toString(),
+                        ))
+                    }
+                }
+            }
         }
     }
 
@@ -122,11 +133,18 @@ class Media3AudioPlayer(
     private suspend fun resolveForPlayback(track: Track): YouTubeResolution {
         val cached = prefetchCache.remove(track.id)
         if (cached != null) {
+            if (!cached.isCompleted) {
+                logger.info("Media3Player", "prefetch_miss_pending", "Prefetch jeszcze się nie zakończył — czekam na niego zamiast startować od nowa", fields = mapOf("track" to track.title))
+            }
             val resolution = runCatching { cached.await() }.getOrNull()
             val expiresAtMs = resolution?.stream?.expiresAtMs
             if (resolution != null && (expiresAtMs == null || expiresAtMs - System.currentTimeMillis() > PREFETCH_EXPIRY_MARGIN_MS)) {
+                logger.info("Media3Player", "prefetch_hit", "Użyto rozwiązania z prefetchu", fields = mapOf("track" to track.title))
                 return resolution
             }
+            logger.info("Media3Player", "prefetch_expired", "Prefetch wygasł lub się nie udał — rozwiązuję od nowa", fields = mapOf("track" to track.title))
+        } else {
+            logger.info("Media3Player", "prefetch_miss", "Brak prefetchu dla utworu — rozwiązuję od zera", fields = mapOf("track" to track.title))
         }
         return youtube.resolve(track)
     }
