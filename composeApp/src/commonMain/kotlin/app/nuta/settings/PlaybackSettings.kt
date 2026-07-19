@@ -16,6 +16,8 @@ data class YouTubePlaybackSettings(
     val bufferSize: BufferSize = BufferSize.STANDARD,
     val loudnessNormalization: LoudnessNormalization = LoudnessNormalization.OFF,
     val homeRecommendations: Int = 6,
+    /** Eksperymentalne: rozwiązuj strumień dla widocznych utworów zanim użytkownik kliknie play. */
+    val prefetchEnabled: Boolean = false,
 )
 
 interface PlaybackSettingsStore {

@@ -75,6 +75,9 @@
     <string name="buffer_large">Duży</string>
     <string name="home_recs_title">Rekomendacje na Starcie</string>
     <string name="home_recs_desc">Ile playlist pokazywać na ekranie startowym</string>
+    <string name="prefetch_title">Prefetch (eksperymentalne)</string>
+    <string name="prefetch_desc">Rozwiązuj strumień dla widocznych utworów z wyprzedzeniem, żeby play startował natychmiast. Zużywa więcej danych i baterii.</string>
+    <string name="option_enabled">Włączone</string>
     <string name="loudness_title">Wyrównaj głośność</string>
     <string name="loudness_desc">Domyślnie wyłączone; korekcja może zmienić dynamikę utworu</string>
     <string name="loudness_off">Wyłączone</string>

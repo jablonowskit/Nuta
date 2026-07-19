@@ -51,6 +51,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.runtime.setValue
@@ -81,6 +82,7 @@ import app.nuta.settings.BufferSize
 import app.nuta.settings.LoudnessNormalization
 import app.nuta.settings.CodecPreference
 import app.nuta.settings.StreamQuality
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
 
@@ -112,12 +114,26 @@ private fun ScrollableLazyColumn(
     reverseLayout: Boolean = false,
     verticalArrangement: Arrangement.Vertical = Arrangement.Top,
     scrollToIndex: Int? = null,
+    onVisibleRangeChanged: ((IntRange) -> Unit)? = null,
     content: LazyListScope.() -> Unit,
 ) {
     val listState = rememberLazyListState()
     LaunchedEffect(scrollToIndex) {
         scrollToIndex?.takeIf { it >= 0 }?.let { index ->
             listState.animateScrollToItem(index)
+        }
+    }
+    if (onVisibleRangeChanged != null) {
+        LaunchedEffect(listState) {
+            var debounceJob: Job? = null
+            snapshotFlow { listState.layoutInfo.visibleItemsInfo.map { it.index } }.collect { indices ->
+                debounceJob?.cancel()
+                if (indices.isEmpty()) return@collect
+                debounceJob = launch {
+                    delay(250)
+                    onVisibleRangeChanged(indices.min()..indices.max())
+                }
+            }
         }
     }
     Box(modifier) {
@@ -130,6 +146,19 @@ private fun ScrollableLazyColumn(
         )
         PlatformVerticalScrollbar(listState, Modifier.align(Alignment.CenterEnd).fillMaxHeight())
     }
+}
+
+/** Eksperymentalny prefetch: śledzi widoczny zakres listy (debounced) i rozwiązuje strumień dla tych utworów z wyprzedzeniem. */
+@Composable
+private fun rememberPrefetchHandler(tracks: List<Track>, container: AppContainer): (IntRange) -> Unit {
+    val settings by container.playbackSettings.settings.collectAsState()
+    var visibleRange by remember { mutableStateOf(0..2) }
+    LaunchedEffect(visibleRange, tracks, settings.prefetchEnabled) {
+        if (!settings.prefetchEnabled) return@LaunchedEffect
+        val toPrefetch = (visibleRange.first..visibleRange.last).mapNotNull(tracks::getOrNull)
+        if (toPrefetch.isNotEmpty()) container.audioPlayer.prefetch(toPrefetch)
+    }
+    return { range -> visibleRange = range }
 }
 
 @Composable
@@ -489,6 +518,14 @@ private fun SettingsScreen(container: AppContainer) {
             }
         }
         item {
+            SettingsGroup(stringResource(Res.string.prefetch_title), stringResource(Res.string.prefetch_desc)) {
+                SettingOptions(
+                    options = listOf(false to stringResource(Res.string.loudness_off), true to stringResource(Res.string.option_enabled)),
+                    selected = settings.prefetchEnabled,
+                ) { container.playbackSettings.update(settings.copy(prefetchEnabled = it)) }
+            }
+        }
+        item {
             Text(
                 stringResource(Res.string.settings_footer),
                 color = Color(0xFF8D9BA6),
@@ -686,7 +723,8 @@ private fun PlaylistDetails(playlist: Playlist, playerState: PlayerState, contai
         Spacer(Modifier.height(16.dp))
         Button(onClick = { scope.launch { container.audioPlayer.setQueue(playlist.tracks); container.audioPlayer.play() } }) { Text(stringResource(Res.string.play_all)) }
         Spacer(Modifier.height(16.dp))
-        ScrollableLazyColumn(Modifier.fillMaxSize()) {
+        val onVisibleRangeChanged = rememberPrefetchHandler(playlist.tracks, container)
+        ScrollableLazyColumn(Modifier.fillMaxSize(), onVisibleRangeChanged = onVisibleRangeChanged) {
             items(playlist.tracks, key = { it.id }) { track ->
                 TrackRow(track, playerState.currentTrack?.id == track.id, loading = playerState.status == PlayerStatus.LOADING, onPlay = {
                     scope.launch {
@@ -730,7 +768,8 @@ private fun LikedScreen(
                     }
                 }) { Text(stringResource(Res.string.liked_play_all, tracks.size)) }
                 Spacer(Modifier.height(14.dp))
-                ScrollableLazyColumn(Modifier.fillMaxSize(), scrollToIndex = tracks.indexOfFirst { it.id == playerState.currentTrack?.id }.takeIf { it >= 0 }) {
+                val onVisibleRangeChanged = rememberPrefetchHandler(tracks, container)
+                ScrollableLazyColumn(Modifier.fillMaxSize(), scrollToIndex = tracks.indexOfFirst { it.id == playerState.currentTrack?.id }.takeIf { it >= 0 }, onVisibleRangeChanged = onVisibleRangeChanged) {
                     items(tracks, key = { "liked-${it.id}" }) { track ->
                         TrackRow(track, playerState.currentTrack?.id == track.id, loading = playerState.status == PlayerStatus.LOADING, onPlay = {
                             scope.launch {
@@ -916,6 +955,10 @@ private fun SearchScreen(
             titleMatches || artistMatches
         }
         val visiblePlaylists = if (state.searchPlaylists) state.result.playlists else emptyList()
+        val searchPlaybackSettings by container.playbackSettings.settings.collectAsState()
+        LaunchedEffect(visibleTracks, searchPlaybackSettings.prefetchEnabled) {
+            if (searchPlaybackSettings.prefetchEnabled) container.audioPlayer.prefetch(visibleTracks)
+        }
         if (state.error != null) ErrorState(state.error) else if (state.query.isNotBlank() && visibleTracks.isEmpty() && visiblePlaylists.isEmpty()) {
             EmptyState(stringResource(Res.string.search_no_results, state.query))
         } else {
