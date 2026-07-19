@@ -70,11 +70,15 @@ jobs:
         run: |
           chmod +x gradlew
           ./gradlew --no-daemon :composeApp:packageAppImage
+      - name: Inspect Linux package output
+        run: |
+          echo "Generated files:"
+          find composeApp/build/compose -type f -print
       - name: Upload Linux AppImage
         uses: actions/upload-artifact@v5
         with:
           name: nuta-linux-appimage
-          path: composeApp/build/compose/binaries/main/app/*.AppImage
+          path: composeApp/build/compose/binaries/main/app/
           if-no-files-found: error
 
       - name: Build GUI test image
