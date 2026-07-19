@@ -221,10 +221,9 @@ class SpotifyAndroidRepository(
     private suspend fun libraryRequest(method: String, action: String?, trackId: String): JsonElement? {
         require(trackId.matches(Regex("[A-Za-z0-9]+"))) { "Nieprawidłowy identyfikator utworu" }
         check(token.expiresAtMs > System.currentTimeMillis() + 30_000) { "Sesja Spotify wygasła. Zaloguj się ponownie." }
-        val uri = URLEncoder.encode("spotify:track:$trackId", StandardCharsets.UTF_8.name())
         val suffix = action?.let { "/$it" }.orEmpty()
         return withContext(Dispatchers.IO) {
-            val connection = URL("https://api.spotify.com/v1/me/library$suffix?uris=$uri").openConnection() as HttpURLConnection
+            val connection = URL("https://api.spotify.com/v1/me/tracks$suffix?ids=$trackId").openConnection() as HttpURLConnection
             try {
                 connection.requestMethod = method
                 connection.connectTimeout = 15_000
