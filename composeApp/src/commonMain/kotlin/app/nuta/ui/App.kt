@@ -23,6 +23,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.Button
 import androidx.compose.material.ButtonDefaults
@@ -46,6 +47,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -807,11 +809,12 @@ private fun SearchScreen(
         )
         BoxWithConstraints(Modifier.fillMaxWidth()) {
             if (maxWidth < 380.dp) {
-                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        SearchScopeCheckbox("Utwory", state.searchTracks) { onStateChange(state.copy(searchTracks = it)) }
-                        SearchScopeCheckbox("Wykonawcy", state.searchArtists) { onStateChange(state.copy(searchArtists = it)) }
-                    }
+                Row(
+                    modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    SearchScopeCheckbox("Utwory", state.searchTracks) { onStateChange(state.copy(searchTracks = it)) }
+                    SearchScopeCheckbox("Wykonawcy", state.searchArtists) { onStateChange(state.copy(searchArtists = it)) }
                     SearchScopeCheckbox("Playlisty", state.searchPlaylists) { onStateChange(state.copy(searchPlaylists = it)) }
                 }
             } else {
