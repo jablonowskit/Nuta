@@ -2,6 +2,7 @@ package app.nuta.android
 
 import app.nuta.core.logging.NutaLogger
 import app.nuta.core.models.Playlist
+import app.nuta.core.models.Artist
 import app.nuta.core.models.SearchResult
 import app.nuta.core.models.Track
 import app.nuta.domain.SpotifyRepository
@@ -130,14 +131,15 @@ class SpotifyAndroidRepository(
             "includeArtistHasConcertsField" to JsonPrimitive(false), "includePreReleases" to JsonPrimitive(false),
             "includeLocalConcertsField" to JsonPrimitive(false), "includeAuthors" to JsonPrimitive(false),
         ))).jsonObject
-        val items = root["data"]?.asObject()?.get("searchV2")?.asObject()?.get("tracksV2")?.asObject()?.get("items") as? JsonArray
+        val searchRoot = root["data"]?.asObject()?.get("searchV2") ?: return SearchResult(emptyList(), emptyList())
+        val items = searchRoot.asObject()?.get("tracksV2")?.asObject()?.get("items") as? JsonArray
         val tracks = items.orEmpty().mapNotNull { element ->
             val item = element.asObject()?.get("item")?.asObject()?.get("data")?.asObject() ?: return@mapNotNull null
             val uri = item["uri"]?.asText() ?: return@mapNotNull null
             mapTrack(item, uri)
         }.distinctBy(Track::id).take(10)
         logger.info("SpotifyAndroid", "search_completed", "Zakończono wyszukiwanie Spotify", fields = mapOf("count" to tracks.size.toString()))
-        return SearchResult(tracks, emptyList())
+        return SearchResult(tracks, collectPlaylists(searchRoot), collectArtists(searchRoot))
     }
 
     override suspend fun getTrackRadio(seed: Track, limit: Int): List<Track> {
@@ -228,6 +230,18 @@ class SpotifyAndroidRepository(
         }
         else -> emptyList()
     }
+
+    private fun collectArtists(element: JsonElement): List<Artist> = when (element) {
+        is JsonArray -> element.flatMap(::collectArtists)
+        is JsonObject -> {
+            val uri = element["uri"]?.asText()
+            val artist = if (uri?.startsWith("spotify:artist:") == true) {
+                element["name"]?.asText()?.let { Artist(uri.substringAfterLast(':'), it, spotifyImageUrl(element)) }
+            } else null
+            listOfNotNull(artist) + element.values.flatMap(::collectArtists)
+        }
+        else -> emptyList()
+    }.distinctBy(Artist::id)
 
     private fun collectTracks(element: JsonElement): List<Track> = when (element) {
         is JsonArray -> element.flatMap(::collectTracks)

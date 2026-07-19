@@ -57,6 +57,7 @@ import app.nuta.AppContainer
 import app.nuta.core.logging.LogEvent
 import app.nuta.core.logging.LogLevel
 import app.nuta.core.models.Destination
+import app.nuta.core.models.Artist
 import app.nuta.core.models.PlayerState
 import app.nuta.core.models.PlayerStatus
 import app.nuta.core.models.Playlist
@@ -583,6 +584,17 @@ private fun PlaylistCard(playlist: Playlist, onClick: () -> Unit) {
 }
 
 @Composable
+private fun ArtistSearchCard(artist: Artist) {
+    Card(
+        backgroundColor = MaterialTheme.colors.surface,
+        shape = RoundedCornerShape(10.dp),
+        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+    ) {
+        Text(artist.name, modifier = Modifier.padding(14.dp), fontWeight = FontWeight.Bold)
+    }
+}
+
+@Composable
 private fun PlaylistDetails(playlist: Playlist, playerState: PlayerState, container: AppContainer) {
     val scope = rememberCoroutineScope()
     Column(Modifier.fillMaxSize()) {
@@ -756,15 +768,18 @@ private fun SearchScreen(
             }
             Spacer(Modifier.height(14.dp))
         }
-        val visibleTracks = state.result.tracks.filter { track ->
-            (state.searchTracks && track.title.contains(state.query, ignoreCase = true)) ||
-                (state.searchArtists && track.artists.any { it.contains(state.query, ignoreCase = true) })
-        }
+        val visibleTracks = if (state.searchTracks) state.result.tracks else emptyList()
+        val visibleArtists = if (state.searchArtists) state.result.artists else emptyList()
         val visiblePlaylists = if (state.searchPlaylists) state.result.playlists else emptyList()
-        if (state.error != null) ErrorState(state.error) else if (state.query.isNotBlank() && visibleTracks.isEmpty() && visiblePlaylists.isEmpty()) {
+        if (state.error != null) ErrorState(state.error) else if (state.query.isNotBlank() && visibleTracks.isEmpty() && visibleArtists.isEmpty() && visiblePlaylists.isEmpty()) {
             EmptyState("Brak wyników dla „${state.query}”")
         } else {
             ScrollableLazyColumn(Modifier.fillMaxSize()) {
+                if (visibleArtists.isNotEmpty()) {
+                    item { SectionLabel("WYKONAWCY") }
+                    items(visibleArtists, key = { "a-${it.id}" }) { ArtistSearchCard(it) }
+                    item { Spacer(Modifier.height(18.dp)) }
+                }
                 if (visiblePlaylists.isNotEmpty()) {
                     item { SectionLabel("PLAYLISTY") }
                     items(visiblePlaylists, key = { "p-${it.id}" }) { PlaylistCard(it) { onPlaylist(it) } }
