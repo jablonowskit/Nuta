@@ -23,6 +23,7 @@ class AndroidPlaybackSettingsStore(private val preferences: SharedPreferences) :
             .putString("youtubeBuffer", value.bufferSize.name)
             .putString("loudnessNormalization", value.loudnessNormalization.name)
             .putInt("homeRecommendations", value.homeRecommendations)
+            .putBoolean("prefetchEnabled", value.prefetchEnabled)
             .apply()
         state.value = value
     }
@@ -34,6 +35,7 @@ class AndroidPlaybackSettingsStore(private val preferences: SharedPreferences) :
         bufferSize = enumValue(preferences.getString("youtubeBuffer", null), BufferSize.STANDARD),
         loudnessNormalization = enumValue(preferences.getString("loudnessNormalization", null), LoudnessNormalization.OFF),
         homeRecommendations = preferences.getInt("homeRecommendations", 6).coerceIn(3, 50),
+        prefetchEnabled = preferences.getBoolean("prefetchEnabled", false),
     )
 
     private inline fun <reified T : Enum<T>> enumValue(value: String?, fallback: T): T =
