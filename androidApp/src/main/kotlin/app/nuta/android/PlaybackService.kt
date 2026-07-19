@@ -49,6 +49,13 @@ class PlaybackService : MediaSessionService() {
         override fun isCommandAvailable(command: Int): Boolean = getAvailableCommands().contains(command)
         override fun hasNextMediaItem(): Boolean = true
         override fun hasPreviousMediaItem(): Boolean = true
+        // maskujemy BUFFERING jako READY: system zamienia play/pause na wskaźnik ładowania, a chcemy stałe przyciski
+        override fun getPlaybackState(): Int = when (val state = super.getPlaybackState()) {
+            Player.STATE_BUFFERING -> Player.STATE_READY
+            else -> state
+        }
+        override fun isPlaying(): Boolean = playWhenReady &&
+            super.getPlaybackState().let { it == Player.STATE_READY || it == Player.STATE_BUFFERING }
         override fun seekToNext() { PlaybackQueueBridge.onNext?.invoke() }
         override fun seekToNextMediaItem() { PlaybackQueueBridge.onNext?.invoke() }
         override fun seekToPrevious() { PlaybackQueueBridge.onPrevious?.invoke() }
