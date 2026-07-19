@@ -45,10 +45,26 @@ jobs:
           path: androidApp/build/outputs/apk/debug/*.apk
           if-no-files-found: error
 
-  test-linux-gui:
+  build-linux-gui:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "25"
+      - uses: gradle/actions/setup-gradle@v5
+      - name: Build Linux AppImage
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon :composeApp:packageAppImage
+      - name: Upload Linux AppImage
+        uses: actions/upload-artifact@v5
+        with:
+          name: nuta-linux-appimage
+          path: composeApp/build/compose/binaries/main/app/*.AppImage
+          if-no-files-found: error
 
       - name: Build GUI test image
         run: docker compose build gui-test
