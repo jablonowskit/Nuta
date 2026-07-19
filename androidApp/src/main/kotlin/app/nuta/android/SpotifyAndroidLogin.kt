@@ -79,8 +79,10 @@ fun SpotifyAndroidLogin(
 
     Column(Modifier.fillMaxSize().background(Color(0xFF101418))) {
         Row(Modifier.fillMaxWidth().background(Color(0xFF131A20)).padding(10.dp)) {
-            Text(status, color = Color.White, modifier = Modifier.fillMaxWidth(0.62f).padding(10.dp))
-            Button(onClick = connectSession) { Text("Połącz po zalogowaniu") }
+            Text(status, color = Color.White, modifier = Modifier.weight(1f).padding(10.dp), maxLines = 2)
+            Button(onClick = connectSession, modifier = Modifier.padding(end = 4.dp)) {
+                Text("Połącz", maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+            }
         }
         AndroidView(
             modifier = Modifier.fillMaxSize(),

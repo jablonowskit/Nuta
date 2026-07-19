@@ -263,7 +263,8 @@ fun NutaApp(container: AppContainer, onSpotifyLogin: (() -> Unit)? = null) {
 
         Surface(modifier = Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing), color = MaterialTheme.colors.background) {
             BoxWithConstraints(Modifier.fillMaxSize()) {
-            val compact = maxWidth < 700.dp
+            // Leave enough room for the desktop sidebar and player controls.
+            val compact = maxWidth < 960.dp
             Column(Modifier.fillMaxSize()) {
                 TopBar(compact)
                 Row(Modifier.weight(1f).fillMaxWidth()) {
@@ -348,7 +349,7 @@ private fun TopBar(compact: Boolean) {
         Spacer(Modifier.width(12.dp))
         if (!compact) Text("Spotify Web + YouTube", color = Color(0xFF8D9BA6), fontSize = 13.sp)
         Spacer(Modifier.weight(1f))
-        Text(if (compact) "ANDROID" else "NUTA", color = MaterialTheme.colors.secondary, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+        Text("NUTA", color = MaterialTheme.colors.secondary, fontWeight = FontWeight.Bold, fontSize = 11.sp)
     }
 }
 
@@ -366,7 +367,14 @@ private fun BottomNavigation(selected: Destination, onSelect: (Destination) -> U
                     .background(if (active) Color(0xFF24332B) else Color.Transparent),
                 contentAlignment = Alignment.Center,
             ) {
-                Text(labels.getValue(item), color = if (active) MaterialTheme.colors.primary else Color(0xFFC5CFD7), fontSize = 10.sp, fontWeight = if (active) FontWeight.Bold else FontWeight.Normal)
+                Text(
+                    labels.getValue(item),
+                    color = if (active) MaterialTheme.colors.primary else Color(0xFFC5CFD7),
+                    fontSize = 10.sp,
+                    fontWeight = if (active) FontWeight.Bold else FontWeight.Normal,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
             }
         }
     }
@@ -720,14 +728,26 @@ private fun SearchScreen(
             modifier = Modifier.fillMaxWidth(),
             singleLine = true,
         )
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            SearchScopeCheckbox("Utwory", state.searchTracks) { onStateChange(state.copy(searchTracks = it)) }
-            SearchScopeCheckbox("Wykonawcy", state.searchArtists) { onStateChange(state.copy(searchArtists = it)) }
-            SearchScopeCheckbox("Playlisty", state.searchPlaylists) { onStateChange(state.copy(searchPlaylists = it)) }
+        BoxWithConstraints(Modifier.fillMaxWidth()) {
+            if (maxWidth < 380.dp) {
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        SearchScopeCheckbox("Utwory", state.searchTracks) { onStateChange(state.copy(searchTracks = it)) }
+                        SearchScopeCheckbox("Wykonawcy", state.searchArtists) { onStateChange(state.copy(searchArtists = it)) }
+                    }
+                    SearchScopeCheckbox("Playlisty", state.searchPlaylists) { onStateChange(state.copy(searchPlaylists = it)) }
+                }
+            } else {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    SearchScopeCheckbox("Utwory", state.searchTracks) { onStateChange(state.copy(searchTracks = it)) }
+                    SearchScopeCheckbox("Wykonawcy", state.searchArtists) { onStateChange(state.copy(searchArtists = it)) }
+                    SearchScopeCheckbox("Playlisty", state.searchPlaylists) { onStateChange(state.copy(searchPlaylists = it)) }
+                }
+            }
         }
         Spacer(Modifier.height(10.dp))
         state.youtubeStatus?.takeIf { false }?.let {
