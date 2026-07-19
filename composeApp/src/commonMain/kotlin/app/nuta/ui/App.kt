@@ -831,18 +831,15 @@ private fun SearchScreen(
                                 onStateChange(state.copy(youtubeStatus = null))
                             }
                         }, titleAction = {
-                            OutlinedButton(onClick = {
+                            TrackPlayButton {
                                 scope.launch {
                                     onStateChange(state.copy(youtubeStatus = "Player: przygotowywanie strumienia YouTubeâ€¦"))
                                     playTrack(track)
                                     onStateChange(state.copy(youtubeStatus = null))
                                 }
-                        }, modifier = Modifier.size(32.dp).clickable { }, contentPadding = PaddingValues(0.dp), border = null) { Text("▶") }
+                            }
                             }, subtitleAction = {
-                            Box(
-                                modifier = Modifier.size(32.dp).clickable { scope.launch { container.audioPlayer.appendToQueue(listOf(track)) } },
-                                contentAlignment = Alignment.Center,
-                            ) { Text("＋") }
+                            TrackQueueButton { scope.launch { container.audioPlayer.appendToQueue(listOf(track)) } }
                         })
                     }
                 }
