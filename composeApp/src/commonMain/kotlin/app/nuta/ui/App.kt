@@ -614,6 +614,8 @@ private fun PlaylistDetails(playlist: Playlist, playerState: PlayerState, contai
                         container.audioPlayer.setQueue(playlist.tracks, playlist.tracks.indexOf(track))
                         container.audioPlayer.play()
                     } }
+                }, subtitleAction = {
+                    TrackQueueButton { scope.launch { container.audioPlayer.appendToQueue(listOf(track)) } }
                 })
             }
         }
@@ -656,6 +658,8 @@ private fun LikedScreen(
                                 container.audioPlayer.setQueue(tracks, tracks.indexOf(track))
                                 container.audioPlayer.play()
                             } }
+                        }, subtitleAction = {
+                            TrackQueueButton { scope.launch { container.audioPlayer.appendToQueue(listOf(track)) } }
                         })
                     }
                 }
@@ -711,6 +715,16 @@ private fun TrackPlayButton(onClick: () -> Unit) {
         contentPadding = PaddingValues(0.dp),
         border = null,
     ) { Text("▶") }
+}
+
+@Composable
+private fun TrackQueueButton(onClick: () -> Unit) {
+    OutlinedButton(
+        onClick = onClick,
+        modifier = Modifier.size(32.dp),
+        contentPadding = PaddingValues(0.dp),
+        border = null,
+    ) { Text("＋") }
 }
 
 @Composable
