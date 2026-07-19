@@ -226,7 +226,14 @@ private fun NutaAppContent(container: AppContainer, onSpotifyLogin: (() -> Unit)
         }
 
         LaunchedEffect(container.spotifyRepository) {
-            if (likedLoaded || likedLoading) return@LaunchedEffect
+            if (likedTracks.isEmpty() && !likedLoaded) {
+                runCatching { container.spotifyRepository.getCachedLikedTracks() }
+                    .onSuccess { cached -> if (likedTracks.isEmpty() && !likedLoaded) likedTracks = cached }
+            }
+        }
+
+        LaunchedEffect(destination, container.spotifyRepository) {
+            if (destination != Destination.PLAYLISTS && destination != Destination.LIKED || likedLoaded || likedLoading) return@LaunchedEffect
             likedLoading = true
             likedError = null
             runCatching { container.spotifyRepository.getLikedTracks() }
