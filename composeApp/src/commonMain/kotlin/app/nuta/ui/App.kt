@@ -834,28 +834,16 @@ private fun SearchScreen(
             }
             Spacer(Modifier.height(14.dp))
         }
-        val visibleTracks = if (state.searchTracks) state.result.tracks else emptyList()
-        val visibleArtists = if (state.searchArtists) state.result.artists else emptyList()
+        val visibleTracks = state.result.tracks.filter { track ->
+            val titleMatches = state.searchTracks && track.title.contains(state.query, ignoreCase = true)
+            val artistMatches = state.searchArtists && track.artists.any { it.contains(state.query, ignoreCase = true) }
+            titleMatches || artistMatches
+        }
         val visiblePlaylists = if (state.searchPlaylists) state.result.playlists else emptyList()
-        if (state.error != null) ErrorState(state.error) else if (state.query.isNotBlank() && visibleTracks.isEmpty() && visibleArtists.isEmpty() && visiblePlaylists.isEmpty()) {
+        if (state.error != null) ErrorState(state.error) else if (state.query.isNotBlank() && visibleTracks.isEmpty() && visiblePlaylists.isEmpty()) {
             EmptyState("Brak wyników dla „${state.query}”")
         } else {
             ScrollableLazyColumn(Modifier.fillMaxSize()) {
-                if (visibleArtists.isNotEmpty()) {
-                    item { SectionLabel("WYKONAWCY") }
-                    items(visibleArtists, key = { "a-${it.id}" }) { artist ->
-                        val artistTracks = state.result.tracks.filter { artist.name in it.artists }
-                        ArtistSearchCard(artist) {
-                            if (artistTracks.isNotEmpty()) {
-                                scope.launch {
-                                    container.audioPlayer.setQueue(artistTracks)
-                                    container.audioPlayer.play()
-                                }
-                            }
-                        }
-                    }
-                    item { Spacer(Modifier.height(18.dp)) }
-                }
                 if (visiblePlaylists.isNotEmpty()) {
                     item { SectionLabel("PLAYLISTY") }
                     items(visiblePlaylists, key = { "p-${it.id}" }) { PlaylistCard(it) { onPlaylist(it) } }
