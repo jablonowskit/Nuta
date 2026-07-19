@@ -73,6 +73,8 @@
     <string name="buffer_desc">Zmiana bufora działa po ponownym uruchomieniu aplikacji</string>
     <string name="buffer_small">Mały</string>
     <string name="buffer_large">Duży</string>
+    <string name="home_recs_title">Rekomendacje na Starcie</string>
+    <string name="home_recs_desc">Ile playlist pokazywać na ekranie startowym</string>
     <string name="loudness_title">Wyrównaj głośność</string>
     <string name="loudness_desc">Domyślnie wyłączone; korekcja może zmienić dynamikę utworu</string>
     <string name="loudness_off">Wyłączone</string>
