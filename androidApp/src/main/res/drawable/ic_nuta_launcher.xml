@@ -6,10 +6,35 @@
     <path
         android:fillColor="#063047"
         android:pathData="M54,0A54,54 0,1 0,54 108A54,54 0,1 0,54 0" />
+    <!-- główka nuty (pierścień) -->
+    <path
+        android:strokeColor="#39FF88"
+        android:strokeWidth="9"
+        android:pathData="M45,80A11,11 0,1 1,67 80A11,11 0,1 1,45 80" />
+    <!-- laska nuty -->
+    <path
+        android:strokeColor="#39FF88"
+        android:strokeWidth="8"
+        android:strokeLineCap="round"
+        android:pathData="M67,80L67,18" />
+    <!-- chorągiewka ósemki -->
     <path
         android:fillColor="#39FF88"
-        android:pathData="M66,24L66,68.5A12,12 0,1 1,59 57.2L59,36L39,41L39,78.5A12,12 0,1 1,32 67.2L32,35L66,24Z" />
+        android:pathData="M67,14C81,18 92,26 92,40C92,48 88,54 82,58C86,50 85,42 76,35C73,32.5 69,31 67,30Z" />
+    <!-- fale dźwiękowe -->
     <path
-        android:fillColor="#65D9FF"
-        android:pathData="M73,47L77,47L77,61L73,61Z M81,42L85,42L85,66L81,66Z M89,49L93,49L93,59L89,59Z" />
+        android:strokeColor="#39FF88"
+        android:strokeWidth="8"
+        android:strokeLineCap="round"
+        android:pathData="M34,74A22,22 0,0 1,56 52" />
+    <path
+        android:strokeColor="#39FF88"
+        android:strokeWidth="8"
+        android:strokeLineCap="round"
+        android:pathData="M22,72A34,34 0,0 1,56 38" />
+    <path
+        android:strokeColor="#39FF88"
+        android:strokeWidth="8"
+        android:strokeLineCap="round"
+        android:pathData="M10,70A46,46 0,0 1,56 24" />
 </vector>
