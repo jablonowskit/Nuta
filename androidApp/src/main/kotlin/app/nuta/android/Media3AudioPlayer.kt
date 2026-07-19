@@ -1,25 +1,17 @@
 package app.nuta.android
 
-import android.content.Context
 import android.content.SharedPreferences
 import android.util.Base64
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
-import androidx.media3.datasource.DefaultHttpDataSource
-import androidx.media3.exoplayer.ExoPlayer
-import androidx.media3.exoplayer.DefaultLoadControl
-import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
-import androidx.media3.session.MediaSession
 import app.nuta.core.logging.NutaLogger
 import app.nuta.core.models.PlayerState
 import app.nuta.core.models.PlayerStatus
 import app.nuta.core.models.Track
 import app.nuta.domain.AudioPlayer
 import app.nuta.youtube.YouTubeMediaService
-import app.nuta.settings.BufferSize
-import app.nuta.settings.PlaybackSettingsStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -34,11 +26,10 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
 class Media3AudioPlayer(
-    context: Context,
+    private val player: Player,
     private val scope: CoroutineScope,
     private val youtube: YouTubeMediaService,
     private val logger: NutaLogger,
-    settingsStore: PlaybackSettingsStore,
     private val queuePreferences: SharedPreferences,
 ) : AudioPlayer {
     private val stateFlow = MutableStateFlow(restoreQueue())
@@ -46,11 +37,6 @@ class Media3AudioPlayer(
     private val loadMutex = Mutex()
     private var ticker: Job? = null
     private var retryingAfterError = false
-    private val player = ExoPlayer.Builder(context)
-        .setMediaSourceFactory(DefaultMediaSourceFactory(DefaultHttpDataSource.Factory().setUserAgent(USER_AGENT).setAllowCrossProtocolRedirects(true)))
-        .setLoadControl(loadControl(settingsStore.settings.value.bufferSize))
-        .build()
-    private val mediaSession = MediaSession.Builder(context, player).build()
 
     init {
         player.addListener(object : Player.Listener {
@@ -78,7 +64,6 @@ class Media3AudioPlayer(
                 logger.error("Media3Player", "playback_failed", "Media3 zgłosił błąd odtwarzania", throwable = error)
             }
         })
-        scope.coroutineContext[Job]?.invokeOnCompletion { mediaSession.release(); player.release() }
     }
 
     override suspend fun setQueue(tracks: List<Track>, startIndex: Int) {
@@ -160,16 +145,4 @@ class Media3AudioPlayer(
     }
     private suspend fun advanceAfterEnd() { val next = stateFlow.value.currentIndex + 1; if (next in stateFlow.value.queue.indices) move(next) else stateFlow.value = stateFlow.value.copy(status = PlayerStatus.ENDED) }
     private fun startTicker() { ticker?.cancel(); ticker = scope.launch { while (isActive) { delay(500); val position = withContext(Dispatchers.Main) { player.currentPosition }; stateFlow.value = stateFlow.value.copy(positionMs = position.coerceAtLeast(0)) } } }
-    companion object {
-        private const val USER_AGENT = "Mozilla/5.0 (Linux; Android 15) AppleWebKit/537.36 Chrome/128.0 Mobile Safari/537.36"
-
-        private fun loadControl(size: BufferSize): DefaultLoadControl {
-            val values = when (size) {
-                BufferSize.SMALL -> intArrayOf(5_000, 15_000, 500, 1_000)
-                BufferSize.STANDARD -> intArrayOf(15_000, 50_000, 1_500, 3_000)
-                BufferSize.LARGE -> intArrayOf(30_000, 120_000, 3_000, 5_000)
-            }
-            return DefaultLoadControl.Builder().setBufferDurationsMs(values[0], values[1], values[2], values[3]).build()
-        }
-    }
 }
