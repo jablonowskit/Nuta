@@ -68,7 +68,10 @@ compose.desktop {
     application {
         mainClass = "app.nuta.MainKt"
         nativeDistributions {
-            targetFormats(org.jetbrains.compose.desktop.application.dsl.TargetFormat.Exe)
+            targetFormats(
+                org.jetbrains.compose.desktop.application.dsl.TargetFormat.Exe,
+                org.jetbrains.compose.desktop.application.dsl.TargetFormat.AppImage,
+            )
             packageName = "Nuta"
             packageVersion = "0.1.1"
             description = "Nuta music player"
