@@ -610,13 +610,17 @@ private fun PlaylistCard(playlist: Playlist, onClick: () -> Unit) {
 }
 
 @Composable
-private fun ArtistSearchCard(artist: Artist) {
+private fun ArtistSearchCard(artist: Artist, onPlay: () -> Unit) {
     Card(
         backgroundColor = MaterialTheme.colors.surface,
         shape = RoundedCornerShape(10.dp),
-        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).clickable(onClick = onPlay),
     ) {
-        Text(artist.name, modifier = Modifier.padding(14.dp), fontWeight = FontWeight.Bold)
+        Row(Modifier.fillMaxWidth().padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
+            TrackPlayButton(onPlay)
+            Spacer(Modifier.width(10.dp))
+            Text(artist.name, fontWeight = FontWeight.Bold)
+        }
     }
 }
 
@@ -839,7 +843,17 @@ private fun SearchScreen(
             ScrollableLazyColumn(Modifier.fillMaxSize()) {
                 if (visibleArtists.isNotEmpty()) {
                     item { SectionLabel("WYKONAWCY") }
-                    items(visibleArtists, key = { "a-${it.id}" }) { ArtistSearchCard(it) }
+                    items(visibleArtists, key = { "a-${it.id}" }) { artist ->
+                        val artistTracks = state.result.tracks.filter { artist.name in it.artists }
+                        ArtistSearchCard(artist) {
+                            if (artistTracks.isNotEmpty()) {
+                                scope.launch {
+                                    container.audioPlayer.setQueue(artistTracks)
+                                    container.audioPlayer.play()
+                                }
+                            }
+                        }
+                    }
                     item { Spacer(Modifier.height(18.dp)) }
                 }
                 if (visiblePlaylists.isNotEmpty()) {
