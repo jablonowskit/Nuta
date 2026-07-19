@@ -111,7 +111,18 @@ class SpotifyAndroidRepository(
             val total = page["totalCount"]?.asText()?.toIntOrNull() ?: offset
             hasNext = items.isNotEmpty() && offset < total && result.size < 500
         } while (hasNext)
-        return result.distinctBy(Track::id)
+        return result.distinctBy(Track::id).also(::writeLikedCache)
+    }
+
+    override suspend fun getCachedLikedTracks(): List<Track> =
+        cache.getString("likedTracks", "").orEmpty().lineSequence().filter(String::isNotBlank).mapNotNull { row -> runCatching {
+            val v = row.split("\u001e").map { String(Base64.decode(it, Base64.DEFAULT)) }
+            Track(v[0], v[1], v[2].split("\u001f"), v[3], v[4].toLong(), v[5].ifBlank { null })
+        }.getOrNull() }.toList()
+
+    private fun writeLikedCache(tracks: List<Track>) {
+        val value = tracks.joinToString("\n") { t -> listOf(t.id, t.title, t.artists.joinToString("\u001f"), t.album, t.durationMs.toString(), t.imageUrl.orEmpty()).joinToString("\u001e") { Base64.encodeToString(it.toByteArray(), Base64.NO_WRAP) } }
+        cache.edit().putString("likedTracks", value).putLong("likedTracksAt", System.currentTimeMillis()).apply()
     }
 
     override suspend fun isTrackLiked(trackId: String): Boolean {

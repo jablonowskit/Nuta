@@ -11,6 +11,8 @@ interface SpotifyRepository {
     suspend fun getSavedPlaylists(): List<Playlist>
     suspend fun getPlaylistTracks(playlistId: String): List<Track>
     suspend fun getLikedTracks(): List<Track>
+    /** Ostatnia znana lista ulubionych bez sięgania do sieci — do natychmiastowego stanu serduszka po starcie. */
+    suspend fun getCachedLikedTracks(): List<Track> = emptyList()
     suspend fun isTrackLiked(trackId: String): Boolean
     suspend fun setTrackLiked(trackId: String, liked: Boolean)
     suspend fun search(query: String): SearchResult
