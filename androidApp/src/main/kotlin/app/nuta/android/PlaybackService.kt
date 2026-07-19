@@ -6,6 +6,7 @@ import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import androidx.media3.session.CommandButton
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
 import app.nuta.settings.BufferSize
@@ -19,8 +20,20 @@ class PlaybackService : MediaSessionService() {
         val player = ExoPlayer.Builder(this)
             .setMediaSourceFactory(DefaultMediaSourceFactory(DefaultHttpDataSource.Factory().setUserAgent(USER_AGENT).setAllowCrossProtocolRedirects(true)))
             .setLoadControl(loadControl(settingsStore.settings.value.bufferSize))
+            .setSeekBackIncrementMs(10_000)
+            .setSeekForwardIncrementMs(10_000)
             .build()
-        mediaSession = MediaSession.Builder(this, QueueAwarePlayer(player)).build()
+        val seekBack = CommandButton.Builder(CommandButton.ICON_SKIP_BACK_10)
+            .setDisplayName("Cofnij 10 sekund")
+            .setPlayerCommand(Player.COMMAND_SEEK_BACK)
+            .build()
+        val seekForward = CommandButton.Builder(CommandButton.ICON_SKIP_FORWARD_10)
+            .setDisplayName("Przewiń 10 sekund")
+            .setPlayerCommand(Player.COMMAND_SEEK_FORWARD)
+            .build()
+        mediaSession = MediaSession.Builder(this, QueueAwarePlayer(player))
+            .setMediaButtonPreferences(listOf(seekBack, seekForward))
+            .build()
     }
 
     private class QueueAwarePlayer(player: Player) : ForwardingPlayer(player) {
