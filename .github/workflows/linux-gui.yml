@@ -7,7 +7,6 @@ on:
 
 jobs:
   build-windows-exe:
-    needs: build-android-apk
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v5
@@ -58,7 +57,6 @@ jobs:
           if-no-files-found: error
 
   build-linux-gui:
-    needs: build-android-apk
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
