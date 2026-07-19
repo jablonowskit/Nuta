@@ -731,8 +731,7 @@ private fun SearchScreen(
     }
 
     Column(Modifier.fillMaxSize()) {
-        Heading("Wyszukiwanie", "Wyszukuje utwory, wykonawców i playlisty Spotify")
-        Spacer(Modifier.height(16.dp))
+        
         OutlinedTextField(
             value = state.query,
             onValueChange = { onStateChange(state.copy(query = it)) },
