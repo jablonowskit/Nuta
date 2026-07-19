@@ -77,8 +77,9 @@ class Media3AudioPlayer(
             }
         }
         // jedyne źródło prawdy o LOADING/PLAYING/PAUSED: reaguje zarówno na eventy playera jak i na
-        // prawdziwy stan buforowania z serwisu, niezależnie od kolejności ich napłynięcia
-        scope.launch { PlaybackQueueBridge.buffering.collect { refreshPlayingState() } }
+        // prawdziwy stan buforowania z serwisu, niezależnie od kolejności ich napłynięcia.
+        // MediaController wymaga wywołań z głównego wątku — stąd Dispatchers.Main tutaj.
+        scope.launch(Dispatchers.Main) { PlaybackQueueBridge.buffering.collect { refreshPlayingState() } }
     }
 
     /** Jedyne miejsce, które ustawia LOADING/PLAYING/PAUSED — unika wyścigu między eventami playera a bridge.buffering. */
