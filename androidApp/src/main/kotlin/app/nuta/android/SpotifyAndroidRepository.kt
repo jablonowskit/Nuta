@@ -126,8 +126,8 @@ class SpotifyAndroidRepository(
     override suspend fun search(query: String): SearchResult {
         if (query.isBlank()) return SearchResult(emptyList(), emptyList())
         val root = query("searchTracks", SEARCH_HASH, JsonObject(mapOf(
-            "searchTerm" to JsonPrimitive(query), "offset" to JsonPrimitive(0), "limit" to JsonPrimitive(10),
-            "numberOfTopResults" to JsonPrimitive(10), "includeAudiobooks" to JsonPrimitive(false),
+            "searchTerm" to JsonPrimitive(query), "offset" to JsonPrimitive(0), "limit" to JsonPrimitive(50),
+            "numberOfTopResults" to JsonPrimitive(50), "includeAudiobooks" to JsonPrimitive(false),
             "includeArtistHasConcertsField" to JsonPrimitive(false), "includePreReleases" to JsonPrimitive(false),
             "includeLocalConcertsField" to JsonPrimitive(false), "includeAuthors" to JsonPrimitive(false),
         ))).jsonObject
@@ -137,7 +137,7 @@ class SpotifyAndroidRepository(
             val item = element.asObject()?.get("item")?.asObject()?.get("data")?.asObject() ?: return@mapNotNull null
             val uri = item["uri"]?.asText() ?: return@mapNotNull null
             mapTrack(item, uri)
-        }.distinctBy(Track::id).take(10)
+        }.distinctBy(Track::id).take(50)
         logger.info("SpotifyAndroid", "search_completed", "Zakończono wyszukiwanie Spotify", fields = mapOf("count" to tracks.size.toString()))
         val artists = (collectArtists(root) + tracks.flatMap { track ->
             track.artists.map { name -> Artist(name.hashCode().toString(), name) }
