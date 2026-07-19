@@ -967,14 +967,15 @@ private fun CompactPlayerBar(
         Box(Modifier.size(60.dp).clickable { onOpenQueue() }) { Cover(track?.title ?: "N", track?.imageUrl, Modifier.fillMaxSize()) }
         Spacer(Modifier.width(10.dp))
         Column(Modifier.weight(1f).clickable { onOpenQueue() }) {
-            Text(track?.title ?: "Nic nie odtwarzamy", maxLines = 2, overflow = TextOverflow.Clip, softWrap = true, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text(track?.title ?: "Nic nie odtwarzamy", maxLines = 2, overflow = TextOverflow.Clip, softWrap = true, fontWeight = FontWeight.Bold, fontSize = 14.sp, modifier = Modifier.weight(1f))
+                Text(streamDescription(state), color = Color(0xFF8D9BA6), fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.width(72.dp).padding(start = 4.dp))
+            }
             Text(track?.artists?.joinToString() ?: "Wybierz utwór", color = Color(0xFF8D9BA6), fontSize = 11.sp, maxLines = 2, overflow = TextOverflow.Clip, softWrap = true)
         }
     }
     Box(Modifier.fillMaxWidth().height(40.dp)) {
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Box(Modifier.weight(1f).fillMaxHeight()) {
-        Row(Modifier.align(Alignment.Center), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
             Text("⏮", modifier = Modifier.size(32.dp).clickable(enabled = track != null) { scope.launch { container.audioPlayer.previous() } }, color = if (track != null) Color.White else Color(0xFF55616A), fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
             Text("◀◀", modifier = Modifier.size(32.dp).clickable(enabled = track != null) { scope.launch { container.audioPlayer.seekTo((state.positionMs - 10_000).coerceAtLeast(0)) } }, color = if (track != null) Color.White else Color(0xFF55616A), fontSize = 12.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
             if (state.status == PlayerStatus.LOADING) {
@@ -999,9 +1000,6 @@ private fun CompactPlayerBar(
                 fontSize = 16.sp,
                 fontWeight = FontWeight.Bold,
             )
-        }
-        }
-        Text(streamDescription(state), color = Color(0xFF8D9BA6), fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.width(78.dp).padding(start = 4.dp))
         }
     }
     Row(Modifier.fillMaxWidth().height(38.dp), verticalAlignment = Alignment.CenterVertically) {
