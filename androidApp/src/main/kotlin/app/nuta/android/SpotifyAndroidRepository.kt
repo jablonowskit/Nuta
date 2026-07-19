@@ -142,7 +142,29 @@ class SpotifyAndroidRepository(
         val artists = (collectArtists(root) + tracks.flatMap { track ->
             track.artists.map { name -> Artist(name.hashCode().toString(), name) }
         }).distinctBy(Artist::id).take(30)
-        return SearchResult(tracks, collectPlaylists(root).distinctBy(Playlist::id).take(30), artists)
+        val playlists = (collectPlaylists(root) + searchPlaylists(query)).distinctBy(Playlist::id).take(30)
+        return SearchResult(tracks, playlists, artists)
+    }
+
+    private suspend fun searchPlaylists(query: String): List<Playlist> = withContext(Dispatchers.IO) {
+        val encoded = URLEncoder.encode(query, StandardCharsets.UTF_8.name())
+        val connection = URL("https://api.spotify.com/v1/search?q=$encoded&type=playlist&limit=10").openConnection() as HttpURLConnection
+        try {
+            connection.requestMethod = "GET"
+            connection.connectTimeout = 15_000
+            connection.readTimeout = 20_000
+            connection.setRequestProperty("Accept", "application/json")
+            token.value.use { connection.setRequestProperty("Authorization", "Bearer $it") }
+            val status = connection.responseCode
+            val response = (if (status in 200..299) connection.inputStream else connection.errorStream)?.bufferedReader()?.use { it.readText() }.orEmpty()
+            if (status !in 200..299) return@withContext emptyList()
+            val items = json.parseToJsonElement(response).jsonObject["playlists"]?.jsonObject?.get("items") as? JsonArray ?: return@withContext emptyList()
+            items.mapNotNull { item ->
+                val obj = item.jsonObject
+                val id = obj["id"]?.asText() ?: return@mapNotNull null
+                Playlist(id, obj["name"]?.asText() ?: "Playlist", obj["description"]?.asText().orEmpty(), emptyList(), (obj["images"] as? JsonArray)?.firstOrNull()?.asObject()?.get("url")?.asText())
+            }
+        } finally { connection.disconnect() }
     }
 
     override suspend fun getTrackRadio(seed: Track, limit: Int): List<Track> {
