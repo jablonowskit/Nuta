@@ -88,7 +88,9 @@ class Media3AudioPlayer(
         when {
             PlaybackQueueBridge.buffering.value -> stateFlow.value = stateFlow.value.copy(status = PlayerStatus.LOADING)
             player.isPlaying -> stateFlow.value = stateFlow.value.copy(status = PlayerStatus.PLAYING)
-            player.playbackState == Player.STATE_READY && stateFlow.value.status == PlayerStatus.PLAYING ->
+            // dowolny status "w trakcie" (w tym LOADING po seeku podczas pauzy) wraca do PAUSED — nie tylko z PLAYING,
+            // inaczej pauza + seek zostawiały UI zablokowane na LOADING (brak pasującej gałęzi)
+            player.playbackState == Player.STATE_READY && stateFlow.value.status !in TERMINAL_STATUSES ->
                 stateFlow.value = stateFlow.value.copy(status = PlayerStatus.PAUSED)
         }
     }
@@ -198,5 +200,6 @@ class Media3AudioPlayer(
     private companion object {
         const val PREFETCH_LIMIT = 5
         const val PREFETCH_EXPIRY_MARGIN_MS = 30_000L
+        val TERMINAL_STATUSES = setOf(PlayerStatus.IDLE, PlayerStatus.ENDED, PlayerStatus.ERROR)
     }
 }
