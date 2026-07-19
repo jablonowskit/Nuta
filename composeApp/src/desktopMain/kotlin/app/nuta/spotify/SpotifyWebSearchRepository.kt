@@ -207,8 +207,8 @@ class SpotifyWebSearchRepository(
     private suspend fun searchPayload(query: String, token: SpotifyWebToken): SearchPayload {
         val body = JsonObject(mapOf(
             "variables" to JsonObject(mapOf(
-                "searchTerm" to JsonPrimitive(query), "offset" to JsonPrimitive(0), "limit" to JsonPrimitive(10),
-                "numberOfTopResults" to JsonPrimitive(10), "includeAudiobooks" to JsonPrimitive(false),
+                "searchTerm" to JsonPrimitive(query), "offset" to JsonPrimitive(0), "limit" to JsonPrimitive(50),
+                "numberOfTopResults" to JsonPrimitive(50), "includeAudiobooks" to JsonPrimitive(false),
                 "includeArtistHasConcertsField" to JsonPrimitive(false), "includePreReleases" to JsonPrimitive(false),
                 "includeLocalConcertsField" to JsonPrimitive(false), "includeAuthors" to JsonPrimitive(false),
             )),
@@ -240,7 +240,7 @@ class SpotifyWebSearchRepository(
                 durationMs = durationMs,
                 imageUrl = spotifyImageUrl(item["albumOfTrack"] ?: item),
             )
-        }.distinctBy(Track::id).take(10)
+        }.distinctBy(Track::id).take(50)
         return SearchPayload(tracks, root)
     }
 
