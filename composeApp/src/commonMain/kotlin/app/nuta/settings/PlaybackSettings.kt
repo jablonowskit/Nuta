@@ -10,6 +10,7 @@ enum class BufferSize { SMALL, STANDARD, LARGE }
 enum class LoudnessNormalization { OFF, GENTLE, NORMAL }
 
 data class YouTubePlaybackSettings(
+    val fontScale: Float = 1f,
     val quality: StreamQuality = StreamQuality.BEST,
     val codec: CodecPreference = CodecPreference.AAC,
     val bufferSize: BufferSize = BufferSize.STANDARD,

@@ -17,6 +17,7 @@ class AndroidPlaybackSettingsStore(private val preferences: SharedPreferences) :
 
     override fun update(value: YouTubePlaybackSettings) {
         preferences.edit()
+            .putFloat("fontScale", value.fontScale)
             .putString("youtubeQuality", value.quality.name)
             .putString("youtubeCodec", value.codec.name)
             .putString("youtubeBuffer", value.bufferSize.name)
@@ -26,6 +27,7 @@ class AndroidPlaybackSettingsStore(private val preferences: SharedPreferences) :
     }
 
     private fun read() = YouTubePlaybackSettings(
+        fontScale = preferences.getFloat("fontScale", 1f).coerceIn(0.5f, 1f),
         quality = enumValue(preferences.getString("youtubeQuality", null), StreamQuality.BEST),
         codec = enumValue(preferences.getString("youtubeCodec", null), CodecPreference.AAC),
         bufferSize = enumValue(preferences.getString("youtubeBuffer", null), BufferSize.STANDARD),
