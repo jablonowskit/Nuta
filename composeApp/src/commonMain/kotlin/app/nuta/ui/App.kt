@@ -176,6 +176,11 @@ fun NutaApp(container: AppContainer, onSpotifyLogin: (() -> Unit)? = null) {
 private fun NutaAppContent(container: AppContainer, onSpotifyLogin: (() -> Unit)?) {
         val playerState by container.audioPlayer.state.collectAsState()
         val playbackSettings by container.playbackSettings.settings.collectAsState()
+        LaunchedEffect(playerState.currentIndex, playerState.queue, playbackSettings.prefetchEnabled) {
+            if (!playbackSettings.prefetchEnabled) return@LaunchedEffect
+            val upcoming = (playerState.currentIndex + 1..playerState.currentIndex + 3).mapNotNull(playerState.queue::getOrNull)
+            if (upcoming.isNotEmpty()) container.audioPlayer.prefetch(upcoming)
+        }
         var destination by remember { mutableStateOf(Destination.HOME) }
         var selectedPlaylist by remember { mutableStateOf<Playlist?>(null) }
         var playlists by remember { mutableStateOf<List<Playlist>>(emptyList()) }
