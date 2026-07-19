@@ -71,6 +71,8 @@
     <string name="buffer_desc">Buffer changes take effect after restarting the app</string>
     <string name="buffer_small">Small</string>
     <string name="buffer_large">Large</string>
+    <string name="home_recs_title">Home recommendations</string>
+    <string name="home_recs_desc">How many playlists to show on the Home screen</string>
     <string name="loudness_title">Loudness normalization</string>
     <string name="loudness_desc">Off by default; correction can alter track dynamics</string>
     <string name="loudness_off">Off</string>
