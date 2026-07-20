@@ -1314,9 +1314,8 @@ private fun QueueScreen(state: PlayerState, container: AppContainer) {
                                 when {
                                     !active -> "${index + 1}."
                                     state.status == PlayerStatus.LOADING -> "⏳︎"
-                                    state.status == PlayerStatus.PLAYING -> "▶"
                                     state.status == PlayerStatus.ERROR -> "⚠︎"
-                                    else -> "⏸"
+                                    else -> "▶"
                                 },
                                 color = when {
                                     !active -> Color(0xFF7D8B95)
