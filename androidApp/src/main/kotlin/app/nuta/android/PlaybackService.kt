@@ -36,15 +36,17 @@ class PlaybackService : MediaSessionService() {
         // ±10s jako CUSTOM SessionCommand: system Android 13+ renderuje w powiadomieniu tylko
         // standardowe prev/play/next + custom actions — player command SEEK_BACK/FORWARD ląduje
         // jako REWIND/FAST_FORWARD, których systemowe kontrolki nie pokazują wcale
+        // SLOT_OVERFLOW (nie SECONDARY): tylko overflow eksportuje się jako custom actions
+        // do sesji platformowej, z której czyta panel multimediów Samsunga
         val seekBackButton = CommandButton.Builder(CommandButton.ICON_SKIP_BACK_10)
             .setDisplayName("Cofnij 10 sekund")
             .setSessionCommand(SessionCommand(COMMAND_SEEK_BACK_10, Bundle.EMPTY))
-            .setSlots(CommandButton.SLOT_BACK_SECONDARY)
+            .setSlots(CommandButton.SLOT_OVERFLOW)
             .build()
         val seekForwardButton = CommandButton.Builder(CommandButton.ICON_SKIP_FORWARD_10)
             .setDisplayName("Przewiń 10 sekund")
             .setSessionCommand(SessionCommand(COMMAND_SEEK_FORWARD_10, Bundle.EMPTY))
-            .setSlots(CommandButton.SLOT_FORWARD_SECONDARY)
+            .setSlots(CommandButton.SLOT_OVERFLOW)
             .build()
         mediaSession = MediaSession.Builder(this, QueueAwarePlayer(player))
             .setCallback(object : MediaSession.Callback {
