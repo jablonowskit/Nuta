@@ -87,11 +87,7 @@ class SpotifyAndroidRepository(
             "offset" to JsonPrimitive(0), "limit" to JsonPrimitive(50),
             "includeEpisodeContentRatingsV2" to JsonPrimitive(false),
         )))
-        val tracks = collectTracks(root).distinctBy(Track::id).take(50)
-        if (tracks.isEmpty()) {
-            android.util.Log.d("NutaPlaylistDebug", "playlistId=$playlistId raw=${root.toString().take(3000)}")
-        }
-        return tracks
+        return collectTracks(root).distinctBy(Track::id).take(50)
     }
 
     override suspend fun getLikedTracks(): List<Track> {
