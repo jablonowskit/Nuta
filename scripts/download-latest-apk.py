@@ -7,7 +7,7 @@ z profilem zalogowanym do GitHuba (artefakty Actions wymagają zalogowania).
 
 Użycie:
   python scripts/download-latest-apk.py            # pobierz do ~/Downloads i rozpakuj
-  python scripts/download-latest-apk.py --install  # dodatkowo zainstaluj przez adb i uruchom
+  python scripts/download-latest-apk.py --install  # dodatkowo wdroż przez scripts/deploy-android.ps1
 """
 import argparse
 import asyncio
@@ -29,8 +29,7 @@ CDP = "http://localhost:9222"
 ACTIONS_URL = "https://github.com/jablonowskit/Nuta/actions?query=branch%3Amain"
 ARTIFACT_NAME = "nuta-android-apk"
 DOWNLOADS = Path.home() / "Downloads"
-ADB = Path.home() / r"AppData\Local\Microsoft\WinGet\Packages\Google.PlatformTools_Microsoft.Winget.Source_8wekyb3d8bbwe\platform-tools\adb.exe"
-PACKAGE = "app.nuta"
+DEPLOY_SCRIPT = Path(__file__).resolve().parent / "deploy-android.ps1"
 
 
 def cdp_new_tab():
@@ -129,17 +128,15 @@ def extract(zip_path: Path) -> Path:
 
 
 def install(apk: Path) -> None:
-    if not ADB.exists():
-        sys.exit(f"Nie znaleziono adb: {ADB}")
-    subprocess.run([str(ADB), "install", "-r", str(apk)], check=True)
-    subprocess.run([str(ADB), "shell", "am", "force-stop", PACKAGE], check=True)
-    subprocess.run([str(ADB), "shell", "monkey", "-p", PACKAGE, "1"], check=True)
-    print("Zainstalowano i uruchomiono", PACKAGE)
+    subprocess.run(
+        ["powershell", "-ExecutionPolicy", "Bypass", "-File", str(DEPLOY_SCRIPT), "-ApkPath", str(apk)],
+        check=True,
+    )
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--install", action="store_true", help="po pobraniu zainstaluj przez adb i uruchom aplikację")
+    parser.add_argument("--install", action="store_true", help="po pobraniu wdroż przez scripts/deploy-android.ps1")
     args = parser.parse_args()
     zip_path = asyncio.run(download())
     apk = extract(zip_path)
