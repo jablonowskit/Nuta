@@ -7,7 +7,7 @@ z profilem zalogowanym do GitHuba (artefakty Actions wymagają zalogowania).
 
 Użycie:
   python scripts/download-latest-apk.py            # pobierz do ~/Downloads i rozpakuj
-  python scripts/download-latest-apk.py --install  # dodatkowo wdroż przez scripts/deploy-android.ps1
+  python scripts/download-latest-apk.py --install  # dodatkowo wdroż przez scripts/deploy-android.py
 """
 import argparse
 import asyncio
@@ -29,7 +29,7 @@ CDP = "http://localhost:9222"
 ACTIONS_URL = "https://github.com/jablonowskit/Nuta/actions?query=branch%3Amain"
 ARTIFACT_NAME = "nuta-android-apk"
 DOWNLOADS = Path.home() / "Downloads"
-DEPLOY_SCRIPT = Path(__file__).resolve().parent / "deploy-android.ps1"
+DEPLOY_SCRIPT = Path(__file__).resolve().parent / "deploy-android.py"
 
 
 def cdp_new_tab():
@@ -128,15 +128,12 @@ def extract(zip_path: Path) -> Path:
 
 
 def install(apk: Path) -> None:
-    subprocess.run(
-        ["powershell", "-ExecutionPolicy", "Bypass", "-File", str(DEPLOY_SCRIPT), "-ApkPath", str(apk)],
-        check=True,
-    )
+    subprocess.run([sys.executable, str(DEPLOY_SCRIPT), "--apk", str(apk)], check=True)
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--install", action="store_true", help="po pobraniu wdroż przez scripts/deploy-android.ps1")
+    parser.add_argument("--install", action="store_true", help="po pobraniu wdroż przez scripts/deploy-android.py")
     args = parser.parse_args()
     zip_path = asyncio.run(download())
     apk = extract(zip_path)
