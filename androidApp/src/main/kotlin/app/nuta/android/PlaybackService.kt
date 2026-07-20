@@ -1,5 +1,6 @@
 package app.nuta.android
 
+import android.os.Bundle
 import androidx.media3.common.ForwardingPlayer
 import androidx.media3.common.Player
 import androidx.media3.datasource.DefaultHttpDataSource
@@ -9,7 +10,11 @@ import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.session.CommandButton
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
+import androidx.media3.session.SessionCommand
+import androidx.media3.session.SessionResult
 import app.nuta.settings.BufferSize
+import com.google.common.util.concurrent.Futures
+import com.google.common.util.concurrent.ListenableFuture
 
 class PlaybackService : MediaSessionService() {
     private var mediaSession: MediaSession? = null
@@ -28,30 +33,47 @@ class PlaybackService : MediaSessionService() {
                 PlaybackQueueBridge.buffering.value = playbackState == Player.STATE_BUFFERING
             }
         })
-        // pełny układ 5 przycisków: preferencje ZASTĘPUJĄ domyślny zestaw, więc prev/next
-        // trzeba zadeklarować jawnie obok ±10s — inaczej sloty prev/next przejmują przyciski seek
-        val previous = CommandButton.Builder(CommandButton.ICON_PREVIOUS)
-            .setDisplayName("Poprzedni utwór")
-            .setPlayerCommand(Player.COMMAND_SEEK_TO_PREVIOUS)
-            .setSlots(CommandButton.SLOT_BACK)
-            .build()
-        val next = CommandButton.Builder(CommandButton.ICON_NEXT)
-            .setDisplayName("Następny utwór")
-            .setPlayerCommand(Player.COMMAND_SEEK_TO_NEXT)
-            .setSlots(CommandButton.SLOT_FORWARD)
-            .build()
-        val seekBack = CommandButton.Builder(CommandButton.ICON_SKIP_BACK_10)
+        // ±10s jako CUSTOM SessionCommand: system Android 13+ renderuje w powiadomieniu tylko
+        // standardowe prev/play/next + custom actions — player command SEEK_BACK/FORWARD ląduje
+        // jako REWIND/FAST_FORWARD, których systemowe kontrolki nie pokazują wcale
+        val seekBackButton = CommandButton.Builder(CommandButton.ICON_SKIP_BACK_10)
             .setDisplayName("Cofnij 10 sekund")
-            .setPlayerCommand(Player.COMMAND_SEEK_BACK)
+            .setSessionCommand(SessionCommand(COMMAND_SEEK_BACK_10, Bundle.EMPTY))
             .setSlots(CommandButton.SLOT_BACK_SECONDARY)
             .build()
-        val seekForward = CommandButton.Builder(CommandButton.ICON_SKIP_FORWARD_10)
+        val seekForwardButton = CommandButton.Builder(CommandButton.ICON_SKIP_FORWARD_10)
             .setDisplayName("Przewiń 10 sekund")
-            .setPlayerCommand(Player.COMMAND_SEEK_FORWARD)
+            .setSessionCommand(SessionCommand(COMMAND_SEEK_FORWARD_10, Bundle.EMPTY))
             .setSlots(CommandButton.SLOT_FORWARD_SECONDARY)
             .build()
-        mediaSession = MediaSession.Builder(this, QueueAwarePlayer(player)).build()
-        mediaSession?.setMediaButtonPreferences(listOf(previous, next, seekBack, seekForward))
+        mediaSession = MediaSession.Builder(this, QueueAwarePlayer(player))
+            .setCallback(object : MediaSession.Callback {
+                override fun onConnect(session: MediaSession, controller: MediaSession.ControllerInfo): MediaSession.ConnectionResult =
+                    MediaSession.ConnectionResult.AcceptedResultBuilder(session)
+                        .setAvailableSessionCommands(
+                            MediaSession.ConnectionResult.DEFAULT_SESSION_COMMANDS.buildUpon()
+                                .add(SessionCommand(COMMAND_SEEK_BACK_10, Bundle.EMPTY))
+                                .add(SessionCommand(COMMAND_SEEK_FORWARD_10, Bundle.EMPTY))
+                                .build(),
+                        )
+                        .build()
+
+                override fun onCustomCommand(
+                    session: MediaSession,
+                    controller: MediaSession.ControllerInfo,
+                    customCommand: SessionCommand,
+                    args: Bundle,
+                ): ListenableFuture<SessionResult> {
+                    when (customCommand.customAction) {
+                        COMMAND_SEEK_BACK_10 -> session.player.seekBack()
+                        COMMAND_SEEK_FORWARD_10 -> session.player.seekForward()
+                        else -> return Futures.immediateFuture(SessionResult(SessionResult.RESULT_ERROR_NOT_SUPPORTED))
+                    }
+                    return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
+                }
+            })
+            .build()
+        mediaSession?.setMediaButtonPreferences(listOf(seekBackButton, seekForwardButton))
     }
 
     private class QueueAwarePlayer(player: Player) : ForwardingPlayer(player) {
@@ -94,6 +116,8 @@ class PlaybackService : MediaSessionService() {
 
     companion object {
         private const val USER_AGENT = "Mozilla/5.0 (Linux; Android 15) AppleWebKit/537.36 Chrome/128.0 Mobile Safari/537.36"
+        private const val COMMAND_SEEK_BACK_10 = "app.nuta.SEEK_BACK_10"
+        private const val COMMAND_SEEK_FORWARD_10 = "app.nuta.SEEK_FORWARD_10"
 
         private fun loadControl(size: BufferSize): DefaultLoadControl {
             val values = when (size) {
