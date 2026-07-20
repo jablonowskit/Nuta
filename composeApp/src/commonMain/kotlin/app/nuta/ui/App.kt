@@ -1310,7 +1310,21 @@ private fun QueueScreen(state: PlayerState, container: AppContainer) {
                                 .padding(horizontal = 12.dp, vertical = 10.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            Text(if (active) "▶" else "${index + 1}.", color = if (active) MaterialTheme.colors.primary else Color(0xFF7D8B95), modifier = Modifier.width(38.dp))
+                            Text(
+                                when {
+                                    !active -> "${index + 1}."
+                                    state.status == PlayerStatus.LOADING -> "⏳︎"
+                                    state.status == PlayerStatus.PLAYING -> "▶"
+                                    state.status == PlayerStatus.ERROR -> "⚠︎"
+                                    else -> "⏸"
+                                },
+                                color = when {
+                                    !active -> Color(0xFF7D8B95)
+                                    state.status == PlayerStatus.ERROR -> Color(0xFFFF7B7B)
+                                    else -> MaterialTheme.colors.primary
+                                },
+                                modifier = Modifier.width(38.dp),
+                            )
                             Column(Modifier.weight(1f)) {
                                 Text(item.title, fontWeight = if (active) FontWeight.Bold else FontWeight.Normal, maxLines = 3, overflow = TextOverflow.Clip, softWrap = true, modifier = Modifier.fillMaxWidth())
                                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
