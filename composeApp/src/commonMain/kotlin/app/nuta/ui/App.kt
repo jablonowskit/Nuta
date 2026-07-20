@@ -726,7 +726,10 @@ private fun PlaylistDetails(playlist: Playlist, playerState: PlayerState, contai
     Column(Modifier.fillMaxSize()) {
         Heading(playlist.name, playlist.description)
         Spacer(Modifier.height(16.dp))
-        Button(onClick = { scope.launch { container.audioPlayer.setQueue(playlist.tracks); container.audioPlayer.play() } }) { Text(stringResource(Res.string.play_all)) }
+        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(onClick = { scope.launch { container.audioPlayer.setQueue(playlist.tracks); container.audioPlayer.play() } }) { Text(stringResource(Res.string.play_all), maxLines = 1, softWrap = false) }
+            OutlinedButton(onClick = { scope.launch { container.audioPlayer.appendToQueue(playlist.tracks) } }) { Text(stringResource(Res.string.add_all_to_queue), maxLines = 1, softWrap = false) }
+        }
         Spacer(Modifier.height(16.dp))
         val onVisibleRangeChanged = rememberPrefetchHandler(playlist.tracks, container)
         ScrollableLazyColumn(Modifier.fillMaxSize(), onVisibleRangeChanged = onVisibleRangeChanged) {
@@ -766,12 +769,15 @@ private fun LikedScreen(
             error != null -> ErrorState(error)
             tracks.isEmpty() -> EmptyState(stringResource(Res.string.liked_empty))
             else -> {
-                Button(onClick = {
-                    scope.launch {
-                        container.audioPlayer.setQueue(tracks)
-                        container.audioPlayer.play()
-                    }
-                }) { Text(stringResource(Res.string.liked_play_all, tracks.size)) }
+                Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(onClick = {
+                        scope.launch {
+                            container.audioPlayer.setQueue(tracks)
+                            container.audioPlayer.play()
+                        }
+                    }) { Text(stringResource(Res.string.liked_play_all, tracks.size), maxLines = 1, softWrap = false) }
+                    OutlinedButton(onClick = { scope.launch { container.audioPlayer.appendToQueue(tracks) } }) { Text(stringResource(Res.string.add_all_to_queue), maxLines = 1, softWrap = false) }
+                }
                 Spacer(Modifier.height(14.dp))
                 val onVisibleRangeChanged = rememberPrefetchHandler(tracks, container)
                 ScrollableLazyColumn(Modifier.fillMaxSize(), scrollToIndex = tracks.indexOfFirst { it.id == playerState.currentTrack?.id }.takeIf { it >= 0 }, onVisibleRangeChanged = onVisibleRangeChanged) {
