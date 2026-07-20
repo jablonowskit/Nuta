@@ -9,6 +9,7 @@ import app.nuta.domain.SpotifyRepository
 import app.nuta.spotify.SpotifyWebToken
 import android.content.SharedPreferences
 import android.util.Base64
+import android.util.Log
 import java.net.HttpURLConnection
 import java.net.URL
 import kotlinx.coroutines.Dispatchers
@@ -156,6 +157,8 @@ class SpotifyAndroidRepository(
         // z innego flow OAuth (Accounts, nie web-player) i zawsze kończyło się błędem autoryzacji,
         // po cichu połykanym jako pusta lista. Wzorem Spotube: jedno zapytanie, jeden token.
         val playlists = collectPlaylists(root).distinctBy(Playlist::id).take(30)
+        Log.d("NutaSearchDebug", "searchV2Keys=${searchRoot.asObject()?.keys?.joinToString()} playlistsFound=${playlists.size}")
+        Log.d("NutaSearchDebug", "raw=${root.toString().take(3000)}")
         return SearchResult(tracks, playlists, artists)
     }
 
