@@ -148,14 +148,12 @@ class SpotifyAndroidRepository(
             mapTrack(item, uri)
         }.distinctBy(Track::id).take(50)
         logger.info("SpotifyAndroid", "search_completed", "Zakończono wyszukiwanie Spotify", fields = mapOf("count" to tracks.size.toString()))
-        val artists = (collectArtists(root) + tracks.flatMap { track ->
-            track.artists.map { name -> Artist(name.hashCode().toString(), name) }
-        }).distinctBy(Artist::id).take(30)
-        // searchTracks nie zwraca w ogóle sekcji playlist (potwierdzone: klucze searchV2 to tylko
-        // "query, tracksV2") — trzeba osobnego zapytania pathfinder "searchPlaylists" tym samym
-        // tokenem (nie publicznego REST /v1/search, który wymaga innego flow OAuth i zawsze
-        // kończył się błędem autoryzacji połykanym jako pusta lista).
+        // searchTracks nie zwraca w ogóle sekcji playlist/artystów (potwierdzone: klucze searchV2 to
+        // tylko "query, tracksV2") — trzeba osobnych zapytań pathfinder tym samym tokenem (nie
+        // publicznego REST /v1/search, który wymaga innego flow OAuth i zawsze kończył się błędem
+        // autoryzacji połykanym jako pusta lista).
         val playlists = searchPlaylists(query).distinctBy(Playlist::id).take(30)
+        val artists = searchArtists(query).distinctBy(Artist::id).take(30)
         return SearchResult(tracks, playlists, artists)
     }
 
@@ -167,6 +165,16 @@ class SpotifyAndroidRepository(
             "includeAlbumPreReleases" to JsonPrimitive(true), "includeEpisodeContentRatingsV2" to JsonPrimitive(true),
         )))
         return collectPlaylists(root)
+    }
+
+    private suspend fun searchArtists(searchTerm: String): List<Artist> {
+        val root = query("searchArtists", SEARCH_ARTISTS_HASH, JsonObject(mapOf(
+            "searchTerm" to JsonPrimitive(searchTerm), "offset" to JsonPrimitive(0), "limit" to JsonPrimitive(30),
+            "numberOfTopResults" to JsonPrimitive(20), "includeAudiobooks" to JsonPrimitive(true),
+            "includeAuthors" to JsonPrimitive(false), "includePreReleases" to JsonPrimitive(false),
+            "includeAlbumPreReleases" to JsonPrimitive(true), "includeEpisodeContentRatingsV2" to JsonPrimitive(true),
+        )))
+        return collectArtists(root)
     }
 
     override suspend fun getTrackRadio(seed: Track, limit: Int): List<Track> {
@@ -262,7 +270,8 @@ class SpotifyAndroidRepository(
         is JsonObject -> {
             val uri = element["uri"]?.asText()
             val artist = if (uri?.startsWith("spotify:artist:") == true) {
-                element["name"]?.asText()?.let { Artist(uri.substringAfterLast(':'), it, spotifyImageUrl(element)) }
+                (element["name"]?.asText() ?: element["profile"]?.asObject()?.get("name")?.asText())
+                    ?.let { Artist(uri.substringAfterLast(':'), it, spotifyImageUrl(element)) }
             } else null
             listOfNotNull(artist) + element.values.flatMap(::collectArtists)
         }
@@ -311,6 +320,7 @@ class SpotifyAndroidRepository(
         private const val HOME_HASH = "76243c78b0e20ecdbe41b794dec8cbe73f75e585b0a7201b8d2e84578412847a"
         private const val PLAYLIST_HASH = "a65e12194ed5fc443a1cdebed5fabe33ca5b07b987185d63c72483867ad13cb4"
         private const val SEARCH_PLAYLISTS_HASH = "af1730623dc1248b75a61a18bad1f47f1fc7eff802fb0676683de88815c958d8"
+        private const val SEARCH_ARTISTS_HASH = "270905851ba5c7faca81cfe053c2dbd8ceb4f156a0e0ef4b385af75ab69ffd13"
         private const val LIBRARY_HASH = "087278b20b743578a6262c2b0b4bcd20d879c503cc359a2285baf083ef944240"
         private const val BROWSER_USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/128.0 Safari/537.36"
     }
