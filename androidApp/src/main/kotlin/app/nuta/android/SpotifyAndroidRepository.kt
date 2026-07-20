@@ -9,7 +9,6 @@ import app.nuta.domain.SpotifyRepository
 import app.nuta.spotify.SpotifyWebToken
 import android.content.SharedPreferences
 import android.util.Base64
-import android.util.Log
 import java.net.HttpURLConnection
 import java.net.URL
 import kotlinx.coroutines.Dispatchers
@@ -152,14 +151,22 @@ class SpotifyAndroidRepository(
         val artists = (collectArtists(root) + tracks.flatMap { track ->
             track.artists.map { name -> Artist(name.hashCode().toString(), name) }
         }).distinctBy(Artist::id).take(30)
-        // collectPlaylists skanuje tę samą odpowiedź searchTracks (już uwierzytelnioną tym samym
-        // tokenem pathfinder) — osobne zapytanie do publicznego REST /v1/search wymagało tokenu
-        // z innego flow OAuth (Accounts, nie web-player) i zawsze kończyło się błędem autoryzacji,
-        // po cichu połykanym jako pusta lista. Wzorem Spotube: jedno zapytanie, jeden token.
-        val playlists = collectPlaylists(root).distinctBy(Playlist::id).take(30)
-        Log.d("NutaSearchDebug", "searchV2Keys=${searchRoot.asObject()?.keys?.joinToString()} playlistsFound=${playlists.size}")
-        Log.d("NutaSearchDebug", "raw=${root.toString().take(3000)}")
+        // searchTracks nie zwraca w ogóle sekcji playlist (potwierdzone: klucze searchV2 to tylko
+        // "query, tracksV2") — trzeba osobnego zapytania pathfinder "searchPlaylists" tym samym
+        // tokenem (nie publicznego REST /v1/search, który wymaga innego flow OAuth i zawsze
+        // kończył się błędem autoryzacji połykanym jako pusta lista).
+        val playlists = searchPlaylists(query).distinctBy(Playlist::id).take(30)
         return SearchResult(tracks, playlists, artists)
+    }
+
+    private suspend fun searchPlaylists(searchTerm: String): List<Playlist> {
+        val root = query("searchPlaylists", SEARCH_PLAYLISTS_HASH, JsonObject(mapOf(
+            "searchTerm" to JsonPrimitive(searchTerm), "offset" to JsonPrimitive(0), "limit" to JsonPrimitive(30),
+            "numberOfTopResults" to JsonPrimitive(20), "includeAudiobooks" to JsonPrimitive(true),
+            "includeAuthors" to JsonPrimitive(false), "includePreReleases" to JsonPrimitive(false),
+            "includeAlbumPreReleases" to JsonPrimitive(true), "includeEpisodeContentRatingsV2" to JsonPrimitive(true),
+        )))
+        return collectPlaylists(root)
     }
 
     override suspend fun getTrackRadio(seed: Track, limit: Int): List<Track> {
@@ -303,6 +310,7 @@ class SpotifyAndroidRepository(
         private const val SEARCH_HASH = "bc1ca2fcd0ba1013a0fc88e6cc4f190af501851e3dafd3e1ef85840297694428"
         private const val HOME_HASH = "76243c78b0e20ecdbe41b794dec8cbe73f75e585b0a7201b8d2e84578412847a"
         private const val PLAYLIST_HASH = "a65e12194ed5fc443a1cdebed5fabe33ca5b07b987185d63c72483867ad13cb4"
+        private const val SEARCH_PLAYLISTS_HASH = "af1730623dc1248b75a61a18bad1f47f1fc7eff802fb0676683de88815c958d8"
         private const val LIBRARY_HASH = "087278b20b743578a6262c2b0b4bcd20d879c503cc359a2285baf083ef944240"
         private const val BROWSER_USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/128.0 Safari/537.36"
     }
