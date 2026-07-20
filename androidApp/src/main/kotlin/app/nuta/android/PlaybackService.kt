@@ -28,16 +28,30 @@ class PlaybackService : MediaSessionService() {
                 PlaybackQueueBridge.buffering.value = playbackState == Player.STATE_BUFFERING
             }
         })
+        // pełny układ 5 przycisków: preferencje ZASTĘPUJĄ domyślny zestaw, więc prev/next
+        // trzeba zadeklarować jawnie obok ±10s — inaczej sloty prev/next przejmują przyciski seek
+        val previous = CommandButton.Builder(CommandButton.ICON_PREVIOUS)
+            .setDisplayName("Poprzedni utwór")
+            .setPlayerCommand(Player.COMMAND_SEEK_TO_PREVIOUS)
+            .setSlots(CommandButton.SLOT_BACK)
+            .build()
+        val next = CommandButton.Builder(CommandButton.ICON_NEXT)
+            .setDisplayName("Następny utwór")
+            .setPlayerCommand(Player.COMMAND_SEEK_TO_NEXT)
+            .setSlots(CommandButton.SLOT_FORWARD)
+            .build()
         val seekBack = CommandButton.Builder(CommandButton.ICON_SKIP_BACK_10)
             .setDisplayName("Cofnij 10 sekund")
             .setPlayerCommand(Player.COMMAND_SEEK_BACK)
+            .setSlots(CommandButton.SLOT_BACK_SECONDARY)
             .build()
         val seekForward = CommandButton.Builder(CommandButton.ICON_SKIP_FORWARD_10)
             .setDisplayName("Przewiń 10 sekund")
             .setPlayerCommand(Player.COMMAND_SEEK_FORWARD)
+            .setSlots(CommandButton.SLOT_FORWARD_SECONDARY)
             .build()
         mediaSession = MediaSession.Builder(this, QueueAwarePlayer(player)).build()
-        mediaSession?.setMediaButtonPreferences(listOf(seekBack, seekForward))
+        mediaSession?.setMediaButtonPreferences(listOf(previous, next, seekBack, seekForward))
     }
 
     private class QueueAwarePlayer(player: Player) : ForwardingPlayer(player) {
