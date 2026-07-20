@@ -367,7 +367,7 @@ private fun NutaAppContent(container: AppContainer, onSpotifyLogin: (() -> Unit)
                                     container = container,
                                     state = searchState,
                                     onStateChange = { searchState = it },
-                                    onPlaylist = { playlist -> selectedPlaylist = playlist },
+                                    onPlaylist = ::selectPlaylist,
                                 )
                                 Destination.QUEUE -> QueueScreen(playerState, container)
                                 Destination.SETTINGS -> SettingsScreen(container)
