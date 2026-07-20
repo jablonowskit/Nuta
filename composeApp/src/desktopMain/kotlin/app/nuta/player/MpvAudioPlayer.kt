@@ -66,6 +66,36 @@ class MpvAudioPlayer(
         logger.info("MpvAudioPlayer", "queue_shuffled", "Przetasowano pozostałe utwory kolejki")
     }
 
+    override suspend fun removeFromQueue(index: Int) {
+        val state = _state.value
+        if (index !in state.queue.indices) return
+        val newQueue = state.queue.toMutableList().apply { removeAt(index) }
+        if (newQueue.isEmpty()) { clearQueue(); return }
+        when {
+            index < state.currentIndex -> {
+                _state.value = state.copy(queue = newQueue, currentIndex = state.currentIndex - 1)
+            }
+            index == state.currentIndex -> {
+                val wasPlaying = state.status == PlayerStatus.PLAYING || state.status == PlayerStatus.LOADING
+                ticker?.cancel()
+                if (process?.isAlive == true) sendCommand("stop")
+                _state.value = _state.value.copy(queue = newQueue, currentIndex = index.coerceAtMost(newQueue.lastIndex), positionMs = 0, status = PlayerStatus.IDLE, errorMessage = null)
+                if (wasPlaying) play()
+            }
+            else -> {
+                _state.value = state.copy(queue = newQueue)
+            }
+        }
+        logger.info("MpvPlayer", "queue_item_removed", "Usunięto utwór z kolejki")
+    }
+
+    override suspend fun clearQueue() {
+        ticker?.cancel()
+        if (process?.isAlive == true) sendCommand("stop")
+        _state.value = PlayerState()
+        logger.info("MpvPlayer", "queue_cleared", "Wyczyszczono kolejkę")
+    }
+
     override suspend fun play() {
         val current = _state.value.currentTrack ?: return
         if (_state.value.status == PlayerStatus.PAUSED) {

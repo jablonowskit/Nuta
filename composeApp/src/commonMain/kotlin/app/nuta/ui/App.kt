@@ -1292,7 +1292,14 @@ private fun PlayerBar(
 private fun QueueScreen(state: PlayerState, container: AppContainer) {
     val scope = rememberCoroutineScope()
     Column(Modifier.fillMaxSize()) {
-        Heading(stringResource(Res.string.nav_queue))
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.weight(1f)) { Heading(stringResource(Res.string.nav_queue)) }
+            if (state.queue.isNotEmpty()) {
+                OutlinedButton(onClick = { scope.launch { container.audioPlayer.clearQueue() } }) {
+                    Text(stringResource(Res.string.clear_queue))
+                }
+            }
+        }
         Spacer(Modifier.height(14.dp))
         if (state.queue.isEmpty()) {
             EmptyState(stringResource(Res.string.queue_empty))
@@ -1342,6 +1349,12 @@ private fun QueueScreen(state: PlayerState, container: AppContainer) {
                                     Text(formatTime(item.durationMs), color = Color(0xFF8F9CA6), fontSize = 12.sp)
                                 }
                             }
+                            Text(
+                                "✕",
+                                color = Color(0xFF7D8B95),
+                                modifier = Modifier.size(32.dp).clickable { scope.launch { container.audioPlayer.removeFromQueue(index) } },
+                                textAlign = TextAlign.Center,
+                            )
                         }
                     }
             }

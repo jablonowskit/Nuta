@@ -97,6 +97,7 @@
     <string name="nothing_playing">Nic nie odtwarzamy</string>
     <string name="choose_track">Wybierz utwór</string>
     <string name="queue_empty">Uruchom utwór, playlistę albo radio, aby utworzyć kolejkę</string>
+    <string name="clear_queue">Wyczyść kolejkę</string>
     <string name="status_buffering">buforowanie…</string>
     <string name="status_playing">odtwarzanie</string>
     <string name="status_paused">pauza</string>

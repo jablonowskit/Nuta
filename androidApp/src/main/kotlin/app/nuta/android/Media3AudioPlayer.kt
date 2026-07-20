@@ -110,6 +110,43 @@ class Media3AudioPlayer(
         savePosition(0)
     }
     override suspend fun appendToQueue(tracks: List<Track>) { if (tracks.isNotEmpty()) { stateFlow.value = stateFlow.value.copy(queue = stateFlow.value.queue + tracks); saveQueue() } }
+
+    override suspend fun removeFromQueue(index: Int) {
+        val state = stateFlow.value
+        if (index !in state.queue.indices) return
+        val newQueue = state.queue.toMutableList().apply { removeAt(index) }
+        if (newQueue.isEmpty()) { clearQueue(); return }
+        when {
+            index < state.currentIndex -> {
+                // utwór przed aktualnym: samo przesunięcie indeksu, bez dotykania playera
+                stateFlow.value = state.copy(queue = newQueue, currentIndex = state.currentIndex - 1)
+                saveQueue()
+            }
+            index == state.currentIndex -> {
+                val wasPlaying = state.status == PlayerStatus.PLAYING || state.status == PlayerStatus.LOADING
+                val newIndex = index.coerceAtMost(newQueue.lastIndex)
+                pendingResumePositionMs = 0
+                withContext(Dispatchers.Main) { player.stop(); player.clearMediaItems() }
+                stateFlow.value = PlayerState(queue = newQueue, currentIndex = newIndex)
+                saveQueue(); savePosition(0)
+                if (wasPlaying) play()
+            }
+            else -> {
+                // utwór po aktualnym: nie wpływa na to, co gra teraz
+                stateFlow.value = state.copy(queue = newQueue)
+                saveQueue()
+            }
+        }
+    }
+
+    override suspend fun clearQueue() {
+        pendingResumePositionMs = 0
+        ticker?.cancel()
+        withContext(Dispatchers.Main) { player.stop(); player.clearMediaItems() }
+        stateFlow.value = PlayerState()
+        saveQueue()
+        savePosition(0)
+    }
     override suspend fun shuffleUpcoming() {
         val state = stateFlow.value
         if (state.currentIndex !in state.queue.indices) return
