@@ -38,6 +38,9 @@ class Media3AudioPlayer(
     private val logger: NutaLogger,
     private val queuePreferences: SharedPreferences,
 ) : AudioPlayer {
+    /** Pozycja z poprzedniej sesji — użyta raz przy pierwszym odtworzeniu przywróconego utworu. */
+    private var pendingResumePositionMs = queuePreferences.getLong("positionMs", 0L).coerceAtLeast(0L)
+    private var lastPositionSaveMs = 0L
     private val stateFlow = MutableStateFlow(restoreQueue())
     override val state: StateFlow<PlayerState> = stateFlow.asStateFlow()
     private val loadMutex = Mutex()
@@ -100,9 +103,11 @@ class Media3AudioPlayer(
 
     override suspend fun setQueue(tracks: List<Track>, startIndex: Int) {
         require(startIndex in tracks.indices || tracks.isEmpty())
+        pendingResumePositionMs = 0
         withContext(Dispatchers.Main) { player.stop(); player.clearMediaItems() }
         stateFlow.value = PlayerState(queue = tracks, currentIndex = if (tracks.isEmpty()) -1 else startIndex)
         saveQueue()
+        savePosition(0)
     }
     override suspend fun appendToQueue(tracks: List<Track>) { if (tracks.isNotEmpty()) { stateFlow.value = stateFlow.value.copy(queue = stateFlow.value.queue + tracks); saveQueue() } }
     override suspend fun shuffleUpcoming() {
@@ -182,7 +187,10 @@ class Media3AudioPlayer(
         val track = stateFlow.value.currentTrack ?: return
         if (stateFlow.value.status == PlayerStatus.PAUSED) { withContext(Dispatchers.Main) { player.play() }; return }
         loadMutex.withLock {
-            stateFlow.value = stateFlow.value.copy(status = PlayerStatus.LOADING, positionMs = 0, errorMessage = null, streamBitrate = null, streamCodec = null)
+            // wznowienie po restarcie: pierwszy start przywróconego utworu zaczyna od zapisanej pozycji
+            val resumeFromMs = pendingResumePositionMs.takeIf { it > 0 && it < track.durationMs }
+            pendingResumePositionMs = 0
+            stateFlow.value = stateFlow.value.copy(status = PlayerStatus.LOADING, positionMs = resumeFromMs ?: 0, errorMessage = null, streamBitrate = null, streamCodec = null)
             runCatching { resolveForPlayback(track) }.onSuccess { resolution ->
                 retryingAfterError = false
                 val url = resolution.stream.url.use { it }
@@ -199,7 +207,9 @@ class Media3AudioPlayer(
                             .setAlbumTitle(track.album)
                             .build())
                         .build())
-                    player.prepare(); player.play()
+                    player.prepare()
+                    if (resumeFromMs != null) player.seekTo(resumeFromMs)
+                    player.play()
                 }
                 logger.info("Media3Player", "playback_prepared", "Przekazano strumień YouTube do Media3", fields = mapOf(
                     "codec" to resolution.stream.codec,
@@ -212,8 +222,8 @@ class Media3AudioPlayer(
             }
         }
     }
-    override suspend fun pause() = withContext(Dispatchers.Main) { player.pause() }
-    override suspend fun stop() { ticker?.cancel(); withContext(Dispatchers.Main) { player.stop() }; stateFlow.value = stateFlow.value.copy(status = PlayerStatus.IDLE, positionMs = 0) }
+    override suspend fun pause() = withContext(Dispatchers.Main) { player.pause(); savePosition(player.currentPosition) }
+    override suspend fun stop() { ticker?.cancel(); withContext(Dispatchers.Main) { player.stop() }; savePosition(0); stateFlow.value = stateFlow.value.copy(status = PlayerStatus.IDLE, positionMs = 0) }
     override suspend fun seekTo(positionMs: Long) { withContext(Dispatchers.Main) { player.seekTo(positionMs.coerceIn(0, stateFlow.value.durationMs)) } }
     override suspend fun next() = move(stateFlow.value.currentIndex + 1)
     override suspend fun previous() = move(stateFlow.value.currentIndex - 1)
@@ -222,7 +232,10 @@ class Media3AudioPlayer(
 
     private suspend fun move(index: Int) {
         if (index !in stateFlow.value.queue.indices) return
+        pendingResumePositionMs = 0
         stateFlow.value = stateFlow.value.copy(currentIndex = index, status = PlayerStatus.IDLE, positionMs = 0, errorMessage = null, streamBitrate = null, streamCodec = null)
+        saveQueue()
+        savePosition(0)
         // pause zamiast stop: stop przełącza sesję w IDLE i zwija powiadomienie/lock screen na czas rozwiązywania streamu
         withContext(Dispatchers.Main) { player.pause() }
         play()
@@ -234,15 +247,24 @@ class Media3AudioPlayer(
         queuePreferences.edit().putString("tracks", rows).putInt("index", state.currentIndex).apply()
     }
 
+    private fun savePosition(positionMs: Long) {
+        queuePreferences.edit().putLong("positionMs", positionMs.coerceAtLeast(0)).apply()
+    }
+
     private fun restoreQueue(): PlayerState {
         val tracks = queuePreferences.getString("tracks", "").orEmpty().lineSequence().filter(String::isNotBlank).mapNotNull { row -> runCatching {
             val v = row.split("\u001e").map { String(Base64.decode(it, Base64.DEFAULT)) }
             Track(v[0], v[1], v[2].split("\u001f"), v[3], v[4].toLong(), v[5].ifBlank { null })
         }.getOrNull() }.toList()
-        return PlayerState(queue = tracks, currentIndex = queuePreferences.getInt("index", -1).coerceIn(-1, tracks.lastIndex))
+        val index = queuePreferences.getInt("index", -1).coerceIn(-1, tracks.lastIndex)
+        return PlayerState(
+            queue = tracks,
+            currentIndex = index,
+            positionMs = if (index >= 0) pendingResumePositionMs else 0L,
+        )
     }
     private suspend fun advanceAfterEnd() { val next = stateFlow.value.currentIndex + 1; if (next in stateFlow.value.queue.indices) move(next) else stateFlow.value = stateFlow.value.copy(status = PlayerStatus.ENDED) }
-    private fun startTicker() { ticker?.cancel(); ticker = scope.launch { while (isActive) { delay(500); val position = withContext(Dispatchers.Main) { player.currentPosition }; stateFlow.value = stateFlow.value.copy(positionMs = position.coerceAtLeast(0)) } } }
+    private fun startTicker() { ticker?.cancel(); ticker = scope.launch { while (isActive) { delay(500); val position = withContext(Dispatchers.Main) { player.currentPosition }; stateFlow.value = stateFlow.value.copy(positionMs = position.coerceAtLeast(0)); val now = System.currentTimeMillis(); if (now - lastPositionSaveMs > 5_000) { lastPositionSaveMs = now; savePosition(position) } } } }
 
     private companion object {
         const val PREFETCH_LIMIT = 5
