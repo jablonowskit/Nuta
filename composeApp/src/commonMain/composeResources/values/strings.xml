@@ -95,6 +95,7 @@
     <string name="nothing_playing">Nothing is playing</string>
     <string name="choose_track">Pick a track</string>
     <string name="queue_empty">Play a track, playlist or radio to build a queue</string>
+    <string name="clear_queue">Clear queue</string>
     <string name="status_buffering">buffering…</string>
     <string name="status_playing">playing</string>
     <string name="status_paused">paused</string>

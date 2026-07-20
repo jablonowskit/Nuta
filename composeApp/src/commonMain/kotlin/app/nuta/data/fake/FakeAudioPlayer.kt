@@ -41,6 +41,28 @@ class FakeAudioPlayer(
         logger.info("FakeAudioPlayer", "queue_shuffled", "Przetasowano pozostałe utwory kolejki")
     }
 
+    override suspend fun removeFromQueue(index: Int) {
+        val state = _state.value
+        if (index !in state.queue.indices) return
+        val newQueue = state.queue.toMutableList().apply { removeAt(index) }
+        if (newQueue.isEmpty()) { clearQueue(); return }
+        _state.value = when {
+            index < state.currentIndex -> state.copy(queue = newQueue, currentIndex = state.currentIndex - 1)
+            index == state.currentIndex -> {
+                ticker?.cancel()
+                state.copy(queue = newQueue, currentIndex = index.coerceAtMost(newQueue.lastIndex), positionMs = 0, status = PlayerStatus.PAUSED)
+            }
+            else -> state.copy(queue = newQueue)
+        }
+        logger.info("FakeAudioPlayer", "queue_item_removed", "Usunięto utwór z kolejki")
+    }
+
+    override suspend fun clearQueue() {
+        ticker?.cancel()
+        _state.value = PlayerState()
+        logger.info("FakeAudioPlayer", "queue_cleared", "Wyczyszczono kolejkę")
+    }
+
     override suspend fun play() {
         if (_state.value.currentTrack == null) return
         _state.value = _state.value.copy(status = PlayerStatus.PLAYING, errorMessage = null)
