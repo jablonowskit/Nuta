@@ -21,10 +21,13 @@ if (-not (Test-Path -LiteralPath $ApkPath -PathType Leaf)) {
 
 $adb = Get-Command adb -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source -First 1
 if (-not $adb) {
-    $sdkAdb = Join-Path $env:LOCALAPPDATA "Android\Sdk\platform-tools\adb.exe"
-    if (Test-Path -LiteralPath $sdkAdb) { $adb = $sdkAdb }
+    $candidates = @(
+        (Join-Path $env:LOCALAPPDATA "Android\Sdk\platform-tools\adb.exe"),
+        (Join-Path $env:LOCALAPPDATA "Microsoft\WinGet\Packages\Google.PlatformTools_Microsoft.Winget.Source_8wekyb3d8bbwe\platform-tools\adb.exe")
+    )
+    $adb = $candidates | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
 }
-if (-not $adb) { throw "Nie znaleziono adb. Sprawdz instalacje Android SDK." }
+if (-not $adb) { throw "Nie znaleziono adb. Sprawdz instalacje Android SDK lub platform-tools (winget install Google.PlatformTools)." }
 
 $deviceArguments = @()
 if ($Device) { $deviceArguments = @("-s", $Device) }
