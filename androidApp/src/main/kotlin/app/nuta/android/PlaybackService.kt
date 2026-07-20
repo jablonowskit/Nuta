@@ -3,7 +3,11 @@ package app.nuta.android
 import android.os.Bundle
 import androidx.media3.common.ForwardingPlayer
 import androidx.media3.common.Player
+import androidx.media3.database.StandaloneDatabaseProvider
 import androidx.media3.datasource.DefaultHttpDataSource
+import androidx.media3.datasource.cache.CacheDataSource
+import androidx.media3.datasource.cache.LeastRecentlyUsedCacheEvictor
+import androidx.media3.datasource.cache.SimpleCache
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
@@ -15,15 +19,25 @@ import androidx.media3.session.SessionResult
 import app.nuta.settings.BufferSize
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
+import java.io.File
 
 class PlaybackService : MediaSessionService() {
     private var mediaSession: MediaSession? = null
+    private var streamCache: SimpleCache? = null
 
     override fun onCreate() {
         super.onCreate()
         val settingsStore = AndroidPlaybackSettingsStore(getSharedPreferences("playback-settings", MODE_PRIVATE))
+        val upstreamFactory = DefaultHttpDataSource.Factory().setUserAgent(USER_AGENT).setAllowCrossProtocolRedirects(true)
+        val cache = SimpleCache(File(cacheDir, "stream-cache"), LeastRecentlyUsedCacheEvictor(CACHE_SIZE_BYTES), StandaloneDatabaseProvider(this))
+        streamCache = cache
+        val cacheFactory = CacheDataSource.Factory()
+            .setCache(cache)
+            .setUpstreamDataSourceFactory(upstreamFactory)
+            .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
+        PlaybackQueueBridge.streamCacheFactory = cacheFactory
         val player = ExoPlayer.Builder(this)
-            .setMediaSourceFactory(DefaultMediaSourceFactory(DefaultHttpDataSource.Factory().setUserAgent(USER_AGENT).setAllowCrossProtocolRedirects(true)))
+            .setMediaSourceFactory(DefaultMediaSourceFactory(cacheFactory))
             .setLoadControl(loadControl(settingsStore.settings.value.bufferSize))
             .setSeekBackIncrementMs(10_000)
             .setSeekForwardIncrementMs(10_000)
@@ -113,11 +127,15 @@ class PlaybackService : MediaSessionService() {
             release()
             mediaSession = null
         }
+        PlaybackQueueBridge.streamCacheFactory = null
+        streamCache?.release()
+        streamCache = null
         super.onDestroy()
     }
 
     companion object {
         private const val USER_AGENT = "Mozilla/5.0 (Linux; Android 15) AppleWebKit/537.36 Chrome/128.0 Mobile Safari/537.36"
+        private const val CACHE_SIZE_BYTES = 150L * 1024 * 1024
         private const val COMMAND_SEEK_BACK_10 = "app.nuta.SEEK_BACK_10"
         private const val COMMAND_SEEK_FORWARD_10 = "app.nuta.SEEK_FORWARD_10"
 
