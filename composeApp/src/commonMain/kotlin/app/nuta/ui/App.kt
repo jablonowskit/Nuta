@@ -733,12 +733,12 @@ private fun PlaylistDetails(playlist: Playlist, playerState: PlayerState, contai
             items(playlist.tracks, key = { it.id }) { track ->
                 TrackRow(track, playerState.currentTrack?.id == track.id, loading = playerState.status == PlayerStatus.LOADING, onPlay = {
                     scope.launch {
-                        container.audioPlayer.setQueue(playlist.tracks, playlist.tracks.indexOf(track))
+                        container.audioPlayer.setQueue(listOf(track), 0)
                         container.audioPlayer.play()
                     }
                 }, titleAction = {
                     TrackPlayButton { scope.launch {
-                        container.audioPlayer.setQueue(playlist.tracks, playlist.tracks.indexOf(track))
+                        container.audioPlayer.setQueue(listOf(track), 0)
                         container.audioPlayer.play()
                     } }
                 }, subtitleAction = {
@@ -778,12 +778,12 @@ private fun LikedScreen(
                     items(tracks, key = { "liked-${it.id}" }) { track ->
                         TrackRow(track, playerState.currentTrack?.id == track.id, loading = playerState.status == PlayerStatus.LOADING, onPlay = {
                             scope.launch {
-                                container.audioPlayer.setQueue(tracks, tracks.indexOf(track))
+                                container.audioPlayer.setQueue(listOf(track), 0)
                                 container.audioPlayer.play()
                             }
                         }, titleAction = {
                             TrackPlayButton { scope.launch {
-                                container.audioPlayer.setQueue(tracks, tracks.indexOf(track))
+                                container.audioPlayer.setQueue(listOf(track), 0)
                                 container.audioPlayer.play()
                             } }
                         }, subtitleAction = {
