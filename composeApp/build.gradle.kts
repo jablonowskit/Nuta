@@ -87,6 +87,8 @@ compose.desktop {
             windows {
                 // Diagnostic build: keep stderr/stdout visible when the bundled JVM fails.
                 console = true
+                menu = true
+                shortcut = true
             }
         }
     }
