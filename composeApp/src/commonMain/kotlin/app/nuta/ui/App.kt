@@ -196,6 +196,8 @@ private fun NutaAppContent(container: AppContainer, onSpotifyLogin: (() -> Unit)
         var similarModeActive by remember { mutableStateOf(false) }
         var similarModeLoading by remember { mutableStateOf(false) }
         var currentTrackLiked by remember { mutableStateOf(false) }
+        // tylko stan ręcznego kliknięcia — celowo NIE dzielony z tłowym sprawdzaniem "czy polubione"
+        // przy zmianie utworu; gdyby to sprawdzenie się zawiesiło, nie może trwale zablokować przycisku
         var favoriteLoading by remember { mutableStateOf(false) }
         val scope = rememberCoroutineScope()
         val displayedTrackLiked = currentTrackLiked || playerState.currentTrack?.id?.let { id -> likedTracks.any { it.id == id } } == true
@@ -294,7 +296,6 @@ private fun NutaAppContent(container: AppContainer, onSpotifyLogin: (() -> Unit)
             // unikamy zapytania sieciowego, jeśli już wiemy z załadowanej listy Ulubionych —
             // odciąża endpoint /v1/me/tracks, który Spotify łatwo rate-limituje (HTTP 429)
             if (likedTracks.any { it.id == trackId }) { currentTrackLiked = true; return@LaunchedEffect }
-            favoriteLoading = true
             runCatching { container.spotifyRepository.isTrackLiked(trackId) }
                 .onSuccess { liked ->
                     if (playerState.currentTrack?.id == trackId) currentTrackLiked = liked
@@ -305,11 +306,11 @@ private fun NutaAppContent(container: AppContainer, onSpotifyLogin: (() -> Unit)
                         fields = mapOf("reason" to (error::class.simpleName ?: "unknown"), "message" to (error.message ?: "")),
                     )
                 }
-            if (playerState.currentTrack?.id == trackId) favoriteLoading = false
         }
 
         val toggleCurrentTrackLiked = {
             val track = playerState.currentTrack
+            println("NutaLikedDebug toggle_clicked track=${track?.id} favoriteLoading=$favoriteLoading")
             if (track != null && !favoriteLoading) {
                 val targetLiked = !currentTrackLiked
                 scope.launch {
@@ -329,7 +330,7 @@ private fun NutaAppContent(container: AppContainer, onSpotifyLogin: (() -> Unit)
                                 fields = mapOf("reason" to (error::class.simpleName ?: "unknown"), "message" to (error.message ?: "")),
                             )
                         }
-                    if (playerState.currentTrack?.id == track.id) favoriteLoading = false
+                    favoriteLoading = false
                 }
             }
             Unit
