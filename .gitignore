@@ -19,3 +19,4 @@ test-results/
 .codex-*.png
 native/*/bin/
 native/*/obj/
+composeApp/resources/

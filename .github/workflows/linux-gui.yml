@@ -18,6 +18,19 @@ jobs:
           distribution: temurin
           java-version: "25"
       - uses: gradle/actions/setup-gradle@v5
+      - name: Build Spotify login helper (WebView2)
+        run: dotnet publish native/spotify-login -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true
+      - name: Upload Spotify login helper (diagnostic)
+        uses: actions/upload-artifact@v5
+        with:
+          name: nuta-spotify-login-helper-diagnostic
+          path: native/spotify-login/bin/Release/net8.0-windows/win-x64/publish/SpotifyLoginHelper.exe
+          if-no-files-found: error
+      - name: Bundle login helper into app resources
+        shell: bash
+        run: |
+          mkdir -p composeApp/resources/windows
+          cp native/spotify-login/bin/Release/net8.0-windows/win-x64/publish/SpotifyLoginHelper.exe composeApp/resources/windows/SpotifyLoginHelper.exe
       - name: Build Windows EXE (diagnostic console)
         run: .\gradlew.bat --no-daemon :composeApp:packageExe
       - name: Upload Windows diagnostic package
@@ -25,14 +38,6 @@ jobs:
         with:
           name: nuta-windows-exe-diagnostic
           path: composeApp/build/compose/binaries/main/exe/*.exe
-          if-no-files-found: error
-      - name: Build Spotify login helper (WebView2 PoC)
-        run: dotnet publish native/spotify-login -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true
-      - name: Upload Spotify login helper
-        uses: actions/upload-artifact@v5
-        with:
-          name: nuta-spotify-login-helper-diagnostic
-          path: native/spotify-login/bin/Release/net8.0-windows/win-x64/publish/SpotifyLoginHelper.exe
           if-no-files-found: error
 
   build-android-apk:

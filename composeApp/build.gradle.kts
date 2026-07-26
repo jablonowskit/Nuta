@@ -91,6 +91,9 @@ compose.desktop {
             description = "Nuta music player"
             vendor = "Nuta"
             modules("java.net.http")
+            // SpotifyLoginHelper.exe (native/spotify-login) trafia tu w CI przed packageExe;
+            // w runtime odczytywany przez SpotifyLoginHelperClient pod compose.application.resources.dir.
+            appResourcesRootDir.set(project.layout.projectDirectory.dir("resources"))
 
             windows {
                 // Diagnostic build: keep stderr/stdout visible when the bundled JVM fails.
