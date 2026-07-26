@@ -291,6 +291,9 @@ private fun NutaAppContent(container: AppContainer, onSpotifyLogin: (() -> Unit)
             val trackId = playerState.currentTrack?.id
             currentTrackLiked = false
             if (trackId == null) return@LaunchedEffect
+            // unikamy zapytania sieciowego, jeśli już wiemy z załadowanej listy Ulubionych —
+            // odciąża endpoint /v1/me/tracks, który Spotify łatwo rate-limituje (HTTP 429)
+            if (likedTracks.any { it.id == trackId }) { currentTrackLiked = true; return@LaunchedEffect }
             favoriteLoading = true
             runCatching { container.spotifyRepository.isTrackLiked(trackId) }
                 .onSuccess { liked ->
@@ -299,7 +302,7 @@ private fun NutaAppContent(container: AppContainer, onSpotifyLogin: (() -> Unit)
                 .onFailure { error ->
                     container.logger.warn(
                         "SpotifyLiked", "liked_status_failed", "Nie udało się sprawdzić, czy utwór jest w ulubionych",
-                        fields = mapOf("reason" to (error::class.simpleName ?: "unknown")),
+                        fields = mapOf("reason" to (error::class.simpleName ?: "unknown"), "message" to (error.message ?: "")),
                     )
                 }
             if (playerState.currentTrack?.id == trackId) favoriteLoading = false
@@ -323,7 +326,7 @@ private fun NutaAppContent(container: AppContainer, onSpotifyLogin: (() -> Unit)
                         .onFailure { error ->
                             container.logger.warn(
                                 "SpotifyLiked", "liked_update_failed", "Nie udało się zmienić ulubionego utworu",
-                                fields = mapOf("reason" to (error::class.simpleName ?: "unknown")),
+                                fields = mapOf("reason" to (error::class.simpleName ?: "unknown"), "message" to (error.message ?: "")),
                             )
                         }
                     if (playerState.currentTrack?.id == track.id) favoriteLoading = false
