@@ -135,15 +135,10 @@ class SpotifyAndroidRepository(
     }
 
     override suspend fun setTrackLiked(trackId: String, liked: Boolean) {
-        if (liked) {
-            query("addToLibrary", ADD_TO_LIBRARY_HASH, JsonObject(mapOf(
-                "libraryItemUris" to JsonArray(listOf(JsonPrimitive("spotify:track:$trackId"))),
-            )))
-        } else {
-            // usuwanie z Ulubionych zdarza się rzadko (świadome kliknięcie), więc mniejsze ryzyko
-            // rate-limitu na publicznym REST — nie znaleziono jeszcze odpowiednika w pathfinder
-            libraryRequest("DELETE", null, trackId)
-        }
+        // ten sam hash dla add/remove — Spotify rozróżnia po operationName, nie po treści zapytania
+        query(if (liked) "addToLibrary" else "removeFromLibrary", ADD_TO_LIBRARY_HASH, JsonObject(mapOf(
+            "libraryItemUris" to JsonArray(listOf(JsonPrimitive("spotify:track:$trackId"))),
+        )))
     }
 
     override suspend fun search(query: String): SearchResult {
@@ -248,30 +243,6 @@ class SpotifyAndroidRepository(
                     error("Spotify GraphQL error ($operation): $message")
                 }
                 parsed
-            } finally {
-                connection.disconnect()
-            }
-        }
-    }
-
-    private suspend fun libraryRequest(method: String, action: String?, trackId: String): JsonElement? {
-        require(trackId.matches(Regex("[A-Za-z0-9]+"))) { "Nieprawidłowy identyfikator utworu" }
-        check(token.expiresAtMs > System.currentTimeMillis() + 30_000) { "Sesja Spotify wygasła. Zaloguj się ponownie." }
-        val suffix = action?.let { "/$it" }.orEmpty()
-        return withContext(Dispatchers.IO) {
-            val connection = URL("https://api.spotify.com/v1/me/tracks$suffix?ids=$trackId").openConnection() as HttpURLConnection
-            try {
-                connection.requestMethod = method
-                connection.connectTimeout = 15_000
-                connection.readTimeout = 20_000
-                connection.setRequestProperty("Accept", "application/json")
-                connection.setRequestProperty("Content-Length", "0")
-                token.value.use { connection.setRequestProperty("Authorization", "Bearer $it") }
-                val status = connection.responseCode
-                val response = (if (status in 200..299) connection.inputStream else connection.errorStream)
-                    ?.bufferedReader()?.use { it.readText() }.orEmpty()
-                check(status in 200..299) { "Spotify library HTTP $status: ${response.take(120)}" }
-                response.takeIf(String::isNotBlank)?.let(json::parseToJsonElement)
             } finally {
                 connection.disconnect()
             }
