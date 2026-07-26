@@ -63,7 +63,9 @@ class SpotifyLoginHelperClient(private val logger: NutaLogger) {
     private fun locateHelper(): File {
         val resourcesDir = System.getProperty("compose.application.resources.dir")
             ?: error("Brak compose.application.resources.dir — helper logowania jest dostępny tylko w spakowanej wersji Windows")
-        val exe = File(resourcesDir, "windows/SpotifyLoginHelper.exe")
+        // Compose Desktop spłaszcza appResourcesRootDir przy pakowaniu: zawartość
+        // resources/windows/ trafia bezpośrednio do app/resources (bez prefiksu "windows").
+        val exe = File(resourcesDir, "SpotifyLoginHelper.exe")
         check(exe.isFile) { "Nie znaleziono helpera logowania: ${exe.absolutePath}" }
         return exe
     }
