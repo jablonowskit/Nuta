@@ -6,26 +6,26 @@ on:
   workflow_dispatch:
 
 jobs:
-  # build-windows-exe i build-linux-gui wyłączone tymczasowo — budujemy tylko APK.
-  # Odkomentować poniższe joby, żeby przywrócić budowanie Windows/Linux.
-  #
-  # build-windows-exe:
-  #   runs-on: windows-latest
-  #   steps:
-  #     - uses: actions/checkout@v5
-  #     - uses: actions/setup-java@v5
-  #       with:
-  #         distribution: temurin
-  #         java-version: "25"
-  #     - uses: gradle/actions/setup-gradle@v5
-  #     - name: Build Windows EXE (diagnostic console)
-  #       run: .\gradlew.bat --no-daemon :composeApp:packageExe
-  #     - name: Upload Windows diagnostic package
-  #       uses: actions/upload-artifact@v5
-  #       with:
-  #         name: nuta-windows-exe-diagnostic
-  #         path: composeApp/build/compose/binaries/main/exe/*.exe
-  #         if-no-files-found: error
+  # build-linux-gui wyłączony tymczasowo — budujemy tylko APK i Windows.
+  # Odkomentować poniższy job, żeby przywrócić budowanie Linux.
+
+  build-windows-exe:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "25"
+      - uses: gradle/actions/setup-gradle@v5
+      - name: Build Windows EXE (diagnostic console)
+        run: .\gradlew.bat --no-daemon :composeApp:packageExe
+      - name: Upload Windows diagnostic package
+        uses: actions/upload-artifact@v5
+        with:
+          name: nuta-windows-exe-diagnostic
+          path: composeApp/build/compose/binaries/main/exe/*.exe
+          if-no-files-found: error
 
   build-android-apk:
     runs-on: ubuntu-latest
