@@ -124,12 +124,26 @@ class SpotifyAndroidRepository(
     }
 
     override suspend fun isTrackLiked(trackId: String): Boolean {
-        val response = libraryRequest("GET", "contains", trackId)
-        return (response as? JsonArray)?.firstOrNull()?.jsonPrimitive?.content?.toBooleanStrictOrNull() ?: false
+        // pathfinder (ten sam token co reszta appki), nie publiczny REST /v1/me/tracks —
+        // ten drugi ma osobny, dużo bardziej agresywny rate limit (HTTP 429 przy częstym odpytywaniu
+        // przy każdej zmianie utworu), a to samo zapytanie web-player wysyła przy sprawdzaniu serduszka
+        val root = query("areEntitiesInLibrary", ARE_ENTITIES_IN_LIBRARY_HASH, JsonObject(mapOf(
+            "uris" to JsonArray(listOf(JsonPrimitive("spotify:track:$trackId"))),
+        )))
+        val lookup = root.asObject()?.get("data")?.asObject()?.get("lookup") as? JsonArray
+        return lookup?.firstOrNull()?.asObject()?.get("data")?.asObject()?.get("saved")?.asText()?.toBooleanStrictOrNull() ?: false
     }
 
     override suspend fun setTrackLiked(trackId: String, liked: Boolean) {
-        libraryRequest(if (liked) "PUT" else "DELETE", null, trackId)
+        if (liked) {
+            query("addToLibrary", ADD_TO_LIBRARY_HASH, JsonObject(mapOf(
+                "libraryItemUris" to JsonArray(listOf(JsonPrimitive("spotify:track:$trackId"))),
+            )))
+        } else {
+            // usuwanie z Ulubionych zdarza się rzadko (świadome kliknięcie), więc mniejsze ryzyko
+            // rate-limitu na publicznym REST — nie znaleziono jeszcze odpowiednika w pathfinder
+            libraryRequest("DELETE", null, trackId)
+        }
     }
 
     override suspend fun search(query: String): SearchResult {
@@ -321,6 +335,8 @@ class SpotifyAndroidRepository(
         private const val PLAYLIST_HASH = "a65e12194ed5fc443a1cdebed5fabe33ca5b07b987185d63c72483867ad13cb4"
         private const val SEARCH_PLAYLISTS_HASH = "af1730623dc1248b75a61a18bad1f47f1fc7eff802fb0676683de88815c958d8"
         private const val SEARCH_ARTISTS_HASH = "270905851ba5c7faca81cfe053c2dbd8ceb4f156a0e0ef4b385af75ab69ffd13"
+        private const val ARE_ENTITIES_IN_LIBRARY_HASH = "134337999233cc6fdd6b1e6dbf94841409f04a946c5c7b744b09ba0dfe5a85ed"
+        private const val ADD_TO_LIBRARY_HASH = "1ad0d40b3c09660d818b9e770eb1e84745dfbe941df159a64f8772b6fa2bfc3a"
         private const val LIBRARY_HASH = "087278b20b743578a6262c2b0b4bcd20d879c503cc359a2285baf083ef944240"
         private const val BROWSER_USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/128.0 Safari/537.36"
     }
