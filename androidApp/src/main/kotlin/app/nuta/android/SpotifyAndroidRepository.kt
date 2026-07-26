@@ -244,6 +244,7 @@ class SpotifyAndroidRepository(
                 val status = connection.responseCode
                 val response = (if (status in 200..299) connection.inputStream else connection.errorStream)
                     ?.bufferedReader()?.use { it.readText() }.orEmpty()
+                android.util.Log.d("NutaLikedDebug", "method=$method action=$action status=$status response=${response.take(500)}")
                 check(status in 200..299) { "Spotify library HTTP $status: ${response.take(120)}" }
                 response.takeIf(String::isNotBlank)?.let(json::parseToJsonElement)
             } finally {
