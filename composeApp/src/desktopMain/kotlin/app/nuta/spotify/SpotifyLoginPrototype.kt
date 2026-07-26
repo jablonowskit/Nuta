@@ -21,6 +21,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.dp
 import app.nuta.core.logging.MemoryLogger
 
 // Zastępuje dawny ekran JCEF: logowanie realnie dzieje się w osobnym natywnym oknie
