@@ -16,6 +16,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
@@ -44,26 +45,20 @@ class SpotifyAndroidRepository(
     override suspend fun getSavedPlaylists(): List<Playlist> = withContext(Dispatchers.IO) {
         val cached = readPlaylistCache()
         if (cached != null) return@withContext cached
-        check(token.expiresAtMs > System.currentTimeMillis() + 30_000) { "Sesja Spotify wygasła. Zaloguj się ponownie." }
-        val connection = URL("https://api.spotify.com/v1/me/playlists?limit=50").openConnection() as HttpURLConnection
-        try {
-            connection.requestMethod = "GET"
-            connection.connectTimeout = 15_000
-            connection.readTimeout = 20_000
-            connection.setRequestProperty("Accept", "application/json")
-            token.value.use { connection.setRequestProperty("Authorization", "Bearer $it") }
-            val status = connection.responseCode
-            val response = (if (status in 200..299) connection.inputStream else connection.errorStream)?.bufferedReader()?.use { it.readText() }.orEmpty()
-            check(status in 200..299) { "Spotify playlists HTTP $status: ${response.take(120)}" }
-            val items = json.parseToJsonElement(response).jsonObject["items"] as? JsonArray ?: return@withContext emptyList()
-            val playlists = items.mapNotNull { item ->
-                val obj = item.jsonObject
-                val id = obj["id"]?.asText() ?: return@mapNotNull null
-                Playlist(id, obj["name"]?.asText() ?: "Playlist", obj["description"]?.asText().orEmpty(), emptyList(), (obj["images"] as? JsonArray)?.firstOrNull()?.asObject()?.get("url")?.asText())
-            }
-            writePlaylistCache(playlists)
-            playlists
-        } finally { connection.disconnect() }
+        val root = query("libraryV3", LIBRARY_V3_HASH, JsonObject(mapOf(
+            "filters" to JsonArray(listOf(JsonPrimitive("Playlists"))),
+            "order" to JsonNull,
+            "textFilter" to JsonPrimitive(""),
+            "features" to JsonArray(listOf(JsonPrimitive("LikedSongs"), JsonPrimitive("YourEpisodesV2"))),
+            "limit" to JsonPrimitive(50), "offset" to JsonPrimitive(0),
+            "flatten" to JsonPrimitive(true),
+            "expandedFolders" to JsonArray(emptyList()),
+            "folderUri" to JsonNull,
+            "includeFoldersWhenFlattening" to JsonPrimitive(true),
+        )))
+        val playlists = collectPlaylists(root).distinctBy(Playlist::id)
+        writePlaylistCache(playlists)
+        playlists
     }
 
     private fun readPlaylistCache(): List<Playlist>? {
@@ -321,6 +316,7 @@ class SpotifyAndroidRepository(
         private const val ARE_ENTITIES_IN_LIBRARY_HASH = "134337999233cc6fdd6b1e6dbf94841409f04a946c5c7b744b09ba0dfe5a85ed"
         private const val ADD_TO_LIBRARY_HASH = "1ad0d40b3c09660d818b9e770eb1e84745dfbe941df159a64f8772b6fa2bfc3a"
         private const val LIBRARY_HASH = "087278b20b743578a6262c2b0b4bcd20d879c503cc359a2285baf083ef944240"
+        private const val LIBRARY_V3_HASH = "390c78e5b951029bad359785e69b07b536a509c581cbcd0aded5e5067f187455"
         private const val BROWSER_USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/128.0 Safari/537.36"
     }
 }
