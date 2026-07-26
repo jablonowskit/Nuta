@@ -70,13 +70,17 @@ compose.resources {
     packageOfResClass = "app.nuta.resources"
 }
 
-// Numer wersji rośnie z każdym commitem, żeby instalator Windows (MSI) zawsze widział
+// Numer wersji rośnie z każdym buildem, żeby instalator Windows (MSI) zawsze widział
 // nowszą wersję produktu — bez tego drugi instalator z tym samym numerem cichnie
 // z błędem 1638 ("another version of this product is already installed") zamiast
-// zaktualizować istniejącą instalację.
-val gitCommitCount = providers.exec {
-    commandLine("git", "rev-list", "--count", "HEAD")
-}.standardOutput.asText.get().trim().toIntOrNull() ?: 1
+// zaktualizować istniejącą instalację. GITHUB_RUN_NUMBER rośnie przy każdym uruchomieniu
+// workflow i nie zależy od głębokości klonu; git rev-list liczy tylko commity widoczne
+// w danym klonie, a actions/checkout robi domyślnie płytki klon (fetch-depth: 1) — tam
+// zawsze zwracałoby 1, co dokładnie odtwarzałoby ten sam błąd 1638.
+val gitCommitCount = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull()
+    ?: providers.exec { commandLine("git", "rev-list", "--count", "HEAD") }
+        .standardOutput.asText.get().trim().toIntOrNull()
+    ?: 1
 
 compose.desktop {
     application {
