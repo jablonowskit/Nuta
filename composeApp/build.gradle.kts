@@ -97,6 +97,7 @@ compose.desktop {
                 console = true
                 menu = true
                 shortcut = true
+                iconFile.set(project.file("icons/nuta.ico"))
                 // Stały upgrade code — pozwala MSI rozpoznać kolejne wersje jako aktualizację
                 // tego samego produktu zamiast osobnej, kolidującej instalacji.
                 upgradeUuid = "8defd09b-f5f2-49c0-b875-134107878223"

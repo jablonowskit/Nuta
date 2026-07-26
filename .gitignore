@@ -17,3 +17,5 @@ test-results/
 *.pem
 *.key
 .codex-*.png
+native/*/bin/
+native/*/obj/
