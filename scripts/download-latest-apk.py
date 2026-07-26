@@ -1,128 +1,78 @@
 #!/usr/bin/env python3
-"""Pobiera najnowszy artefakt nuta-android-apk z GitHub Actions przez Chrome CDP.
+"""Pobiera najnowszy artefakt nuta-android-apk z GitHub Actions przez gh CLI.
 
-Wymaga Chrome uruchomionego w trybie debugowania (skrót "Chrome CDP" na pulpicie):
-  chrome.exe --remote-debugging-port=9222 --user-data-dir="C:\\ChromeCDPProfile"
-z profilem zalogowanym do GitHuba (artefakty Actions wymagają zalogowania).
+Wymaga zalogowanego GitHub CLI (gh auth login) — patrz `gh auth status`.
 
 Użycie:
   python scripts/download-latest-apk.py            # pobierz do ~/Downloads i rozpakuj
   python scripts/download-latest-apk.py --install  # dodatkowo wdroż przez scripts/deploy-android.py
 """
 import argparse
-import asyncio
-import json
 import shutil
 import subprocess
 import sys
 import time
-import urllib.request
 import zipfile
 from pathlib import Path
 
-try:
-    import websockets
-except ImportError:
-    sys.exit("Brak pakietu 'websockets' — zainstaluj: pip install websockets")
-
-CDP = "http://localhost:9222"
-ACTIONS_URL = "https://github.com/jablonowskit/Nuta/actions?query=branch%3Amain"
+REPO = "jablonowskit/Nuta"
 ARTIFACT_NAME = "nuta-android-apk"
 DOWNLOADS = Path.home() / "Downloads"
 DEPLOY_SCRIPT = Path(__file__).resolve().parent / "deploy-android.py"
 
 
-def cdp_new_tab():
-    req = urllib.request.Request(f"{CDP}/json/new?about:blank", method="PUT")
-    try:
-        with urllib.request.urlopen(req, timeout=5) as r:
-            return json.loads(r.read())
-    except OSError:
-        sys.exit("Chrome CDP nie odpowiada na porcie 9222 — uruchom skrót 'Chrome CDP' z pulpitu.")
+def find_gh() -> str:
+    on_path = shutil.which("gh")
+    if on_path:
+        return on_path
+    candidate = Path(r"C:\Program Files\GitHub CLI\gh.exe")
+    if candidate.exists():
+        return str(candidate)
+    sys.exit("Nie znaleziono gh CLI. Zainstaluj: winget install GitHub.cli")
 
 
-async def download() -> Path:
-    tab = cdp_new_tab()
-    async with websockets.connect(tab["webSocketDebuggerUrl"], max_size=None) as ws:
-        msg_id = 0
-
-        async def send(method, params=None):
-            nonlocal msg_id
-            msg_id += 1
-            this_id = msg_id
-            await ws.send(json.dumps({"id": this_id, "method": method, "params": params or {}}))
-            while True:
-                msg = json.loads(await ws.recv())
-                if msg.get("id") == this_id:
-                    return msg.get("result", {})
-
-        async def evaluate(expr):
-            r = await send("Runtime.evaluate", {"expression": expr, "returnByValue": True, "awaitPromise": True})
-            return r.get("result", {}).get("value")
-
-        await send("Page.enable")
-        await send("Runtime.enable")
-        await send("Page.setDownloadBehavior", {"behavior": "allow", "downloadPath": str(DOWNLOADS)})
-
-        # najnowszy run na main
-        await send("Page.navigate", {"url": ACTIONS_URL})
-        await asyncio.sleep(5)
-        run_url = await evaluate("""
-            (() => {
-              const link = document.querySelector('.Box-row a[href*="/actions/runs/"]');
-              return link ? link.href.split('?')[0] : null;
-            })()
-        """)
-        if not run_url:
-            sys.exit("Nie znaleziono żadnego runa na stronie Actions.")
-        print("run:", run_url)
-
-        # czekaj aż artefakt APK będzie dostępny (job androida mógł jeszcze nie skończyć)
-        artifact_url = None
-        for attempt in range(40):
-            await send("Page.navigate", {"url": run_url})
-            await asyncio.sleep(6)
-            artifact_url = await evaluate("""
-                (() => {
-                  const links = document.querySelectorAll('a[href*="/artifacts/"]');
-                  for (const a of links) if (a.textContent.trim() === '%NAME%') return a.href;
-                  return null;
-                })()
-            """.replace("%NAME%", ARTIFACT_NAME))
-            print(f"artefakt (próba {attempt + 1}):", artifact_url or "jeszcze niedostępny")
-            if artifact_url:
-                break
-            await asyncio.sleep(15)
-        if not artifact_url:
-            sys.exit("Artefakt nie pojawił się w wyznaczonym czasie.")
-
-        target = DOWNLOADS / f"{ARTIFACT_NAME}.zip"
-        target.unlink(missing_ok=True)
-        await send("Page.navigate", {"url": artifact_url})
-        deadline = time.monotonic() + 120
-        while time.monotonic() < deadline:
-            try:
-                msg = json.loads(await asyncio.wait_for(ws.recv(), timeout=5))
-            except asyncio.TimeoutError:
-                continue
-            if msg.get("method") == "Page.downloadProgress":
-                p = msg["params"]
-                if p.get("state") == "completed":
-                    print("Pobrano:", target)
-                    return target
-                if p.get("state") == "canceled":
-                    sys.exit("Pobieranie anulowane.")
-        sys.exit("Przekroczono czas oczekiwania na pobranie.")
+def gh(gh_bin: str, *args: str, check: bool = True) -> subprocess.CompletedProcess:
+    return subprocess.run([gh_bin, *args], capture_output=True, text=True, check=check)
 
 
-def extract(zip_path: Path) -> Path:
+def latest_run_id(gh_bin: str) -> str:
+    result = gh(gh_bin, "run", "list", "--repo", REPO, "--branch", "main",
+                "--workflow", "linux-gui.yml", "--limit", "1", "--json", "databaseId")
+    import json
+    runs = json.loads(result.stdout)
+    if not runs:
+        sys.exit("Nie znaleziono żadnego runa na main.")
+    run_id = str(runs[0]["databaseId"])
+    print("run:", f"https://github.com/{REPO}/actions/runs/{run_id}")
+    return run_id
+
+
+def wait_for_run(gh_bin: str, run_id: str) -> None:
+    for attempt in range(60):
+        result = gh(gh_bin, "run", "view", run_id, "--repo", REPO, "--json", "status,conclusion")
+        import json
+        info = json.loads(result.stdout)
+        status = info.get("status")
+        conclusion = info.get("conclusion")
+        print(f"status (próba {attempt + 1}): {status} ({conclusion or '...'})")
+        if status == "completed":
+            if conclusion != "success":
+                sys.exit(f"Run zakończony z wynikiem: {conclusion}")
+            return
+        time.sleep(15)
+    sys.exit("Przekroczono czas oczekiwania na zakończenie runa.")
+
+
+def download(run_id: str) -> Path:
+    gh_bin = find_gh()
+    wait_for_run(gh_bin, run_id)
     out_dir = DOWNLOADS / "nuta-apk-latest"
     shutil.rmtree(out_dir, ignore_errors=True)
-    with zipfile.ZipFile(zip_path) as z:
-        z.extractall(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    gh(gh_bin, "run", "download", run_id, "--repo", REPO, "--name", ARTIFACT_NAME, "--dir", str(out_dir))
     apk = next(out_dir.rglob("*.apk"), None)
     if not apk:
-        sys.exit("W archiwum nie było pliku APK.")
+        sys.exit("W artefakcie nie było pliku APK.")
     print("APK:", apk)
     return apk
 
@@ -132,11 +82,13 @@ def install(apk: Path) -> None:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--install", action="store_true", help="po pobraniu wdroż przez scripts/deploy-android.py")
+    parser.add_argument("--run-id", help="konkretny run id zamiast najnowszego na main")
     args = parser.parse_args()
-    zip_path = asyncio.run(download())
-    apk = extract(zip_path)
+    gh_bin = find_gh()
+    run_id = args.run_id or latest_run_id(gh_bin)
+    apk = download(run_id)
     if args.install:
         install(apk)
 
