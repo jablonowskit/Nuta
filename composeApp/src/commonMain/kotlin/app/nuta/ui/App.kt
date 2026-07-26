@@ -912,7 +912,10 @@ private fun SearchScreen(
             return@LaunchedEffect
         }
         delay(400)
-        runCatching { container.spotifyRepository.search(submittedQuery) }
+        // Spotify nie zna składni "|"/"&" — do zapytania serwerowego wysyłamy same słowa,
+        // dokładne dopasowanie OR/AND liczymy potem lokalnie (visibleTracks niżej).
+        val serverSearchTerm = submittedQuery.split(Regex("[|&\\s]+")).filter(String::isNotBlank).distinct().joinToString(" ")
+        runCatching { container.spotifyRepository.search(serverSearchTerm) }
             .onSuccess {
                 if (currentState.query == submittedQuery) {
                     onStateChange(currentState.copy(result = it, error = null, lastExecutedQuery = submittedQuery))
@@ -963,12 +966,17 @@ private fun SearchScreen(
             }
             Spacer(Modifier.height(14.dp))
         }
-        val queryWords = state.query.trim().split(Regex("\\s+")).filter(String::isNotBlank)
+        // "|" rozdziela grupy OR, w każdej grupie "&" albo spacja rozdziela wymagane słowa (AND).
+        val queryOrGroups = state.query.split("|").map { group ->
+            group.trim().split(Regex("[&\\s]+")).filter(String::isNotBlank)
+        }.filter(List<String>::isNotEmpty)
         val visibleTracks = state.result.tracks.filter { track ->
-            queryWords.all { word ->
-                val titleMatches = state.searchTracks && track.title.contains(word, ignoreCase = true)
-                val artistMatches = state.searchArtists && track.artists.any { it.contains(word, ignoreCase = true) }
-                titleMatches || artistMatches
+            queryOrGroups.isEmpty() || queryOrGroups.any { andWords ->
+                andWords.all { word ->
+                    val titleMatches = state.searchTracks && track.title.contains(word, ignoreCase = true)
+                    val artistMatches = state.searchArtists && track.artists.any { it.contains(word, ignoreCase = true) }
+                    titleMatches || artistMatches
+                }
             }
         }
         val visiblePlaylists = if (state.searchPlaylists) state.result.playlists else emptyList()
