@@ -70,6 +70,14 @@ compose.resources {
     packageOfResClass = "app.nuta.resources"
 }
 
+// Numer wersji rośnie z każdym commitem, żeby instalator Windows (MSI) zawsze widział
+// nowszą wersję produktu — bez tego drugi instalator z tym samym numerem cichnie
+// z błędem 1638 ("another version of this product is already installed") zamiast
+// zaktualizować istniejącą instalację.
+val gitCommitCount = providers.exec {
+    commandLine("git", "rev-list", "--count", "HEAD")
+}.standardOutput.asText.get().trim().toIntOrNull() ?: 1
+
 compose.desktop {
     application {
         mainClass = "app.nuta.MainKt"
@@ -79,7 +87,7 @@ compose.desktop {
                 org.jetbrains.compose.desktop.application.dsl.TargetFormat.AppImage,
             )
             packageName = "Nuta"
-            packageVersion = "0.1.1"
+            packageVersion = "0.1.$gitCommitCount"
             description = "Nuta music player"
             vendor = "Nuta"
             modules("java.net.http")
@@ -89,6 +97,9 @@ compose.desktop {
                 console = true
                 menu = true
                 shortcut = true
+                // Stały upgrade code — pozwala MSI rozpoznać kolejne wersje jako aktualizację
+                // tego samego produktu zamiast osobnej, kolidującej instalacji.
+                upgradeUuid = "8defd09b-f5f2-49c0-b875-134107878223"
             }
         }
     }
