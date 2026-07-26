@@ -2,6 +2,7 @@ package app.nuta.android
 
 import android.content.ComponentName
 import android.content.Context
+import android.util.Log
 import androidx.core.content.ContextCompat
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
@@ -35,7 +36,7 @@ object AppServices {
     fun start(context: Context) {
         if (started) return
         started = true
-        logger = MemoryLogger(now = { Instant.now().toString() }, initialLevel = LogLevel.DEBUG)
+        logger = MemoryLogger(now = { Instant.now().toString() }, initialLevel = LogLevel.DEBUG, jsonSink = { line -> Log.d("NutaLog", line) })
         playbackSettings = AndroidPlaybackSettingsStore(context.getSharedPreferences("playback-settings", Context.MODE_PRIVATE))
         youtubeMediaService = AndroidYouTubeMediaService(logger, playbackSettings)
         val sessionToken = SessionToken(context, ComponentName(context, PlaybackService::class.java))
