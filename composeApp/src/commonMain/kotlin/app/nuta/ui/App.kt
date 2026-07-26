@@ -901,7 +901,9 @@ private fun SearchScreen(
         container.audioPlayer.play()
     }
 
-    LaunchedEffect(state.query, state.searchTracks, state.searchArtists, state.searchPlaylists, container.spotifyRepository) {
+    // Filtry (searchTracks/Artists/Playlists) tylko zawężają już pobrane wyniki lokalnie
+    // (patrz visibleTracks/visiblePlaylists niżej) — nie powinny wywoływać ponownego zapytania sieciowego.
+    LaunchedEffect(state.query, container.spotifyRepository) {
         val submittedQuery = state.query
         if (submittedQuery.isBlank()) {
             onStateChange(currentState.copy(
