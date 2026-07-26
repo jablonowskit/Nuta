@@ -310,15 +310,12 @@ private fun NutaAppContent(container: AppContainer, onSpotifyLogin: (() -> Unit)
 
         val toggleCurrentTrackLiked = {
             val track = playerState.currentTrack
-            println("NutaLikedDebug toggle_clicked track=${track?.id} favoriteLoading=$favoriteLoading")
             if (track != null && !favoriteLoading) {
                 val targetLiked = !currentTrackLiked
-                println("NutaLikedDebug calling setTrackLiked target=$targetLiked")
                 scope.launch {
                     favoriteLoading = true
                     runCatching { container.spotifyRepository.setTrackLiked(track.id, targetLiked) }
                         .onSuccess {
-                            println("NutaLikedDebug setTrackLiked SUCCESS target=$targetLiked sameTrack=${playerState.currentTrack?.id == track.id}")
                             if (playerState.currentTrack?.id == track.id) currentTrackLiked = targetLiked
                             likedTracks = if (targetLiked) {
                                 (listOf(track) + likedTracks).distinctBy(Track::id)
@@ -327,7 +324,6 @@ private fun NutaAppContent(container: AppContainer, onSpotifyLogin: (() -> Unit)
                             }
                         }
                         .onFailure { error ->
-                            println("NutaLikedDebug setTrackLiked FAILURE ${error::class.simpleName}: ${error.message}")
                             container.logger.warn(
                                 "SpotifyLiked", "liked_update_failed", "Nie udało się zmienić ulubionego utworu",
                                 fields = mapOf("reason" to (error::class.simpleName ?: "unknown"), "message" to (error.message ?: "")),
