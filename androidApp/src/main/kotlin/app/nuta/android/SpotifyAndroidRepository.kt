@@ -235,7 +235,19 @@ class SpotifyAndroidRepository(
                     )
                     error("Spotify GraphQL HTTP $status: ${response.take(120)}")
                 }
-                json.parseToJsonElement(response)
+                val parsed = json.parseToJsonElement(response)
+                val graphqlErrors = parsed.asObject()?.get("errors") as? JsonArray
+                if (!graphqlErrors.isNullOrEmpty()) {
+                    val message = graphqlErrors.firstOrNull()?.asObject()?.get("message")?.asText() ?: "unknown"
+                    logger.warn(
+                        "SpotifyAndroid",
+                        "graphql_error",
+                        "Spotify zwróciło błąd GraphQL mimo HTTP 200",
+                        fields = mapOf("operation" to operation, "message" to message, "response" to response.take(300)),
+                    )
+                    error("Spotify GraphQL error ($operation): $message")
+                }
+                parsed
             } finally {
                 connection.disconnect()
             }
