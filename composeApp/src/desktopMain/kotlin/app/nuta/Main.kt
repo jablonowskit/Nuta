@@ -106,7 +106,7 @@ fun main() {
                     },
                 )
             } else {
-                NutaApp(activeContainer, onSpotifyLogin = { showSpotifyLogin = true })
+                NutaApp(activeContainer)
             }
         }
     }

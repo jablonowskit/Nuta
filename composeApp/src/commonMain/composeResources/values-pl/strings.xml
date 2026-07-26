@@ -21,10 +21,6 @@
     <string name="stat_tracks">Utwory</string>
     <string name="stat_player">Player</string>
     <string name="home_no_recommendations">Spotify nie zwrócił rekomendacji</string>
-    <string name="spotify_session_title">Sesja Spotify</string>
-    <string name="spotify_session_desc">Rekomendacje są pobierane z zalogowanej sesji Spotify Web.</string>
-    <string name="open_playlists">Otwórz playlisty</string>
-    <string name="spotify_login_test">Test logowania Spotify</string>
 
     <!-- Biblioteka / playlisty -->
     <string name="library_title">Biblioteka</string>
