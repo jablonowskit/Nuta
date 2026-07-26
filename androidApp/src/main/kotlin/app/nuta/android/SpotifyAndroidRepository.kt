@@ -46,12 +46,15 @@ class SpotifyAndroidRepository(
         val cached = readPlaylistCache()
         if (cached != null) return@withContext cached
         val root = query("libraryV3", LIBRARY_V3_HASH, JsonObject(mapOf(
-            "filters" to JsonArray(listOf(JsonPrimitive("Playlists"))),
             "order" to JsonNull,
             "textFilter" to JsonPrimitive(""),
-            "features" to JsonArray(listOf(JsonPrimitive("LikedSongs"), JsonPrimitive("YourEpisodesV2"))),
+            "features" to JsonArray(listOf(
+                JsonPrimitive("LIKED_SONGS"), JsonPrimitive("YOUR_EPISODES_V2"),
+                JsonPrimitive("PRERELEASES"), JsonPrimitive("PRERELEASES_V2"),
+                JsonPrimitive("CLIPS"), JsonPrimitive("EVENTS"),
+            )),
             "limit" to JsonPrimitive(50), "offset" to JsonPrimitive(0),
-            "flatten" to JsonPrimitive(true),
+            "flatten" to JsonPrimitive(false),
             "expandedFolders" to JsonArray(emptyList()),
             "folderUri" to JsonNull,
             "includeFoldersWhenFlattening" to JsonPrimitive(true),
