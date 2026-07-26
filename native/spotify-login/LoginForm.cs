@@ -55,15 +55,24 @@ public sealed class LoginForm : Form
 
     private async void OnSourceChanged(object? sender, CoreWebView2SourceChangedEventArgs e)
     {
-        if (_resultWritten) return;
-        if (_webView.CoreWebView2?.Source is not { } sourceUrl) return;
-        if (!Uri.TryCreate(sourceUrl, UriKind.Absolute, out var uri)) return;
+        try
+        {
+            if (_resultWritten) return;
+            if (_webView.CoreWebView2?.Source is not { } sourceUrl) return;
+            if (!Uri.TryCreate(sourceUrl, UriKind.Absolute, out var uri)) return;
 
-        // Po zalogowaniu Spotify wraca na open.spotify.com i dopiero wtedy sp_dc istnieje —
-        // sam host nie wystarczy jako sygnał (widzimy open.spotify.com też przed logowaniem).
-        if (uri.Host != "open.spotify.com") return;
+            // Po zalogowaniu Spotify wraca na open.spotify.com i dopiero wtedy sp_dc istnieje —
+            // sam host nie wystarczy jako sygnał (widzimy open.spotify.com też przed logowaniem).
+            if (uri.Host != "open.spotify.com") return;
 
-        await TryExtractSessionAsync();
+            await TryExtractSessionAsync();
+        }
+        catch (Exception ex)
+        {
+            // async void: bez tego try/catch niezłapany wyjątek ubija cały proces po cichu
+            // (bez wypisania niczego na stderr) — trudne do zdiagnozowania z zewnątrz.
+            await Console.Error.WriteLineAsync($"source_changed_failed: {ex.Message}");
+        }
     }
 
     private async Task TryExtractSessionAsync()
@@ -73,6 +82,10 @@ public sealed class LoginForm : Form
         var cookies = await _webView.CoreWebView2.CookieManager.GetCookiesAsync("https://open.spotify.com");
         var spDc = cookies.FirstOrDefault(c => c.Name == "sp_dc");
         if (spDc is null || string.IsNullOrEmpty(spDc.Value)) return;
+
+        // SourceChanged może odpalić się ponownie zanim ten await się skończy — podwójne
+        // zablokowanie przed zapisem wyniku dwa razy / zamknięciem okna dwa razy.
+        if (_resultWritten) return;
 
         var spT = cookies.FirstOrDefault(c => c.Name == "sp_t");
         _resultWritten = true;
