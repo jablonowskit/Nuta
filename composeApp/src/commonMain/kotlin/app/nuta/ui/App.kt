@@ -162,18 +162,18 @@ private fun rememberPrefetchHandler(tracks: List<Track>, container: AppContainer
 }
 
 @Composable
-fun NutaApp(container: AppContainer, onSpotifyLogin: (() -> Unit)? = null) {
+fun NutaApp(container: AppContainer) {
     val settings by container.playbackSettings.settings.collectAsState()
     val density = LocalDensity.current
     CompositionLocalProvider(LocalDensity provides Density(density.density, settings.fontScale)) {
     MaterialTheme(colors = NutaColors) {
-        NutaAppContent(container, onSpotifyLogin)
+        NutaAppContent(container)
     }
     }
 }
 
 @Composable
-private fun NutaAppContent(container: AppContainer, onSpotifyLogin: (() -> Unit)?) {
+private fun NutaAppContent(container: AppContainer) {
         val playerState by container.audioPlayer.state.collectAsState()
         val playbackSettings by container.playbackSettings.settings.collectAsState()
         LaunchedEffect(playerState.currentIndex, playerState.queue, playbackSettings.prefetchEnabled) {
@@ -360,8 +360,6 @@ private fun NutaAppContent(container: AppContainer, onSpotifyLogin: (() -> Unit)
                                     playlists = playlists,
                                     playerState = playerState,
                                     recommendationsCount = playbackSettings.homeRecommendations,
-                                    openPlaylists = { destination = Destination.PLAYLISTS },
-                                    onSpotifyLogin = onSpotifyLogin,
                                     onSelectPlaylist = ::selectPlaylist,
                                 )
                                 Destination.PLAYLISTS -> PlaylistsScreen(savedPlaylists, ::selectPlaylist)
@@ -619,8 +617,6 @@ private fun HomeScreen(
     playlists: List<Playlist>,
     playerState: PlayerState,
     recommendationsCount: Int,
-    openPlaylists: () -> Unit,
-    onSpotifyLogin: (() -> Unit)?,
     onSelectPlaylist: (Playlist) -> Unit,
 ) {
     val recommendations = playlists.take(recommendationsCount)
@@ -645,21 +641,6 @@ private fun HomeScreen(
         if (recommendations.isEmpty()) item { EmptyState(stringResource(Res.string.home_no_recommendations)) }
         items(recommendations, key = { "home-${it.id}" }) { playlist ->
             PlaylistCard(playlist) { onSelectPlaylist(playlist) }
-        }
-        item {
-        Card(backgroundColor = MaterialTheme.colors.surface, shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(24.dp)) {
-                Text(stringResource(Res.string.spotify_session_title), fontWeight = FontWeight.Bold, fontSize = 18.sp)
-                Spacer(Modifier.height(8.dp))
-                Text(stringResource(Res.string.spotify_session_desc), color = Color(0xFFABB7C0))
-                Spacer(Modifier.height(18.dp))
-                Button(onClick = openPlaylists) { Text(stringResource(Res.string.open_playlists)) }
-                if (onSpotifyLogin != null) {
-                    Spacer(Modifier.height(10.dp))
-                    OutlinedButton(onClick = onSpotifyLogin) { Text(stringResource(Res.string.spotify_login_test)) }
-                }
-            }
-        }
         }
     }
 }

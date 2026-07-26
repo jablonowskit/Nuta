@@ -21,10 +21,6 @@
     <string name="stat_tracks">Tracks</string>
     <string name="stat_player">Player</string>
     <string name="home_no_recommendations">Spotify returned no recommendations</string>
-    <string name="spotify_session_title">Spotify session</string>
-    <string name="spotify_session_desc">Recommendations come from your signed-in Spotify Web session.</string>
-    <string name="open_playlists">Open playlists</string>
-    <string name="spotify_login_test">Spotify login test</string>
 
     <!-- Library / playlists -->
     <string name="library_title">Library</string>

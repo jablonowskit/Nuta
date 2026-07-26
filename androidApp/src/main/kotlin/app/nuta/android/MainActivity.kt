@@ -64,7 +64,7 @@ class MainActivity : ComponentActivity() {
                 val container = remember(repository) {
                     AppContainer(spotifyRepository = repository, audioPlayer = activePlayer, logger = logger, youtubeMediaService = youtubeMediaService, playbackSettings = playbackSettings)
                 }
-                NutaApp(container, onSpotifyLogin = { showLogin = true })
+                NutaApp(container)
             }
         }
     }
