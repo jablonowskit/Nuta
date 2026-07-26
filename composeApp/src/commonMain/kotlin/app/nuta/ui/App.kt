@@ -963,10 +963,13 @@ private fun SearchScreen(
             }
             Spacer(Modifier.height(14.dp))
         }
+        val queryWords = state.query.trim().split(Regex("\\s+")).filter(String::isNotBlank)
         val visibleTracks = state.result.tracks.filter { track ->
-            val titleMatches = state.searchTracks && track.title.contains(state.query, ignoreCase = true)
-            val artistMatches = state.searchArtists && track.artists.any { it.contains(state.query, ignoreCase = true) }
-            titleMatches || artistMatches
+            queryWords.all { word ->
+                val titleMatches = state.searchTracks && track.title.contains(word, ignoreCase = true)
+                val artistMatches = state.searchArtists && track.artists.any { it.contains(word, ignoreCase = true) }
+                titleMatches || artistMatches
+            }
         }
         val visiblePlaylists = if (state.searchPlaylists) state.result.playlists else emptyList()
         val searchPlaybackSettings by container.playbackSettings.settings.collectAsState()
