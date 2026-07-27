@@ -192,6 +192,62 @@ class SpotifyAndroidRepository(
         return candidates
     }
 
+    override suspend fun createPlaylist(name: String, description: String): Playlist {
+        require(name.isNotBlank()) { "Nazwa playlisty nie może być pusta" }
+        val userId = currentUserId()
+        val body = JsonObject(mapOf(
+            "name" to JsonPrimitive(name),
+            "description" to JsonPrimitive(description),
+            "public" to JsonPrimitive(false),
+        )).toString()
+        val root = restRequest("POST", "https://api.spotify.com/v1/users/$userId/playlists", body).jsonObject
+        val id = root["id"]?.asText() ?: error("Spotify nie zwrócił identyfikatora nowej playlisty")
+        logger.info("SpotifyAndroid", "playlist_created", "Utworzono playlistę Spotify", fields = mapOf("playlistId" to id))
+        return Playlist(id, name, description, emptyList())
+    }
+
+    override suspend fun addTracksToPlaylist(playlistId: String, trackIds: List<String>) {
+        require(playlistId.matches(Regex("[A-Za-z0-9]+"))) { "Nieprawidłowy identyfikator playlisty" }
+        if (trackIds.isEmpty()) return
+        val body = JsonObject(mapOf(
+            "uris" to JsonArray(trackIds.map { JsonPrimitive("spotify:track:$it") }),
+        )).toString()
+        restRequest("POST", "https://api.spotify.com/v1/playlists/$playlistId/tracks", body)
+        logger.info("SpotifyAndroid", "tracks_added", "Dodano utwory do playlisty Spotify", fields = mapOf("playlistId" to playlistId, "count" to trackIds.size.toString()))
+    }
+
+    private var cachedUserId: String? = null
+
+    private suspend fun currentUserId(): String = cachedUserId ?: restRequest("GET", "https://api.spotify.com/v1/me", null).jsonObject["id"]?.asText()
+        ?.also { cachedUserId = it }
+        ?: error("Nie udało się ustalić identyfikatora użytkownika Spotify")
+
+    private suspend fun restRequest(method: String, url: String, body: String?): JsonElement {
+        check(token.expiresAtMs > System.currentTimeMillis() + 30_000) { "Sesja Spotify wygasła. Zaloguj się ponownie." }
+        return withContext(Dispatchers.IO) {
+            val connection = URL(url).openConnection() as HttpURLConnection
+            try {
+                connection.requestMethod = method
+                connection.connectTimeout = 15_000
+                connection.readTimeout = 20_000
+                connection.setRequestProperty("Accept", "application/json")
+                token.value.use { connection.setRequestProperty("Authorization", "Bearer $it") }
+                if (body != null) {
+                    connection.doOutput = true
+                    connection.setRequestProperty("Content-Type", "application/json")
+                    connection.outputStream.use { it.write(body.toByteArray()) }
+                }
+                val status = connection.responseCode
+                val response = (if (status in 200..299) connection.inputStream else connection.errorStream)
+                    ?.bufferedReader()?.use { it.readText() }.orEmpty()
+                require(status in 200..299) { "Spotify REST HTTP $status" }
+                if (response.isBlank()) JsonObject(emptyMap()) else json.parseToJsonElement(response)
+            } finally {
+                connection.disconnect()
+            }
+        }
+    }
+
     private suspend fun query(operation: String, hash: String, variables: JsonObject): JsonElement {
         check(token.expiresAtMs > System.currentTimeMillis() + 30_000) { "Sesja Spotify wygasła. Zaloguj się ponownie." }
         val body = JsonObject(mapOf(

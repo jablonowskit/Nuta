@@ -27,15 +27,17 @@ object DemoLibrary {
 
 class FakeSpotifyRepository(private val logger: NutaLogger) : SpotifyRepository {
     private val likedTrackIds = DemoLibrary.tracks.mapTo(mutableSetOf(), Track::id)
+    private val playlists = DemoLibrary.playlists.toMutableList()
+    private var nextPlaylistId = 1
 
     override suspend fun getPlaylists(): List<Playlist> {
-        logger.debug("FakeSpotifyRepository", "playlists_loaded", "Załadowano demonstracyjne playlisty", fields = mapOf("count" to DemoLibrary.playlists.size.toString()))
-        return DemoLibrary.playlists
+        logger.debug("FakeSpotifyRepository", "playlists_loaded", "Załadowano demonstracyjne playlisty", fields = mapOf("count" to playlists.size.toString()))
+        return playlists
     }
     override suspend fun getSavedPlaylists(): List<Playlist> = getPlaylists()
 
     override suspend fun getPlaylistTracks(playlistId: String): List<Track> =
-        DemoLibrary.playlists.firstOrNull { it.id == playlistId }?.tracks.orEmpty()
+        playlists.firstOrNull { it.id == playlistId }?.tracks.orEmpty()
 
     override suspend fun getLikedTracks(): List<Track> = DemoLibrary.tracks.filter { it.id in likedTrackIds }
 
@@ -60,4 +62,20 @@ class FakeSpotifyRepository(private val logger: NutaLogger) : SpotifyRepository 
         DemoLibrary.tracks.filterNot { it.id == seed.id }.take(limit).also {
             logger.info("FakeSpotifyRepository", "radio_completed", "Utworzono demonstracyjne radio utworu", fields = mapOf("count" to it.size.toString()))
         }
+
+    override suspend fun createPlaylist(name: String, description: String): Playlist {
+        val playlist = Playlist("fake-p${nextPlaylistId++}", name, description, emptyList())
+        playlists += playlist
+        logger.info("FakeSpotifyRepository", "playlist_created", "Utworzono demonstracyjną playlistę", fields = mapOf("playlistId" to playlist.id))
+        return playlist
+    }
+
+    override suspend fun addTracksToPlaylist(playlistId: String, trackIds: List<String>) {
+        val index = playlists.indexOfFirst { it.id == playlistId }
+        require(index >= 0) { "Nie znaleziono playlisty $playlistId" }
+        val current = playlists[index]
+        val toAdd = trackIds.mapNotNull { id -> DemoLibrary.tracks.firstOrNull { it.id == id } }
+        playlists[index] = current.copy(tracks = current.tracks + toAdd)
+        logger.info("FakeSpotifyRepository", "tracks_added", "Dodano utwory do demonstracyjnej playlisty", fields = mapOf("playlistId" to playlistId, "count" to toAdd.size.toString()))
+    }
 }

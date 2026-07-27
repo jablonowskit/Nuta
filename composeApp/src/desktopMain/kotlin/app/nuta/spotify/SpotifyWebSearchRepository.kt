@@ -37,6 +37,8 @@ class SpotifyWebSearchRepository(
     private val json = Json { ignoreUnknownKeys = true }
     private val tokenMutex = Mutex()
     private var cachedToken: SpotifyWebToken? = initialToken
+    private val userIdMutex = Mutex()
+    private var cachedUserId: String? = null
 
     override suspend fun getPlaylists(): List<Playlist> {
         val operationId = "spotify-home-${System.currentTimeMillis()}"
@@ -181,6 +183,38 @@ class SpotifyWebSearchRepository(
         require(fallback.isNotEmpty()) { "Spotify nie zwrócił utworów dla radia" }
         logger.info("SpotifyRadio", "radio_completed", "Utworzono radio na podstawie katalogu Spotify", operationId, mapOf("count" to fallback.size.toString(), "source" to "search_fallback"))
         return fallback
+    }
+
+    override suspend fun createPlaylist(name: String, description: String): Playlist {
+        require(name.isNotBlank()) { "Nazwa playlisty nie może być pusta" }
+        val token = validToken()
+        val userId = currentUserId(token)
+        val body = JsonObject(mapOf(
+            "name" to JsonPrimitive(name),
+            "description" to JsonPrimitive(description),
+            "public" to JsonPrimitive(false),
+        )).toString()
+        val root = postJson("https://api.spotify.com/v1/users/$userId/playlists", body, token).jsonObject
+        val id = root["id"]?.jsonPrimitive?.contentOrNull ?: error("Spotify nie zwrócił identyfikatora nowej playlisty")
+        logger.info("SpotifyPlaylist", "playlist_created", "Utworzono playlistę Spotify", fields = mapOf("playlistId" to id))
+        return Playlist(id, name, description, emptyList())
+    }
+
+    override suspend fun addTracksToPlaylist(playlistId: String, trackIds: List<String>) {
+        require(playlistId.matches(Regex("[A-Za-z0-9]+"))) { "Nieprawidłowy identyfikator playlisty" }
+        if (trackIds.isEmpty()) return
+        val token = validToken()
+        val body = JsonObject(mapOf(
+            "uris" to kotlinx.serialization.json.JsonArray(trackIds.map { JsonPrimitive("spotify:track:$it") }),
+        )).toString()
+        postJson("https://api.spotify.com/v1/playlists/$playlistId/tracks", body, token)
+        logger.info("SpotifyPlaylist", "tracks_added", "Dodano utwory do playlisty Spotify", fields = mapOf("playlistId" to playlistId, "count" to trackIds.size.toString()))
+    }
+
+    private suspend fun currentUserId(token: SpotifyWebToken): String = userIdMutex.withLock {
+        cachedUserId ?: getJson("https://api.spotify.com/v1/me", token).jsonObject["id"]?.jsonPrimitive?.contentOrNull
+            ?.also { cachedUserId = it }
+            ?: error("Nie udało się ustalić identyfikatora użytkownika Spotify")
     }
 
     private suspend fun validToken(): SpotifyWebToken = tokenMutex.withLock {

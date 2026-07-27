@@ -17,6 +17,8 @@ interface SpotifyRepository {
     suspend fun setTrackLiked(trackId: String, liked: Boolean)
     suspend fun search(query: String): SearchResult
     suspend fun getTrackRadio(seed: Track, limit: Int = 20): List<Track>
+    suspend fun createPlaylist(name: String, description: String = ""): Playlist
+    suspend fun addTracksToPlaylist(playlistId: String, trackIds: List<String>)
 }
 
 interface AudioPlayer {
