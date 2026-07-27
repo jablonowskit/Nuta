@@ -12,6 +12,7 @@ import app.nuta.platform.RotatingJsonLogSink
 import app.nuta.spotify.SpotifyLoginPrototype
 import app.nuta.spotify.SpotifyTestTokenStore
 import app.nuta.spotify.SpotifyWebSearchRepository
+import app.nuta.settings.InMemoryPlaybackSettingsStore
 import app.nuta.youtube.NutaYouTubeMediaService
 import app.nuta.ui.NutaApp
 import androidx.compose.runtime.getValue
@@ -36,7 +37,10 @@ fun main() {
         initialLevel = configuredLevel,
         jsonSink = { line -> println(line); sink.write(line) },
     )
-    val youtubeMediaService = NutaYouTubeMediaService(logger)
+    // Jedna instancja dzielona przez UI i resolver strumienia — inaczej suwaki jakości/kodeka
+    // zapisywałyby się do innego obiektu niż ten, który czyta wybór formatu.
+    val playbackSettings = InMemoryPlaybackSettingsStore()
+    val youtubeMediaService = NutaYouTubeMediaService(logger, playbackSettings)
     val audioPlayer = MpvAudioPlayer(scope, youtubeMediaService, logger)
     val tokenStore = SpotifyTestTokenStore(logger)
     val restoredToken = tokenStore.load()
@@ -45,6 +49,7 @@ fun main() {
         audioPlayer = audioPlayer,
         logger = logger,
         youtubeMediaService = youtubeMediaService,
+        playbackSettings = playbackSettings,
     )
 
     application {
@@ -87,6 +92,9 @@ fun main() {
                             audioPlayer = container.audioPlayer,
                             logger = logger,
                             youtubeMediaService = container.youtubeMediaService,
+                            // bez tego nowy kontener dostawał świeży store i ustawienia
+                            // odtwarzania resetowały się przy każdym odświeżeniu tokenu
+                            playbackSettings = playbackSettings,
                         )
                         tokenExpiresAtMs = token.expiresAtMs
                         showSpotifyLogin = false

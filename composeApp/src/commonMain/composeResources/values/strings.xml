@@ -64,7 +64,7 @@
     <string name="font_size_title">Font size</string>
     <string name="font_size_desc">Scale the interface between 50% and 100%</string>
     <string name="quality_title">Quality</string>
-    <string name="quality_desc">Takes effect from the next track</string>
+    <string name="quality_desc">Auto picks the best stream on Wi-Fi and saves data on mobile. Takes effect from the next track.</string>
     <string name="option_auto">Auto</string>
     <string name="option_standard">Standard</string>
     <string name="quality_data_saver">Data saver</string>
