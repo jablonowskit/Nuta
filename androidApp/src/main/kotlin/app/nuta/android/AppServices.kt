@@ -38,7 +38,7 @@ object AppServices {
         started = true
         logger = MemoryLogger(now = { Instant.now().toString() }, initialLevel = LogLevel.DEBUG, jsonSink = { line -> Log.d("NutaLog", line) })
         playbackSettings = AndroidPlaybackSettingsStore(context.getSharedPreferences("playback-settings", Context.MODE_PRIVATE))
-        youtubeMediaService = AndroidYouTubeMediaService(logger, playbackSettings)
+        youtubeMediaService = AndroidYouTubeMediaService(logger, playbackSettings, context.applicationContext)
         val sessionToken = SessionToken(context, ComponentName(context, PlaybackService::class.java))
         val future = MediaController.Builder(context, sessionToken).buildAsync()
         future.addListener({

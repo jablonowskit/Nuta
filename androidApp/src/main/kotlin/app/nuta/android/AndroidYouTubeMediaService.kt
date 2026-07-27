@@ -1,16 +1,18 @@
 package app.nuta.android
 
+import android.content.Context
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import app.nuta.core.logging.NutaLogger
 import app.nuta.core.models.Track
 import app.nuta.core.security.SecretValue
+import app.nuta.youtube.AudioFormatSelector
 import app.nuta.youtube.AudioStreamSource
 import app.nuta.youtube.YouTubeCandidate
 import app.nuta.youtube.YouTubeMatch
 import app.nuta.youtube.YouTubeMediaService
 import app.nuta.youtube.YouTubeResolution
-import app.nuta.settings.CodecPreference
 import app.nuta.settings.PlaybackSettingsStore
-import app.nuta.settings.StreamQuality
 import java.net.HttpURLConnection
 import java.net.URLEncoder
 import java.net.URL
@@ -28,6 +30,7 @@ import kotlinx.serialization.json.jsonPrimitive
 class AndroidYouTubeMediaService(
     private val logger: NutaLogger,
     private val settingsStore: PlaybackSettingsStore,
+    private val context: Context,
 ) : YouTubeMediaService {
     private val json = Json { ignoreUnknownKeys = true }
 
@@ -110,22 +113,21 @@ class AndroidYouTubeMediaService(
     }
 
     private fun selectFormat(formats: List<AudioStreamSource>): AudioStreamSource? {
-        if (formats.isEmpty()) return null
         val settings = settingsStore.settings.value
-        val preferred = formats.filter { stream ->
-            when (settings.codec) {
-                CodecPreference.AUTO -> true
-                CodecPreference.AAC -> stream.codec.contains("mp4a", true) || stream.codec.contains("aac", true)
-                CodecPreference.OPUS -> stream.codec.contains("opus", true)
-            }
-        }.ifEmpty { formats }
-        return when (settings.quality) {
-            StreamQuality.DATA_SAVER -> preferred.minByOrNull { kotlin.math.abs(it.bitrate - 64_000) }
-            StreamQuality.STANDARD -> preferred.minByOrNull { kotlin.math.abs(it.bitrate - 128_000) }
-            StreamQuality.BEST -> preferred.maxByOrNull(AudioStreamSource::bitrate)
-            StreamQuality.AUTO -> preferred.minByOrNull { kotlin.math.abs(it.bitrate - 128_000) }
-        }
+        return AudioFormatSelector.select(
+            formats = formats,
+            quality = settings.quality,
+            codec = settings.codec,
+            unmeteredNetwork = unmeteredNetwork(),
+        )
     }
+
+    /** Tylko dla trybu AUTO: na połączeniu limitowanym nie ciągniemy najwyższego bitrate. */
+    private fun unmeteredNetwork(): Boolean? = runCatching {
+        val manager = context.getSystemService(ConnectivityManager::class.java) ?: return null
+        val capabilities = manager.getNetworkCapabilities(manager.activeNetwork ?: return null) ?: return null
+        capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED)
+    }.getOrNull()
 
     private fun format(item: JsonObject): AudioStreamSource? {
         val mime = item["mimeType"]?.jsonPrimitive?.contentOrNull ?: return null

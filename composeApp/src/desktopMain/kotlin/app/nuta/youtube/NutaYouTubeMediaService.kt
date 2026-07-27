@@ -3,6 +3,7 @@ package app.nuta.youtube
 import app.nuta.core.logging.NutaLogger
 import app.nuta.core.models.Track
 import app.nuta.core.security.SecretValue
+import app.nuta.settings.PlaybackSettingsStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
@@ -22,6 +23,7 @@ import java.time.Duration
 
 class NutaYouTubeMediaService(
     private val logger: NutaLogger,
+    private val settingsStore: PlaybackSettingsStore,
 ) : YouTubeMediaService {
     private val json = Json { ignoreUnknownKeys = true }
     private val client = HttpClient.newBuilder()
@@ -159,7 +161,8 @@ class NutaYouTubeMediaService(
         val playerRoot = requireNotNull(root) { "YouTube playability: $lastStatus" }
         val formats = playerRoot["streamingData"]?.jsonObject?.get("adaptiveFormats") as? JsonArray ?: error("Brak formatów adaptacyjnych")
         val audio = formats.mapNotNull { parseAudioFormat(it.jsonObject) }
-        val selected = audio.maxWithOrNull(compareBy<AudioStreamSource>({ if (it.codec.contains("opus", true)) 1 else 0 }, AudioStreamSource::bitrate))
+        val settings = settingsStore.settings.value
+        val selected = AudioFormatSelector.select(audio, settings.quality, settings.codec)
             ?: if (formats.any { it.jsonObject["signatureCipher"] != null || it.jsonObject["cipher"] != null }) {
                 error("YouTube wymaga transformacji podpisu dla dostępnych formatów")
             } else error("Brak bezpośredniego formatu audio-only")
