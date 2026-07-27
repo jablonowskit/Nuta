@@ -44,6 +44,25 @@ class AudioFormatSelectorTest {
     }
 
     @Test
+    fun autoQualityDropsToDataSaverOnMeteredNetworkWithSystemDataSaverOn() {
+        val selected = AudioFormatSelector.select(
+            formats, StreamQuality.AUTO, CodecPreference.AUTO,
+            unmeteredNetwork = false, systemDataSaver = true,
+        )
+        assertEquals(opus64, selected)
+    }
+
+    @Test
+    fun systemDataSaverIsIgnoredOnUnmeteredNetwork() {
+        // system nie stosuje oszczędzania danych na Wi-Fi, więc my też nie obniżamy jakości
+        val selected = AudioFormatSelector.select(
+            formats, StreamQuality.AUTO, CodecPreference.AUTO,
+            unmeteredNetwork = true, systemDataSaver = true,
+        )
+        assertEquals(opus150, selected)
+    }
+
+    @Test
     fun explicitCodecStillWinsOverHigherBitrate() {
         val selected = AudioFormatSelector.select(formats, StreamQuality.BEST, CodecPreference.AAC)
         assertEquals(aac128, selected)

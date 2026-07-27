@@ -14,28 +14,35 @@ object AudioFormatSelector {
      * @param unmeteredNetwork czy połączenie jest nielimitowane (Wi-Fi). Sterowanie tylko dla
      *   [StreamQuality.AUTO]; `null` oznacza brak informacji o taryfie (desktop) i jest
      *   traktowane jak połączenie nielimitowane.
+     * @param systemDataSaver czy użytkownik włączył w systemie oszczędzanie danych. Liczy się
+     *   wyłącznie na połączeniu limitowanym — na Wi-Fi system i tak go nie stosuje.
      */
     fun select(
         formats: List<AudioStreamSource>,
         quality: StreamQuality,
         codec: CodecPreference,
         unmeteredNetwork: Boolean? = null,
+        systemDataSaver: Boolean = false,
     ): AudioStreamSource? {
         if (formats.isEmpty()) return null
         val preferred = formats.filter { matchesCodec(it, codec) }.ifEmpty { formats }
-        val effectiveQuality = if (quality == StreamQuality.AUTO) {
-            // AUTO wcześniej celowało dokładnie w 128 kbps, więc Opus 150 zawsze przegrywał
-            // z AAC 128 (odległość 0). Teraz na Wi-Fi bierze najlepszy dostępny strumień,
-            // a przy połączeniu limitowanym oszczędza transfer.
-            if (unmeteredNetwork == false) StreamQuality.STANDARD else StreamQuality.BEST
-        } else {
-            quality
-        }
+        val effectiveQuality = if (quality == StreamQuality.AUTO) autoQuality(unmeteredNetwork, systemDataSaver) else quality
         return when (effectiveQuality) {
             StreamQuality.DATA_SAVER -> preferred.pickNearest(64_000, codec)
             StreamQuality.STANDARD -> preferred.pickNearest(128_000, codec)
             StreamQuality.BEST, StreamQuality.AUTO -> preferred.pickBest(codec)
         }
+    }
+
+    /**
+     * AUTO wcześniej celowało dokładnie w 128 kbps, więc Opus 150 zawsze przegrywał z AAC 128
+     * (odległość 0) — był odrzucany za to, że jest lepszy.
+     */
+    private fun autoQuality(unmeteredNetwork: Boolean?, systemDataSaver: Boolean): StreamQuality = when {
+        // brak informacji o taryfie (desktop) traktujemy jak Wi-Fi
+        unmeteredNetwork != false -> StreamQuality.BEST
+        systemDataSaver -> StreamQuality.DATA_SAVER
+        else -> StreamQuality.STANDARD
     }
 
     private fun matchesCodec(stream: AudioStreamSource, codec: CodecPreference): Boolean = when (codec) {
