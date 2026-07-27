@@ -30,6 +30,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.AlertDialog
 import androidx.compose.material.Button
 import androidx.compose.material.ButtonDefaults
 import androidx.compose.material.Card
@@ -199,6 +200,10 @@ private fun NutaAppContent(container: AppContainer) {
         // tylko stan ręcznego kliknięcia — celowo NIE dzielony z tłowym sprawdzaniem "czy polubione"
         // przy zmianie utworu; gdyby to sprawdzenie się zawiesiło, nie może trwale zablokować przycisku
         var favoriteLoading by remember { mutableStateOf(false) }
+        var createPlaylistDialogOpen by remember { mutableStateOf(false) }
+        var addToPlaylistTrack by remember { mutableStateOf<Track?>(null) }
+        var playlistActionLoading by remember { mutableStateOf(false) }
+        var playlistActionError by remember { mutableStateOf<String?>(null) }
         val scope = rememberCoroutineScope()
         val displayedTrackLiked = currentTrackLiked || playerState.currentTrack?.id?.let { id -> likedTracks.any { it.id == id } } == true
         val savedPlaylistsFailedPrefix = stringResource(Res.string.saved_playlists_failed_prefix)
@@ -223,6 +228,18 @@ private fun NutaAppContent(container: AppContainer) {
                         )
                     }
                 loading = false
+            }
+        }
+
+        fun openAddToPlaylistDialog(track: Track) {
+            playlistActionError = null
+            addToPlaylistTrack = track
+            // lista playlist jest doczytywana leniwie dopiero na ekranie biblioteki — dialog
+            // może zostać otwarty z wyszukiwania, gdzie jej jeszcze nie ma
+            if (!savedPlaylistsLoaded) scope.launch {
+                runCatching { container.spotifyRepository.getSavedPlaylists() }
+                    .onSuccess { savedPlaylists = it; savedPlaylistsLoaded = true }
+                    .onFailure { playlistActionError = it.message ?: unknownErrorLabel }
             }
         }
 
@@ -354,7 +371,7 @@ private fun NutaAppContent(container: AppContainer) {
                         when {
                             loading -> CircularProgressIndicator(Modifier.align(Alignment.Center))
                             loadError != null -> ErrorState(loadError ?: errorUnknownLabel)
-                            selectedPlaylist != null -> PlaylistDetails(selectedPlaylist!!, playerState, container)
+                            selectedPlaylist != null -> PlaylistDetails(selectedPlaylist!!, playerState, container, onAddToPlaylist = ::openAddToPlaylistDialog)
                             else -> when (destination) {
                                 Destination.HOME -> HomeScreen(
                                     playlists = playlists,
@@ -362,13 +379,14 @@ private fun NutaAppContent(container: AppContainer) {
                                     recommendationsCount = playbackSettings.homeRecommendations,
                                     onSelectPlaylist = ::selectPlaylist,
                                 )
-                                Destination.PLAYLISTS -> PlaylistsScreen(savedPlaylists, ::selectPlaylist)
-                                Destination.LIKED -> LikedScreen(likedTracks, likedLoading, likedError, playerState, container)
+                                Destination.PLAYLISTS -> PlaylistsScreen(savedPlaylists, ::selectPlaylist, onCreatePlaylist = { createPlaylistDialogOpen = true })
+                                Destination.LIKED -> LikedScreen(likedTracks, likedLoading, likedError, playerState, container, onAddToPlaylist = ::openAddToPlaylistDialog)
                                 Destination.SEARCH -> SearchScreen(
                                     container = container,
                                     state = searchState,
                                     onStateChange = { searchState = it },
                                     onPlaylist = ::selectPlaylist,
+                                    onAddToPlaylist = ::openAddToPlaylistDialog,
                                 )
                                 Destination.QUEUE -> QueueScreen(playerState, container)
                                 Destination.SETTINGS -> SettingsScreen(container)
@@ -408,8 +426,143 @@ private fun NutaAppContent(container: AppContainer) {
                 }
             }
             }
+
+            if (createPlaylistDialogOpen) CreatePlaylistDialog(
+                loading = playlistActionLoading,
+                error = playlistActionError,
+                onDismiss = { createPlaylistDialogOpen = false; playlistActionError = null },
+                onConfirm = { name, description ->
+                    scope.launch {
+                        playlistActionLoading = true
+                        playlistActionError = null
+                        runCatching { container.spotifyRepository.createPlaylist(name, description) }
+                            .onSuccess { created ->
+                                savedPlaylists = savedPlaylists + created
+                                createPlaylistDialogOpen = false
+                            }
+                            .onFailure { playlistActionError = it.message ?: unknownErrorLabel }
+                        playlistActionLoading = false
+                    }
+                },
+            )
+
+            addToPlaylistTrack?.let { track ->
+                AddToPlaylistDialog(
+                    track = track,
+                    playlists = savedPlaylists,
+                    loading = playlistActionLoading,
+                    error = playlistActionError,
+                    onDismiss = { addToPlaylistTrack = null; playlistActionError = null },
+                    onCreateNew = { addToPlaylistTrack = null; createPlaylistDialogOpen = true },
+                    onConfirm = { playlist ->
+                        scope.launch {
+                            playlistActionLoading = true
+                            playlistActionError = null
+                            runCatching { container.spotifyRepository.addTracksToPlaylist(playlist.id, listOf(track.id)) }
+                                .onSuccess { addToPlaylistTrack = null }
+                                .onFailure { playlistActionError = it.message ?: unknownErrorLabel }
+                            playlistActionLoading = false
+                        }
+                    },
+                )
+            }
         }
     }
+
+@Composable
+private fun CreatePlaylistDialog(
+    loading: Boolean,
+    error: String?,
+    onDismiss: () -> Unit,
+    onConfirm: (String, String) -> Unit,
+) {
+    var name by remember { mutableStateOf("") }
+    var description by remember { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(Res.string.create_playlist_title)) },
+        text = {
+            Column {
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    label = { Text(stringResource(Res.string.playlist_name_label)) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(Modifier.height(10.dp))
+                OutlinedTextField(
+                    value = description,
+                    onValueChange = { description = it },
+                    label = { Text(stringResource(Res.string.playlist_description_label)) },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                if (error != null) {
+                    Spacer(Modifier.height(10.dp))
+                    Text(error, color = MaterialTheme.colors.error, fontSize = 13.sp)
+                }
+            }
+        },
+        confirmButton = {
+            Button(onClick = { onConfirm(name.trim(), description.trim()) }, enabled = name.isNotBlank() && !loading) {
+                Text(stringResource(Res.string.create))
+            }
+        },
+        dismissButton = { OutlinedButton(onClick = onDismiss, enabled = !loading) { Text(stringResource(Res.string.cancel)) } },
+    )
+}
+
+@Composable
+private fun AddToPlaylistDialog(
+    track: Track,
+    playlists: List<Playlist>,
+    loading: Boolean,
+    error: String?,
+    onDismiss: () -> Unit,
+    onCreateNew: () -> Unit,
+    onConfirm: (Playlist) -> Unit,
+) {
+    var selected by remember { mutableStateOf<Playlist?>(null) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(Res.string.add_to_playlist_title, track.title)) },
+        text = {
+            Column {
+                if (playlists.isEmpty()) {
+                    Text(stringResource(Res.string.no_playlists), color = Color(0xFF94A2AD), fontSize = 13.sp)
+                } else {
+                    ScrollableLazyColumn(Modifier.fillMaxWidth().height(260.dp)) {
+                        items(playlists, key = { it.id }) { playlist ->
+                            Row(
+                                Modifier.fillMaxWidth()
+                                    .background(if (selected?.id == playlist.id) Color(0xFF203129) else Color.Transparent, RoundedCornerShape(8.dp))
+                                    .clickable { selected = playlist }
+                                    .padding(horizontal = 10.dp, vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text(if (selected?.id == playlist.id) "●" else "○", color = if (selected?.id == playlist.id) MaterialTheme.colors.primary else Color(0xFF7D8B95), modifier = Modifier.width(24.dp))
+                                Text(playlist.name, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            }
+                        }
+                    }
+                }
+                if (error != null) {
+                    Spacer(Modifier.height(10.dp))
+                    Text(error, color = MaterialTheme.colors.error, fontSize = 13.sp)
+                }
+                Spacer(Modifier.height(6.dp))
+                OutlinedButton(onClick = onCreateNew, enabled = !loading) { Text(stringResource(Res.string.create_playlist_title)) }
+            }
+        },
+        confirmButton = {
+            Button(onClick = { selected?.let(onConfirm) }, enabled = selected != null && !loading) {
+                Text(stringResource(Res.string.add))
+            }
+        },
+        dismissButton = { OutlinedButton(onClick = onDismiss, enabled = !loading) { Text(stringResource(Res.string.cancel)) } },
+    )
+}
+
 @Composable
 private fun TopBar(compact: Boolean) {
     Row(
@@ -657,10 +810,12 @@ private fun StatCard(label: String, value: String, modifier: Modifier, compact: 
 }
 
 @Composable
-private fun PlaylistsScreen(playlists: List<Playlist>, onSelect: (Playlist) -> Unit) {
+private fun PlaylistsScreen(playlists: List<Playlist>, onSelect: (Playlist) -> Unit, onCreatePlaylist: () -> Unit) {
     Column(Modifier.fillMaxSize()) {
         Heading(stringResource(Res.string.library_title), stringResource(Res.string.library_subtitle))
-        Spacer(Modifier.height(20.dp))
+        Spacer(Modifier.height(12.dp))
+        Button(onClick = onCreatePlaylist) { Text(stringResource(Res.string.create_playlist_title), maxLines = 1, softWrap = false) }
+        Spacer(Modifier.height(12.dp))
         if (playlists.isEmpty()) EmptyState(stringResource(Res.string.no_playlists)) else ScrollableLazyColumn(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             items(playlists, key = { it.id }) { playlist -> PlaylistCard(playlist) { onSelect(playlist) } }
         }
@@ -705,7 +860,7 @@ private fun ArtistSearchCard(artist: Artist, onPlay: () -> Unit) {
 }
 
 @Composable
-private fun PlaylistDetails(playlist: Playlist, playerState: PlayerState, container: AppContainer) {
+private fun PlaylistDetails(playlist: Playlist, playerState: PlayerState, container: AppContainer, onAddToPlaylist: (Track) -> Unit) {
     val scope = rememberCoroutineScope()
     Column(Modifier.fillMaxSize()) {
         Heading(playlist.name, playlist.description)
@@ -730,6 +885,8 @@ private fun PlaylistDetails(playlist: Playlist, playerState: PlayerState, contai
                     } }
                 }, subtitleAction = {
                     TrackQueueButton { scope.launch { container.audioPlayer.appendToQueue(listOf(track)) } }
+                }, trailingAction = {
+                    TrackPlaylistButton { onAddToPlaylist(track) }
                 })
             }
         }
@@ -743,6 +900,7 @@ private fun LikedScreen(
     error: String?,
     playerState: PlayerState,
     container: AppContainer,
+    onAddToPlaylist: (Track) -> Unit,
 ) {
     val scope = rememberCoroutineScope()
     Column(Modifier.fillMaxSize()) {
@@ -778,6 +936,8 @@ private fun LikedScreen(
                             } }
                         }, subtitleAction = {
                             TrackQueueButton { scope.launch { container.audioPlayer.appendToQueue(listOf(track)) } }
+                        }, trailingAction = {
+                            TrackPlaylistButton { onAddToPlaylist(track) }
                         })
                     }
                 }
@@ -794,6 +954,7 @@ private fun TrackRow(
     onPlay: () -> Unit,
     titleAction: (@Composable () -> Unit)? = null,
     subtitleAction: (@Composable () -> Unit)? = null,
+    trailingAction: (@Composable () -> Unit)? = null,
 ) {
     BoxWithConstraints(Modifier.fillMaxWidth()) {
     val compact = maxWidth < 520.dp
@@ -821,6 +982,7 @@ private fun TrackRow(
             }
         }
         if (!compact) Text(track.album, color = Color(0xFF8F9CA6), fontSize = 12.sp, modifier = Modifier.width(170.dp), maxLines = 1, overflow = TextOverflow.Ellipsis)
+        trailingAction?.invoke()
     }
     }
 }
@@ -843,6 +1005,16 @@ private fun TrackQueueButton(onClick: () -> Unit) {
         contentPadding = PaddingValues(0.dp),
         border = null,
     ) { Text("+") }
+}
+
+@Composable
+private fun TrackPlaylistButton(onClick: () -> Unit) {
+    OutlinedButton(
+        onClick = onClick,
+        modifier = Modifier.size(32.dp),
+        contentPadding = PaddingValues(0.dp),
+        border = null,
+    ) { Text("☰", fontSize = 14.sp) }
 }
 
 @Composable
@@ -871,6 +1043,7 @@ private fun SearchScreen(
     state: SearchViewState,
     onStateChange: (SearchViewState) -> Unit,
     onPlaylist: (Playlist) -> Unit,
+    onAddToPlaylist: (Track) -> Unit,
 ) {
     val scope = rememberCoroutineScope()
     val playerState by container.audioPlayer.state.collectAsState()
@@ -995,6 +1168,8 @@ private fun SearchScreen(
                             }
                             }, subtitleAction = {
                             TrackQueueButton { scope.launch { container.audioPlayer.appendToQueue(listOf(track)) } }
+                        }, trailingAction = {
+                            TrackPlaylistButton { onAddToPlaylist(track) }
                         })
                     }
                 }

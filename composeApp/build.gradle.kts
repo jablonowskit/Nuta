@@ -77,9 +77,16 @@ compose.resources {
 // workflow i nie zależy od głębokości klonu; git rev-list liczy tylko commity widoczne
 // w danym klonie, a actions/checkout robi domyślnie płytki klon (fetch-depth: 1) — tam
 // zawsze zwracałoby 1, co dokładnie odtwarzałoby ten sam błąd 1638.
+// runCatching, bo .dockerignore wyklucza .git — w buildzie w kontenerze nie ma repozytorium
+// i git kończy się kodem 128; providers.exec rzuca wtedy wyjątkiem, więc bez tego elvis
+// poniżej nigdy nie dostałby szansy i cały build padał zamiast użyć wartości domyślnej.
 val gitCommitCount = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull()
-    ?: providers.exec { commandLine("git", "rev-list", "--count", "HEAD") }
-        .standardOutput.asText.get().trim().toIntOrNull()
+    ?: runCatching {
+        providers.exec {
+            commandLine("git", "rev-list", "--count", "HEAD")
+            isIgnoreExitValue = true
+        }.standardOutput.asText.get().trim().toIntOrNull()
+    }.getOrNull()
     ?: 1
 
 compose.desktop {

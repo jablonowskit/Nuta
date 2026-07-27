@@ -35,6 +35,13 @@
         <item quantity="other">%1$d utworu</item>
     </plurals>
     <string name="saved_playlists_failed_prefix">Nie udało się pobrać zapisanych playlist Spotify:</string>
+    <string name="create_playlist_title">Nowa playlista</string>
+    <string name="playlist_name_label">Nazwa</string>
+    <string name="playlist_description_label">Opis</string>
+    <string name="add_to_playlist_title">Dodaj „%1$s” do playlisty</string>
+    <string name="create">Utwórz</string>
+    <string name="add">Dodaj</string>
+    <string name="cancel">Anuluj</string>
 
     <!-- Ulubione -->
     <string name="liked_title">Ulubione</string>
