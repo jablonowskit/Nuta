@@ -114,20 +114,30 @@ class AndroidYouTubeMediaService(
 
     private fun selectFormat(formats: List<AudioStreamSource>): AudioStreamSource? {
         val settings = settingsStore.settings.value
+        val manager = runCatching { context.getSystemService(ConnectivityManager::class.java) }.getOrNull()
         return AudioFormatSelector.select(
             formats = formats,
             quality = settings.quality,
             codec = settings.codec,
-            unmeteredNetwork = unmeteredNetwork(),
+            unmeteredNetwork = manager?.let(::unmeteredNetwork),
+            systemDataSaver = manager?.let(::systemDataSaver) ?: false,
         )
     }
 
     /** Tylko dla trybu AUTO: na połączeniu limitowanym nie ciągniemy najwyższego bitrate. */
-    private fun unmeteredNetwork(): Boolean? = runCatching {
-        val manager = context.getSystemService(ConnectivityManager::class.java) ?: return null
-        val capabilities = manager.getNetworkCapabilities(manager.activeNetwork ?: return null) ?: return null
+    private fun unmeteredNetwork(manager: ConnectivityManager): Boolean? = runCatching {
+        val active = manager.activeNetwork ?: return null
+        val capabilities = manager.getNetworkCapabilities(active) ?: return null
         capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED)
     }.getOrNull()
+
+    /**
+     * Systemowe „oszczędzanie danych". WHITELISTED oznacza, że użytkownik zwolnił Nutę
+     * z ograniczeń, więc nie schodzimy wtedy do najniższej jakości.
+     */
+    private fun systemDataSaver(manager: ConnectivityManager): Boolean = runCatching {
+        manager.restrictBackgroundStatus == ConnectivityManager.RESTRICT_BACKGROUND_STATUS_ENABLED
+    }.getOrDefault(false)
 
     private fun format(item: JsonObject): AudioStreamSource? {
         val mime = item["mimeType"]?.jsonPrimitive?.contentOrNull ?: return null
