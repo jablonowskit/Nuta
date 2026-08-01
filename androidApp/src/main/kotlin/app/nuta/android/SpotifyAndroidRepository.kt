@@ -36,10 +36,10 @@ class SpotifyAndroidRepository(
             "homeEndUserIntegration" to JsonPrimitive("INTEGRATION_WEB_PLAYER"),
             "timeZone" to JsonPrimitive("Europe/Warsaw"),
             "sp_t" to JsonPrimitive(""), "facet" to JsonPrimitive(""),
-            "sectionItemsLimit" to JsonPrimitive(10),
+            "sectionItemsLimit" to JsonPrimitive(20),
             "includeEpisodeContentRatingsV2" to JsonPrimitive(false),
         )))
-        return collectPlaylists(root).distinctBy(Playlist::id).take(30)
+        return collectPlaylists(root).distinctBy(Playlist::id).take(60)
     }
 
     override suspend fun getSavedPlaylists(): List<Playlist> = withContext(Dispatchers.IO) {

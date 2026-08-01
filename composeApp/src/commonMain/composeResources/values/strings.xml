@@ -75,8 +75,6 @@
     <string name="buffer_desc">Buffer changes take effect after restarting the app</string>
     <string name="buffer_small">Small</string>
     <string name="buffer_large">Large</string>
-    <string name="home_recs_title">Home recommendations</string>
-    <string name="home_recs_desc">How many playlists to show on the Home screen</string>
     <string name="prefetch_title">Prefetch (experimental)</string>
     <string name="prefetch_desc">Resolve the stream for visible tracks ahead of time so play starts instantly. Uses extra data/battery.</string>
     <string name="option_enabled">Enabled</string>
