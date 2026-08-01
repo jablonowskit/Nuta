@@ -1261,15 +1261,13 @@ private fun CompactPlayerBar(
     var radioLoading by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxWidth().height(164.dp).background(Color(0xFF131A20)).padding(horizontal = 10.dp, vertical = 5.dp)) {
     Row(
-        Modifier.fillMaxWidth().height(76.dp),
+        Modifier.fillMaxWidth().height(76.dp).border(1.dp, Color.Yellow),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(Modifier.size(60.dp).clickable { onOpenQueue() }) { Cover(track?.title ?: "N", track?.imageUrl, Modifier.fillMaxSize()) }
-        Spacer(Modifier.width(10.dp))
         Column(Modifier.weight(1f).clickable { onOpenQueue() }) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Text(track?.title ?: stringResource(Res.string.nothing_playing), maxLines = 2, overflow = TextOverflow.Clip, softWrap = true, fontWeight = FontWeight.Bold, fontSize = 14.sp, modifier = Modifier.weight(1f))
-                Text(streamDescription(state), color = Color(0xFF8D9BA6), fontSize = 10.sp, maxLines = 1, softWrap = false, overflow = TextOverflow.Visible, modifier = Modifier.padding(start = 4.dp))
+                Text(streamDescription(state), color = Color(0xFF8D9BA6), fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Clip, modifier = Modifier.width(110.dp).padding(start = 4.dp))
             }
             Text(track?.artists?.joinToString() ?: stringResource(Res.string.choose_track), color = Color(0xFF8D9BA6), fontSize = 11.sp, maxLines = 2, overflow = TextOverflow.Clip, softWrap = true)
         }
@@ -1303,7 +1301,7 @@ private fun CompactPlayerBar(
             )
         }
     }
-    Row(Modifier.fillMaxWidth().height(38.dp), verticalAlignment = Alignment.CenterVertically) {
+    Row(Modifier.fillMaxWidth().height(38.dp).border(1.dp, Color.Yellow), verticalAlignment = Alignment.CenterVertically) {
         Text(formatTime(state.positionMs), color = Color(0xFF8D9BA6), fontSize = 10.sp)
         Slider(
             value = if (state.durationMs > 0) state.positionMs.coerceAtMost(state.durationMs).toFloat() else 0f,
