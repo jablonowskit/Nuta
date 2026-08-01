@@ -88,6 +88,11 @@
     <string name="loudness_gentle">Łagodne</string>
     <string name="loudness_normal">Normalne</string>
     <string name="settings_footer">Domyślne ustawienie: najwyższa jakość AAC i standardowy bufor.</string>
+    <string name="cache_title">Cache strumieni</string>
+    <string name="cache_desc">Zbuforowane dane audio zapisane na tym urządzeniu</string>
+    <string name="cache_size_unknown">Obliczanie…</string>
+    <string name="cache_clear_button">Wyczyść cache</string>
+    <string name="cache_cleared">Cache wyczyszczony</string>
 
     <!-- Diagnostyka -->
     <string name="diagnostics_title">Diagnostyka</string>

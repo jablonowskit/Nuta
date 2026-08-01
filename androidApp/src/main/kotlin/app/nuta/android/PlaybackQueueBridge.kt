@@ -1,11 +1,15 @@
 package app.nuta.android
 
+import androidx.media3.datasource.cache.Cache
 import androidx.media3.datasource.cache.CacheDataSource
 import kotlinx.coroutines.flow.MutableStateFlow
 
 object PlaybackQueueBridge {
     /** Fabryka źródła danych z cache serwisu — prefetch dogrywa przez nią początek strumienia. */
     @Volatile var streamCacheFactory: CacheDataSource.Factory? = null
+
+    /** Sam cache (ta sama instancja co za streamCacheFactory) — do odczytu rozmiaru i czyszczenia z ustawień. */
+    @Volatile var streamCache: Cache? = null
 
     @Volatile var onNext: (() -> Unit)? = null
     @Volatile var onPrevious: (() -> Unit)? = null

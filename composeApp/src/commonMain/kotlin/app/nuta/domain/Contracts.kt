@@ -38,4 +38,8 @@ interface AudioPlayer {
     suspend fun simulateError()
     /** Eksperymentalne: z góry rozwiąż strumień dla podanych utworów, żeby kliknięcie play było natychmiastowe. No-op domyślnie. */
     suspend fun prefetch(tracks: List<Track>) {}
+    /** Rozmiar cache'u zbuforowanych strumieni w bajtach (0 jeśli platforma go nie ma). */
+    suspend fun cacheSizeBytes(): Long = 0L
+    /** Czyści cache zbuforowanych strumieni. No-op domyślnie. */
+    suspend fun clearCache() {}
 }

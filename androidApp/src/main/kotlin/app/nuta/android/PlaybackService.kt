@@ -36,6 +36,7 @@ class PlaybackService : MediaSessionService() {
             .setUpstreamDataSourceFactory(upstreamFactory)
             .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
         PlaybackQueueBridge.streamCacheFactory = cacheFactory
+        PlaybackQueueBridge.streamCache = cache
         val player = ExoPlayer.Builder(this)
             .setMediaSourceFactory(DefaultMediaSourceFactory(cacheFactory))
             .setLoadControl(loadControl(settingsStore.settings.value.bufferSize))
@@ -128,6 +129,7 @@ class PlaybackService : MediaSessionService() {
             mediaSession = null
         }
         PlaybackQueueBridge.streamCacheFactory = null
+        PlaybackQueueBridge.streamCache = null
         streamCache?.release()
         streamCache = null
         super.onDestroy()
