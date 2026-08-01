@@ -6,6 +6,7 @@ import androidx.compose.animation.core.keyframes
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.ui.draw.alpha
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -933,9 +934,7 @@ private fun PlaylistDetails(playlist: Playlist, playerState: PlayerState, contai
                     } }
                 }, subtitleAction = {
                     TrackQueueButton { scope.launch { container.audioPlayer.appendToQueue(listOf(track)) } }
-                }, trailingAction = {
-                    TrackPlaylistButton { onAddToPlaylist(track) }
-                })
+                }, onLongPress = { onAddToPlaylist(track) })
             }
         }
     }
@@ -984,9 +983,7 @@ private fun LikedScreen(
                             } }
                         }, subtitleAction = {
                             TrackQueueButton { scope.launch { container.audioPlayer.appendToQueue(listOf(track)) } }
-                        }, trailingAction = {
-                            TrackPlaylistButton { onAddToPlaylist(track) }
-                        })
+                        }, onLongPress = { onAddToPlaylist(track) })
                     }
                 }
             }
@@ -1002,15 +999,21 @@ private fun TrackRow(
     onPlay: () -> Unit,
     titleAction: (@Composable () -> Unit)? = null,
     subtitleAction: (@Composable () -> Unit)? = null,
-    trailingAction: (@Composable () -> Unit)? = null,
+    // Zamiast trzeciej ikony "☰" na stałe widocznej w wierszu: przytrzymanie utworu
+    // otwiera dodawanie do playlisty — mniej ikon, więcej miejsca, gest znany z innych appek.
+    onLongPress: (() -> Unit)? = null,
 ) {
     BoxWithConstraints(Modifier.fillMaxWidth()) {
     val compact = maxWidth < 520.dp
+    val rowModifier = Modifier.fillMaxWidth()
+        .background(if (active) Color(0xFF203129) else Color.Transparent, RoundedCornerShape(8.dp))
+        .let { base ->
+            if (onLongPress != null) base.combinedClickable(onClick = onPlay, onLongClick = onLongPress)
+            else base.clickable(onClick = onPlay)
+        }
+        .padding(horizontal = 12.dp, vertical = 8.dp)
     Row(
-        Modifier.fillMaxWidth()
-            .background(if (active) Color(0xFF203129) else Color.Transparent, RoundedCornerShape(8.dp))
-            .clickable(onClick = onPlay)
-            .padding(horizontal = 12.dp, vertical = 8.dp),
+        rowModifier,
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (active && loading) {
@@ -1029,15 +1032,10 @@ private fun TrackRow(
             }
         }
         if (!compact) Text(track.album, color = Color(0xFF8F9CA6), fontSize = 12.sp, modifier = Modifier.width(170.dp), maxLines = 1, overflow = TextOverflow.Ellipsis)
-        // Wszystkie trzy akcje w jednej pionowej kolumnie zamiast rozrzucone w linii tytułu/podtytułu —
-        // przy różnych wysokościach tych linii nakładały się na siebie. Mniejsze przyciski (24dp)
-        // niż w pierwszej wersji (32dp), żeby kolumna 3 przycisków nie podbijała wysokości wiersza
-        // dużo ponad to, co i tak zajmuje tekst tytułu+wykonawcy.
-        if (titleAction != null || subtitleAction != null || trailingAction != null) {
+        if (titleAction != null || subtitleAction != null) {
             Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 titleAction?.invoke()
                 subtitleAction?.invoke()
-                trailingAction?.invoke()
             }
         }
     }
@@ -1062,16 +1060,6 @@ private fun TrackQueueButton(onClick: () -> Unit) {
         contentPadding = PaddingValues(0.dp),
         border = null,
     ) { Text("+", fontSize = 12.sp) }
-}
-
-@Composable
-private fun TrackPlaylistButton(onClick: () -> Unit) {
-    OutlinedButton(
-        onClick = onClick,
-        modifier = Modifier.size(24.dp),
-        contentPadding = PaddingValues(0.dp),
-        border = null,
-    ) { Text("☰", fontSize = 10.sp) }
 }
 
 @Composable
@@ -1225,9 +1213,7 @@ private fun SearchScreen(
                             }
                             }, subtitleAction = {
                             TrackQueueButton { scope.launch { container.audioPlayer.appendToQueue(listOf(track)) } }
-                        }, trailingAction = {
-                            TrackPlaylistButton { onAddToPlaylist(track) }
-                        })
+                        }, onLongPress = { onAddToPlaylist(track) })
                     }
                 }
             }
