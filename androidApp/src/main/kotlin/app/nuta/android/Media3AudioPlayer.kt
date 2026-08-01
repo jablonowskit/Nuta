@@ -25,6 +25,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -223,39 +224,46 @@ class Media3AudioPlayer(
     override suspend fun play() {
         val track = stateFlow.value.currentTrack ?: return
         if (stateFlow.value.status == PlayerStatus.PAUSED) { withContext(Dispatchers.Main) { player.play() }; return }
-        loadMutex.withLock {
-            // wznowienie po restarcie: pierwszy start przywróconego utworu zaczyna od zapisanej pozycji
-            val resumeFromMs = pendingResumePositionMs.takeIf { it > 0 && it < track.durationMs }
-            pendingResumePositionMs = 0
-            stateFlow.value = stateFlow.value.copy(status = PlayerStatus.LOADING, positionMs = resumeFromMs ?: 0, errorMessage = null, streamBitrate = null, streamCodec = null)
-            runCatching { resolveForPlayback(track) }.onSuccess { resolution ->
-                retryingAfterError = false
-                val url = resolution.stream.url.use { it }
-                stateFlow.value = stateFlow.value.copy(
-                    streamBitrate = resolution.stream.bitrate,
-                    streamCodec = resolution.stream.codec,
-                )
-                withContext(Dispatchers.Main) {
-                    player.setMediaItem(MediaItem.Builder()
-                        .setUri(url)
-                        .setMediaMetadata(MediaMetadata.Builder()
-                            .setTitle(track.title)
-                            .setArtist(track.artists.joinToString())
-                            .setAlbumTitle(track.album)
+        // NonCancellable: play() bywa wywoływane w scope ekranu, który je zainicjował (np.
+        // rememberCoroutineScope() na SearchScreen). Bez tego, ręczne przejście na inną
+        // zakładkę zaraz po kliknięciu "odtwórz" anulowało trwające rozwiązywanie streamu
+        // w trakcie — CancellationException trafiał w runCatching poniżej i był mylnie
+        // pokazywany jako PlayerStatus.ERROR, mimo że to nie była prawdziwa awaria.
+        withContext(NonCancellable) {
+            loadMutex.withLock {
+                // wznowienie po restarcie: pierwszy start przywróconego utworu zaczyna od zapisanej pozycji
+                val resumeFromMs = pendingResumePositionMs.takeIf { it > 0 && it < track.durationMs }
+                pendingResumePositionMs = 0
+                stateFlow.value = stateFlow.value.copy(status = PlayerStatus.LOADING, positionMs = resumeFromMs ?: 0, errorMessage = null, streamBitrate = null, streamCodec = null)
+                runCatching { resolveForPlayback(track) }.onSuccess { resolution ->
+                    retryingAfterError = false
+                    val url = resolution.stream.url.use { it }
+                    stateFlow.value = stateFlow.value.copy(
+                        streamBitrate = resolution.stream.bitrate,
+                        streamCodec = resolution.stream.codec,
+                    )
+                    withContext(Dispatchers.Main) {
+                        player.setMediaItem(MediaItem.Builder()
+                            .setUri(url)
+                            .setMediaMetadata(MediaMetadata.Builder()
+                                .setTitle(track.title)
+                                .setArtist(track.artists.joinToString())
+                                .setAlbumTitle(track.album)
+                                .build())
                             .build())
-                        .build())
-                    player.prepare()
-                    if (resumeFromMs != null) player.seekTo(resumeFromMs)
-                    player.play()
+                        player.prepare()
+                        if (resumeFromMs != null) player.seekTo(resumeFromMs)
+                        player.play()
+                    }
+                    logger.info("Media3Player", "playback_prepared", "Przekazano strumień YouTube do Media3", fields = mapOf(
+                        "codec" to resolution.stream.codec,
+                        "mimeType" to resolution.stream.mimeType,
+                        "bitrate" to resolution.stream.bitrate.toString(),
+                    ))
+                }.onFailure { error ->
+                    stateFlow.value = stateFlow.value.copy(status = PlayerStatus.ERROR, errorMessage = error.message)
+                    logger.error("Media3Player", "resolution_failed", "Nie udało się przygotować strumienia YouTube", throwable = error)
                 }
-                logger.info("Media3Player", "playback_prepared", "Przekazano strumień YouTube do Media3", fields = mapOf(
-                    "codec" to resolution.stream.codec,
-                    "mimeType" to resolution.stream.mimeType,
-                    "bitrate" to resolution.stream.bitrate.toString(),
-                ))
-            }.onFailure { error ->
-                stateFlow.value = stateFlow.value.copy(status = PlayerStatus.ERROR, errorMessage = error.message)
-                logger.error("Media3Player", "resolution_failed", "Nie udało się przygotować strumienia YouTube", throwable = error)
             }
         }
     }
