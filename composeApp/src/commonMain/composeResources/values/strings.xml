@@ -86,6 +86,11 @@
     <string name="loudness_gentle">Gentle</string>
     <string name="loudness_normal">Normal</string>
     <string name="settings_footer">Default: best AAC quality and a standard buffer.</string>
+    <string name="cache_title">Stream cache</string>
+    <string name="cache_desc">Buffered audio stream data stored on this device</string>
+    <string name="cache_size_unknown">Calculating…</string>
+    <string name="cache_clear_button">Clear cache</string>
+    <string name="cache_cleared">Cache cleared</string>
 
     <!-- Diagnostics -->
     <string name="diagnostics_title">Diagnostics</string>

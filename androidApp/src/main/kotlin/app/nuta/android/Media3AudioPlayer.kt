@@ -183,6 +183,19 @@ class Media3AudioPlayer(
         }
     }
 
+    override suspend fun cacheSizeBytes(): Long = withContext(Dispatchers.IO) {
+        PlaybackQueueBridge.streamCache?.cacheSpace ?: 0L
+    }
+
+    override suspend fun clearCache() = withContext(Dispatchers.IO) {
+        val cache = PlaybackQueueBridge.streamCache ?: return@withContext
+        // usuwanie klucz po kluczu zamiast kasowania plików bezpośrednio — SimpleCache trzyma
+        // własny indeks metadanych, więc ręczna ingerencja w katalog na dysku by go rozsynchronizowała
+        cache.keys.toList().forEach { key -> runCatching { cache.removeResource(key) } }
+        streamPreloadedIds.clear()
+        logger.info("Media3Player", "cache_cleared", "Wyczyszczono cache zbuforowanych strumieni")
+    }
+
     /** Dogrywa początek strumienia do cache serwisu, żeby start odtwarzania nie czekał na sieć. */
     private suspend fun preloadStreamStart(track: Track, resolution: YouTubeResolution) {
         val factory = PlaybackQueueBridge.streamCacheFactory ?: return

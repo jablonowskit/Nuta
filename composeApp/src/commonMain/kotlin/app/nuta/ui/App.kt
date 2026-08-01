@@ -692,6 +692,37 @@ private fun SettingsScreen(container: AppContainer) {
             }
         }
         item {
+            var cacheBytes by remember { mutableStateOf<Long?>(null) }
+            var clearedJustNow by remember { mutableStateOf(false) }
+            var refreshTrigger by remember { mutableStateOf(0) }
+            val scope = rememberCoroutineScope()
+            val cacheSizeUnknownLabel = stringResource(Res.string.cache_size_unknown)
+            LaunchedEffect(refreshTrigger) {
+                cacheBytes = null
+                cacheBytes = container.audioPlayer.cacheSizeBytes()
+            }
+            SettingsGroup(stringResource(Res.string.cache_title), stringResource(Res.string.cache_desc)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(
+                        cacheBytes?.let(::formatBytes) ?: cacheSizeUnknownLabel,
+                        color = Color(0xFF8D9BA6),
+                        modifier = Modifier.weight(1f),
+                    )
+                    OutlinedButton(onClick = {
+                        scope.launch {
+                            container.audioPlayer.clearCache()
+                            clearedJustNow = true
+                            refreshTrigger += 1
+                        }
+                    }) { Text(stringResource(Res.string.cache_clear_button)) }
+                }
+                if (clearedJustNow) {
+                    Spacer(Modifier.height(6.dp))
+                    Text(stringResource(Res.string.cache_cleared), color = Color(0xFF8FE9AD), fontSize = 12.sp)
+                }
+            }
+        }
+        item {
             Text(
                 stringResource(Res.string.settings_footer),
                 color = Color(0xFF8D9BA6),
@@ -1601,4 +1632,18 @@ private fun ErrorState(message: String) {
 private fun formatTime(ms: Long): String {
     val totalSeconds = (ms / 1_000).coerceAtLeast(0)
     return "${totalSeconds / 60}:${(totalSeconds % 60).toString().padStart(2, '0')}"
+}
+
+// Integer arithmetic zamiast String.format: to (JVM-only) rozszerzenie stdlib nie istnieje
+// we wspólnym kodzie KMP — commonMain kompiluje się też pod cele nie-JVM.
+private fun formatBytes(bytes: Long): String = when {
+    bytes >= 1_073_741_824L -> "${scaledOneDecimal(bytes, 1_073_741_824L)} GB"
+    bytes >= 1_048_576L -> "${scaledOneDecimal(bytes, 1_048_576L)} MB"
+    bytes >= 1_024L -> "${bytes / 1_024L} KB"
+    else -> "$bytes B"
+}
+
+private fun scaledOneDecimal(value: Long, unit: Long): String {
+    val tenths = value * 10 / unit
+    return "${tenths / 10}.${tenths % 10}"
 }
