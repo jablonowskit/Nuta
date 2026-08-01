@@ -18,6 +18,8 @@ data class YouTubePlaybackSettings(
     val homeRecommendations: Int = 6,
     /** Eksperymentalne: rozwiązuj strumień dla widocznych utworów zanim użytkownik kliknie play. */
     val prefetchEnabled: Boolean = false,
+    /** Gdy true, pasek playera zostaje przypięty i widoczny na każdej zakładce, nie tylko na Player/Kolejce. */
+    val playerPinned: Boolean = false,
 )
 
 interface PlaybackSettingsStore {
