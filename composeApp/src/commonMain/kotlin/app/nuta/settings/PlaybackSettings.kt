@@ -15,7 +15,6 @@ data class YouTubePlaybackSettings(
     val codec: CodecPreference = CodecPreference.AAC,
     val bufferSize: BufferSize = BufferSize.STANDARD,
     val loudnessNormalization: LoudnessNormalization = LoudnessNormalization.OFF,
-    val homeRecommendations: Int = 6,
     /** Eksperymentalne: rozwiązuj strumień dla widocznych utworów zanim użytkownik kliknie play. */
     val prefetchEnabled: Boolean = false,
     /** Gdy true, pasek playera zostaje przypięty i widoczny na każdej zakładce, nie tylko na Player/Kolejce. */
