@@ -51,6 +51,8 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.Saver
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.rememberUpdatedState
@@ -182,7 +184,11 @@ private fun NutaAppContent(container: AppContainer) {
             val upcoming = (playerState.currentIndex + 1..playerState.currentIndex + 3).mapNotNull(playerState.queue::getOrNull)
             if (upcoming.isNotEmpty()) container.audioPlayer.prefetch(upcoming)
         }
-        var destination by remember { mutableStateOf(Destination.HOME) }
+        // rememberSaveable (nie remember) — na Androidzie obrót ekranu domyślnie odtwarza
+        // Activity od nowa; bez tego zakładka zawsze wracała do Start po obrocie.
+        var destination by rememberSaveable(
+            saver = Saver(save = { it.name }, restore = { name -> Destination.valueOf(name) }),
+        ) { mutableStateOf(Destination.HOME) }
         var selectedPlaylist by remember { mutableStateOf<Playlist?>(null) }
         var playlists by remember { mutableStateOf<List<Playlist>>(emptyList()) }
         var savedPlaylists by remember { mutableStateOf<List<Playlist>>(emptyList()) }
