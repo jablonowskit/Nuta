@@ -1259,9 +1259,11 @@ private fun CompactPlayerBar(
     val scope = rememberCoroutineScope()
     val track = state.currentTrack
     var radioLoading by remember { mutableStateOf(false) }
-    Column(Modifier.fillMaxWidth().height(164.dp).background(Color(0xFF131A20)).padding(horizontal = 10.dp, vertical = 5.dp)) {
+    // Bez stałej wysokości: tytuł i wykonawca mogą zająć do 2 linii każdy (patrz niżej),
+    // a przy stałych 164dp/76dp długi tekst nachodziłby na przyciski zamiast rozepchnąć układ.
+    Column(Modifier.fillMaxWidth().background(Color(0xFF131A20)).padding(horizontal = 10.dp, vertical = 5.dp)) {
     Row(
-        Modifier.fillMaxWidth().height(76.dp).border(1.dp, Color.Yellow),
+        Modifier.fillMaxWidth().border(1.dp, Color.Yellow),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.weight(1f).clickable { onOpenQueue() }) {
