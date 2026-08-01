@@ -1305,7 +1305,16 @@ private fun CompactPlayerBar(
         Column(Modifier.weight(1f).clickable { onOpenQueue() }) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Text(track?.title ?: stringResource(Res.string.nothing_playing), maxLines = 2, overflow = TextOverflow.Clip, softWrap = true, fontWeight = FontWeight.Bold, fontSize = 14.sp, modifier = Modifier.weight(1f))
-                Text(streamDescription(state), color = Color(0xFF8D9BA6), fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Clip, modifier = Modifier.width(110.dp).padding(start = 4.dp))
+                Text(
+                    // Kodek i bitrate na osobnych liniach — węższa kolumna niż jedna długa linia z "•".
+                    streamDescription(state).replace(" • ", "\n"),
+                    color = Color(0xFF8D9BA6),
+                    fontSize = 10.sp,
+                    maxLines = 2,
+                    overflow = TextOverflow.Clip,
+                    textAlign = TextAlign.End,
+                    modifier = Modifier.width(70.dp).padding(start = 4.dp),
+                )
             }
             Text(track?.artists?.joinToString() ?: stringResource(Res.string.choose_track), color = Color(0xFF8D9BA6), fontSize = 11.sp, maxLines = 2, overflow = TextOverflow.Clip, softWrap = true)
         }
