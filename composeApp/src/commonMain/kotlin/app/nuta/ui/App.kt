@@ -383,7 +383,6 @@ private fun NutaAppContent(container: AppContainer) {
                                 Destination.HOME -> HomeScreen(
                                     playlists = playlists,
                                     playerState = playerState,
-                                    recommendationsCount = playbackSettings.homeRecommendations,
                                     onSelectPlaylist = ::selectPlaylist,
                                 )
                                 Destination.PLAYLISTS -> PlaylistsScreen(savedPlaylists, ::selectPlaylist, onCreatePlaylist = { createPlaylistDialogOpen = true })
@@ -668,14 +667,6 @@ private fun SettingsScreen(container: AppContainer) {
             }
         }
         item {
-            SettingsGroup(stringResource(Res.string.home_recs_title), stringResource(Res.string.home_recs_desc)) {
-                SettingOptions(
-                    options = listOf(6 to "6", 10 to "10", 20 to "20", 30 to "30"),
-                    selected = settings.homeRecommendations,
-                ) { container.playbackSettings.update(settings.copy(homeRecommendations = it)) }
-            }
-        }
-        item {
             SettingsGroup(stringResource(Res.string.loudness_title), stringResource(Res.string.loudness_desc)) {
                 SettingOptions(
                     options = listOf(
@@ -818,11 +809,19 @@ private fun destinationLabel(destination: Destination): String = stringResource(
 private fun HomeScreen(
     playlists: List<Playlist>,
     playerState: PlayerState,
-    recommendationsCount: Int,
     onSelectPlaylist: (Playlist) -> Unit,
 ) {
-    val recommendations = playlists.take(recommendationsCount)
-    ScrollableLazyColumn(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    // Zamiast stałej liczby z ustawień: pokazuj stopniowo więcej rekomendacji w miarę
+    // przewijania listy w dół, dociągając kolejne partie z już pobranej puli.
+    var revealedCount by remember { mutableStateOf(INITIAL_RECOMMENDATIONS_COUNT) }
+    val recommendations = playlists.take(revealedCount)
+    val onVisibleRangeChanged: (IntRange) -> Unit = { range ->
+        // +1 bo pozycja 0 to nagłówek (Heading/statystyki), utwory zaczynają się od indeksu 1
+        if (range.last >= revealedCount && revealedCount < playlists.size) {
+            revealedCount = (revealedCount + RECOMMENDATIONS_PAGE_SIZE).coerceAtMost(playlists.size)
+        }
+    }
+    ScrollableLazyColumn(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(12.dp), onVisibleRangeChanged = onVisibleRangeChanged) {
         item {
         Heading(stringResource(Res.string.home_title), stringResource(Res.string.home_subtitle))
         Spacer(Modifier.height(24.dp))
@@ -846,6 +845,9 @@ private fun HomeScreen(
         }
     }
 }
+
+private const val INITIAL_RECOMMENDATIONS_COUNT = 10
+private const val RECOMMENDATIONS_PAGE_SIZE = 10
 
 @Composable
 private fun StatCard(label: String, value: String, modifier: Modifier, compact: Boolean = false) {
@@ -1327,30 +1329,51 @@ private fun CompactPlayerBar(
     }
     Box(Modifier.fillMaxWidth().height(40.dp)) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
-            Text("⏮", modifier = Modifier.size(40.dp).clickable(enabled = track != null) { scope.launch { container.audioPlayer.previous() } }, color = if (track != null) Color.White else Color(0xFF55616A), fontWeight = FontWeight.Bold, fontSize = 30.sp, textAlign = TextAlign.Center)
-            Text("⏪︎", modifier = Modifier.size(40.dp).clickable(enabled = track != null) { scope.launch { container.audioPlayer.seekTo((state.positionMs - 10_000).coerceAtLeast(0)) } }, color = if (track != null) Color.White else Color(0xFF55616A), fontSize = 28.sp, textAlign = TextAlign.Center)
-            if (state.status == PlayerStatus.LOADING) {
-                Text("⏳︎", modifier = Modifier.size(40.dp), color = MaterialTheme.colors.primary, fontSize = 30.sp, textAlign = TextAlign.Center)
-            } else Text(if (state.status == PlayerStatus.PLAYING) "⏸" else "▶", modifier = Modifier.size(40.dp).clickable(enabled = track != null) { scope.launch { if (state.status == PlayerStatus.PLAYING) container.audioPlayer.pause() else container.audioPlayer.play() } }, color = MaterialTheme.colors.primary, fontSize = 30.sp, textAlign = TextAlign.Center)
-            Text("⏩︎", modifier = Modifier.size(40.dp).clickable(enabled = track != null) { scope.launch { container.audioPlayer.seekTo((state.positionMs + 10_000).coerceAtMost(state.durationMs)) } }, color = if (track != null) Color.White else Color(0xFF55616A), fontSize = 28.sp, textAlign = TextAlign.Center)
-            Text("⏭", modifier = Modifier.size(40.dp).clickable(enabled = track != null) { scope.launch { container.audioPlayer.next() } }, color = if (track != null) Color.White else Color(0xFF55616A), fontWeight = FontWeight.Bold, fontSize = 30.sp, textAlign = TextAlign.Center)
-            Text(
-                if (favoriteLoading) "…" else if (isLiked) "♥" else "♡",
-                modifier = Modifier.size(40.dp).clickable(enabled = track != null && !favoriteLoading) { onToggleLiked() },
-                color = if (isLiked) Color(0xFFFF4D67) else if (track != null) Color.White else Color(0xFF55616A),
-                fontSize = 32.sp,
-                textAlign = TextAlign.Center,
-            )
-            Text(
-                "⇄",
-                color = when { state.shuffleEnabled -> Color.White; state.queue.size > 1 -> MaterialTheme.colors.primary; else -> Color(0xFF55616A) },
-                modifier = Modifier.background(if (state.shuffleEnabled) Color(0xFF2F6B45) else Color.Transparent, RoundedCornerShape(6.dp))
-                    .clickable(enabled = state.queue.size > 1) { scope.launch { container.audioPlayer.shuffleUpcoming(); onOpenQueue() } }
-                    .size(40.dp),
-                fontSize = 28.sp,
-                fontWeight = FontWeight.Bold,
-                textAlign = TextAlign.Center,
-            )
+            // Box(contentAlignment = Center) zamiast samego textAlign na Text — textAlign centruje
+            // tylko poziomo. Różne glify (⏸ vs ⏮ vs ♡) mają różne metryki czcionki (ascent/descent),
+            // więc bez jawnego wyśrodkowania w Boxie każdy z nich "siadał" na innej wysokości mimo
+            // identycznego Modifier.size(40.dp) na samym Tekście.
+            Box(Modifier.size(40.dp).clickable(enabled = track != null) { scope.launch { container.audioPlayer.previous() } }, contentAlignment = Alignment.Center) {
+                Text("⏮", color = if (track != null) Color.White else Color(0xFF55616A), fontWeight = FontWeight.Bold, fontSize = 30.sp)
+            }
+            Box(Modifier.size(40.dp).clickable(enabled = track != null) { scope.launch { container.audioPlayer.seekTo((state.positionMs - 10_000).coerceAtLeast(0)) } }, contentAlignment = Alignment.Center) {
+                Text("⏪︎", color = if (track != null) Color.White else Color(0xFF55616A), fontSize = 28.sp)
+            }
+            Box(Modifier.size(40.dp), contentAlignment = Alignment.Center) {
+                if (state.status == PlayerStatus.LOADING) {
+                    Text("⏳︎", color = MaterialTheme.colors.primary, fontSize = 30.sp)
+                } else {
+                    Box(Modifier.fillMaxSize().clickable(enabled = track != null) { scope.launch { if (state.status == PlayerStatus.PLAYING) container.audioPlayer.pause() else container.audioPlayer.play() } }, contentAlignment = Alignment.Center) {
+                        Text(if (state.status == PlayerStatus.PLAYING) "⏸" else "▶", color = MaterialTheme.colors.primary, fontSize = 30.sp)
+                    }
+                }
+            }
+            Box(Modifier.size(40.dp).clickable(enabled = track != null) { scope.launch { container.audioPlayer.seekTo((state.positionMs + 10_000).coerceAtMost(state.durationMs)) } }, contentAlignment = Alignment.Center) {
+                Text("⏩︎", color = if (track != null) Color.White else Color(0xFF55616A), fontSize = 28.sp)
+            }
+            Box(Modifier.size(40.dp).clickable(enabled = track != null) { scope.launch { container.audioPlayer.next() } }, contentAlignment = Alignment.Center) {
+                Text("⏭", color = if (track != null) Color.White else Color(0xFF55616A), fontWeight = FontWeight.Bold, fontSize = 30.sp)
+            }
+            Box(Modifier.size(40.dp).clickable(enabled = track != null && !favoriteLoading) { onToggleLiked() }, contentAlignment = Alignment.Center) {
+                Text(
+                    if (favoriteLoading) "…" else if (isLiked) "♥" else "♡",
+                    color = if (isLiked) Color(0xFFFF4D67) else if (track != null) Color.White else Color(0xFF55616A),
+                    fontSize = 32.sp,
+                )
+            }
+            Box(
+                Modifier.size(40.dp)
+                    .background(if (state.shuffleEnabled) Color(0xFF2F6B45) else Color.Transparent, RoundedCornerShape(6.dp))
+                    .clickable(enabled = state.queue.size > 1) { scope.launch { container.audioPlayer.shuffleUpcoming(); onOpenQueue() } },
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    "⇄",
+                    color = when { state.shuffleEnabled -> Color.White; state.queue.size > 1 -> MaterialTheme.colors.primary; else -> Color(0xFF55616A) },
+                    fontSize = 28.sp,
+                    fontWeight = FontWeight.Bold,
+                )
+            }
         }
     }
     Row(Modifier.fillMaxWidth().height(38.dp), verticalAlignment = Alignment.CenterVertically) {
