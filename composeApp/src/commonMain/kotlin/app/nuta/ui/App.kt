@@ -187,7 +187,7 @@ private fun NutaAppContent(container: AppContainer) {
         // rememberSaveable (nie remember) — na Androidzie obrót ekranu domyślnie odtwarza
         // Activity od nowa; bez tego zakładka zawsze wracała do Start po obrocie.
         var destination by rememberSaveable(
-            saver = Saver<Destination, String>(save = { it.name }, restore = { name -> Destination.valueOf(name) }),
+            stateSaver = Saver<Destination, String>(save = { it.name }, restore = { name -> Destination.valueOf(name) }),
         ) { mutableStateOf(Destination.HOME) }
         var selectedPlaylist by remember { mutableStateOf<Playlist?>(null) }
         var playlists by remember { mutableStateOf<List<Playlist>>(emptyList()) }
