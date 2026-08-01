@@ -1029,12 +1029,12 @@ private fun TrackRow(
             }
         }
         if (!compact) Text(track.album, color = Color(0xFF8F9CA6), fontSize = 12.sp, modifier = Modifier.width(170.dp), maxLines = 1, overflow = TextOverflow.Ellipsis)
-        // Wszystkie trzy akcje w jednym poziomym rzędzie zamiast rozrzucone w linii tytułu/podtytułu —
-        // przy różnych wysokościach tych linii nakładały się na siebie. Poziomo (zamiast kolumny)
-        // też nie podbija wysokości wiersza — pionowy stos 3 przycisków wcześniej drastycznie
-        // zmniejszał liczbę widocznych utworów na ekranie.
+        // Wszystkie trzy akcje w jednej pionowej kolumnie zamiast rozrzucone w linii tytułu/podtytułu —
+        // przy różnych wysokościach tych linii nakładały się na siebie. Mniejsze przyciski (24dp)
+        // niż w pierwszej wersji (32dp), żeby kolumna 3 przycisków nie podbijała wysokości wiersza
+        // dużo ponad to, co i tak zajmuje tekst tytułu+wykonawcy.
         if (titleAction != null || subtitleAction != null || trailingAction != null) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 titleAction?.invoke()
                 subtitleAction?.invoke()
                 trailingAction?.invoke()
@@ -1048,30 +1048,30 @@ private fun TrackRow(
 private fun TrackPlayButton(onClick: () -> Unit) {
     OutlinedButton(
         onClick = onClick,
-        modifier = Modifier.size(32.dp),
+        modifier = Modifier.size(24.dp),
         contentPadding = PaddingValues(0.dp),
         border = null,
-    ) { Text("▶") }
+    ) { Text("▶", fontSize = 11.sp) }
 }
 
 @Composable
 private fun TrackQueueButton(onClick: () -> Unit) {
     OutlinedButton(
         onClick = onClick,
-        modifier = Modifier.size(32.dp),
+        modifier = Modifier.size(24.dp),
         contentPadding = PaddingValues(0.dp),
         border = null,
-    ) { Text("+") }
+    ) { Text("+", fontSize = 12.sp) }
 }
 
 @Composable
 private fun TrackPlaylistButton(onClick: () -> Unit) {
     OutlinedButton(
         onClick = onClick,
-        modifier = Modifier.size(32.dp),
+        modifier = Modifier.size(24.dp),
         contentPadding = PaddingValues(0.dp),
         border = null,
-    ) { Text("☰", fontSize = 14.sp) }
+    ) { Text("☰", fontSize = 10.sp) }
 }
 
 @Composable
