@@ -1,5 +1,7 @@
 package app.nuta.android
 
+import android.app.PendingIntent
+import android.content.Intent
 import android.os.Bundle
 import androidx.media3.common.ForwardingPlayer
 import androidx.media3.common.Player
@@ -63,7 +65,14 @@ class PlaybackService : MediaSessionService() {
             .setSessionCommand(SessionCommand(COMMAND_SEEK_FORWARD_10, Bundle.EMPTY))
             .setSlots(CommandButton.SLOT_OVERFLOW)
             .build()
+        val openAppIntent = PendingIntent.getActivity(
+            this,
+            0,
+            Intent(this, MainActivity::class.java).setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_NEW_TASK),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
         mediaSession = MediaSession.Builder(this, QueueAwarePlayer(player))
+            .setSessionActivity(openAppIntent)
             .setCallback(object : MediaSession.Callback {
                 override fun onConnect(session: MediaSession, controller: MediaSession.ControllerInfo): MediaSession.ConnectionResult =
                     MediaSession.ConnectionResult.AcceptedResultBuilder(session)
