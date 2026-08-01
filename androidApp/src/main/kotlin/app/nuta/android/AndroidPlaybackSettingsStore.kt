@@ -25,6 +25,7 @@ class AndroidPlaybackSettingsStore(private val preferences: SharedPreferences) :
             .putInt("homeRecommendations", value.homeRecommendations)
             .putBoolean("prefetchEnabled", value.prefetchEnabled)
             .putBoolean("playerPinned", value.playerPinned)
+            .putInt("cacheSizeMb", value.cacheSizeMb)
             .apply()
         state.value = value
     }
@@ -38,6 +39,7 @@ class AndroidPlaybackSettingsStore(private val preferences: SharedPreferences) :
         homeRecommendations = preferences.getInt("homeRecommendations", 6).coerceIn(3, 50),
         prefetchEnabled = preferences.getBoolean("prefetchEnabled", false),
         playerPinned = preferences.getBoolean("playerPinned", false),
+        cacheSizeMb = preferences.getInt("cacheSizeMb", 150).coerceIn(25, 500),
     )
 
     private inline fun <reified T : Enum<T>> enumValue(value: String?, fallback: T): T =

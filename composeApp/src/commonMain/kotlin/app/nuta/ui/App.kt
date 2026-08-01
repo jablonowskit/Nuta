@@ -723,6 +723,13 @@ private fun SettingsScreen(container: AppContainer) {
                     Spacer(Modifier.height(6.dp))
                     Text(stringResource(Res.string.cache_cleared), color = Color(0xFF8FE9AD), fontSize = 12.sp)
                 }
+                Spacer(Modifier.height(10.dp))
+                Text(stringResource(Res.string.cache_limit_label), fontSize = 12.sp)
+                SettingOptions(
+                    options = listOf(50 to "50 MB", 100 to "100 MB", 150 to "150 MB", 300 to "300 MB"),
+                    selected = settings.cacheSizeMb,
+                ) { container.playbackSettings.update(settings.copy(cacheSizeMb = it)) }
+                Text(stringResource(Res.string.cache_limit_restart_note), color = Color(0xFF8D9BA6), fontSize = 11.sp)
             }
         }
         item {
@@ -1019,10 +1026,12 @@ private fun TrackRow(
             }
         }
         if (!compact) Text(track.album, color = Color(0xFF8F9CA6), fontSize = 12.sp, modifier = Modifier.width(170.dp), maxLines = 1, overflow = TextOverflow.Ellipsis)
-        // Wszystkie trzy akcje w jednej pionowej kolumnie zamiast rozrzucone w linii tytułu/podtytułu —
-        // przy różnych wysokościach tych linii nakładały się na siebie zamiast się ładnie ułożyć.
+        // Wszystkie trzy akcje w jednym poziomym rzędzie zamiast rozrzucone w linii tytułu/podtytułu —
+        // przy różnych wysokościach tych linii nakładały się na siebie. Poziomo (zamiast kolumny)
+        // też nie podbija wysokości wiersza — pionowy stos 3 przycisków wcześniej drastycznie
+        // zmniejszał liczbę widocznych utworów na ekranie.
         if (titleAction != null || subtitleAction != null || trailingAction != null) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 titleAction?.invoke()
                 subtitleAction?.invoke()
                 trailingAction?.invoke()
