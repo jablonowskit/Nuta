@@ -24,6 +24,7 @@ class AndroidPlaybackSettingsStore(private val preferences: SharedPreferences) :
             .putString("loudnessNormalization", value.loudnessNormalization.name)
             .putInt("homeRecommendations", value.homeRecommendations)
             .putBoolean("prefetchEnabled", value.prefetchEnabled)
+            .putBoolean("playerPinned", value.playerPinned)
             .apply()
         state.value = value
     }
@@ -36,6 +37,7 @@ class AndroidPlaybackSettingsStore(private val preferences: SharedPreferences) :
         loudnessNormalization = enumValue(preferences.getString("loudnessNormalization", null), LoudnessNormalization.OFF),
         homeRecommendations = preferences.getInt("homeRecommendations", 6).coerceIn(3, 50),
         prefetchEnabled = preferences.getBoolean("prefetchEnabled", false),
+        playerPinned = preferences.getBoolean("playerPinned", false),
     )
 
     private inline fun <reified T : Enum<T>> enumValue(value: String?, fallback: T): T =

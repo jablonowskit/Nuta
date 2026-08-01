@@ -5,7 +5,6 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.keyframes
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.ui.draw.alpha
 import androidx.compose.foundation.layout.Arrangement
@@ -407,8 +406,12 @@ private fun NutaAppContent(container: AppContainer) {
                     selectedPlaylist = null
                     loadError = null
                 }
+                // Przypięty pasek (📌) jest widoczny na każdej zakładce, dopóki coś gra/jest wczytane;
+                // bez przypięcia zachowanie jak dotąd — tylko na zakładce Player/Kolejka.
+                val showPlayerBar = destination == Destination.QUEUE ||
+                    (playbackSettings.playerPinned && playerState.currentTrack != null)
                 if (compact) {
-                    if (destination == Destination.QUEUE) {
+                    if (showPlayerBar) {
                         Divider(color = Color(0xFF2A343D))
                         CompactPlayerBar(playerState, container, similarModeActive, { similarModeActive = it }, openQueue, displayedTrackLiked, favoriteLoading, toggleCurrentTrackLiked)
                     }
@@ -418,7 +421,7 @@ private fun NutaAppContent(container: AppContainer) {
                         loadError = null
                         loading = false
                     }
-                } else if (destination == Destination.QUEUE) {
+                } else if (showPlayerBar) {
                     Divider(color = Color(0xFF2A343D))
                     PlayerBar(
                         state = playerState,
@@ -1294,7 +1297,7 @@ private fun CompactPlayerBar(
     // a przy stałych 164dp/76dp długi tekst nachodziłby na przyciski zamiast rozepchnąć układ.
     Column(Modifier.fillMaxWidth().background(Color(0xFF131A20)).padding(horizontal = 10.dp, vertical = 5.dp)) {
     Row(
-        Modifier.fillMaxWidth().border(1.dp, Color.Yellow),
+        Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.weight(1f).clickable { onOpenQueue() }) {
@@ -1304,9 +1307,16 @@ private fun CompactPlayerBar(
             }
             Text(track?.artists?.joinToString() ?: stringResource(Res.string.choose_track), color = Color(0xFF8D9BA6), fontSize = 11.sp, maxLines = 2, overflow = TextOverflow.Clip, softWrap = true)
         }
+        val pinnedSettings by container.playbackSettings.settings.collectAsState()
+        Text(
+            if (pinnedSettings.playerPinned) "📌" else "📍",
+            fontSize = 18.sp,
+            modifier = Modifier.padding(start = 6.dp).clickable {
+                container.playbackSettings.update(pinnedSettings.copy(playerPinned = !pinnedSettings.playerPinned))
+            },
+        )
     }
-    // TODO usunąć: żółta ramka tylko do debugowania wysokości wiersza z przyciskami.
-    Box(Modifier.fillMaxWidth().height(40.dp).border(1.dp, Color.Yellow)) {
+    Box(Modifier.fillMaxWidth().height(40.dp)) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
             Text("⏮", modifier = Modifier.size(40.dp).clickable(enabled = track != null) { scope.launch { container.audioPlayer.previous() } }, color = if (track != null) Color.White else Color(0xFF55616A), fontWeight = FontWeight.Bold, fontSize = 30.sp, textAlign = TextAlign.Center)
             Text("⏪︎", modifier = Modifier.size(40.dp).clickable(enabled = track != null) { scope.launch { container.audioPlayer.seekTo((state.positionMs - 10_000).coerceAtLeast(0)) } }, color = if (track != null) Color.White else Color(0xFF55616A), fontSize = 28.sp, textAlign = TextAlign.Center)
@@ -1334,7 +1344,7 @@ private fun CompactPlayerBar(
             )
         }
     }
-    Row(Modifier.fillMaxWidth().height(38.dp).border(1.dp, Color.Yellow), verticalAlignment = Alignment.CenterVertically) {
+    Row(Modifier.fillMaxWidth().height(38.dp), verticalAlignment = Alignment.CenterVertically) {
         Text(formatTime(state.positionMs), color = Color(0xFF8D9BA6), fontSize = 10.sp)
         Slider(
             value = if (state.durationMs > 0) state.positionMs.coerceAtMost(state.durationMs).toFloat() else 0f,
@@ -1412,6 +1422,14 @@ private fun PlayerBar(
             Text(track?.title ?: stringResource(Res.string.nothing_playing), maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.Bold, lineHeight = 16.sp)
             Text(track?.let { playerSubtitle(it, state) } ?: stringResource(Res.string.choose_track), color = Color(0xFF8D9BA6), fontSize = 12.sp, maxLines = 1, lineHeight = 14.sp)
         }
+        val pinnedSettings by container.playbackSettings.settings.collectAsState()
+        Text(
+            if (pinnedSettings.playerPinned) "📌" else "📍",
+            fontSize = 18.sp,
+            modifier = Modifier.padding(start = 4.dp).clickable {
+                container.playbackSettings.update(pinnedSettings.copy(playerPinned = !pinnedSettings.playerPinned))
+            },
+        )
         Spacer(Modifier.width(14.dp))
         OutlinedButton(onClick = { scope.launch { container.audioPlayer.previous() } }, enabled = track != null, modifier = Modifier.size(74.dp), contentPadding = PaddingValues(0.dp)) { Text("⏮", fontSize = 28.sp) }
         Spacer(Modifier.width(6.dp))
