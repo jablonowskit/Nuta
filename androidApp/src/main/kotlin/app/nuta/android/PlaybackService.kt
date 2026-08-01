@@ -31,7 +31,8 @@ class PlaybackService : MediaSessionService() {
         super.onCreate()
         val settingsStore = AndroidPlaybackSettingsStore(getSharedPreferences("playback-settings", MODE_PRIVATE))
         val upstreamFactory = DefaultHttpDataSource.Factory().setUserAgent(USER_AGENT).setAllowCrossProtocolRedirects(true)
-        val cache = SimpleCache(File(cacheDir, "stream-cache"), LeastRecentlyUsedCacheEvictor(CACHE_SIZE_BYTES), StandaloneDatabaseProvider(this))
+        val cacheSizeBytes = settingsStore.settings.value.cacheSizeMb.toLong() * 1024 * 1024
+        val cache = SimpleCache(File(cacheDir, "stream-cache"), LeastRecentlyUsedCacheEvictor(cacheSizeBytes), StandaloneDatabaseProvider(this))
         streamCache = cache
         val cacheFactory = CacheDataSource.Factory()
             .setCache(cache)
@@ -146,7 +147,6 @@ class PlaybackService : MediaSessionService() {
 
     companion object {
         private const val USER_AGENT = "Mozilla/5.0 (Linux; Android 15) AppleWebKit/537.36 Chrome/128.0 Mobile Safari/537.36"
-        private const val CACHE_SIZE_BYTES = 150L * 1024 * 1024
         private const val COMMAND_SEEK_BACK_10 = "app.nuta.SEEK_BACK_10"
         private const val COMMAND_SEEK_FORWARD_10 = "app.nuta.SEEK_FORWARD_10"
 

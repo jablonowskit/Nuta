@@ -20,6 +20,8 @@ data class YouTubePlaybackSettings(
     val prefetchEnabled: Boolean = false,
     /** Gdy true, pasek playera zostaje przypięty i widoczny na każdej zakładce, nie tylko na Player/Kolejce. */
     val playerPinned: Boolean = false,
+    /** Limit cache'u zbuforowanych strumieni audio (MB). Zmiana działa dopiero po restarcie aplikacji. */
+    val cacheSizeMb: Int = 150,
 )
 
 interface PlaybackSettingsStore {

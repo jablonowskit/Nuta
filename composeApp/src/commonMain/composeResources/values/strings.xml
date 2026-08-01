@@ -91,6 +91,8 @@
     <string name="cache_size_unknown">Calculating…</string>
     <string name="cache_clear_button">Clear cache</string>
     <string name="cache_cleared">Cache cleared</string>
+    <string name="cache_limit_label">Cache size limit</string>
+    <string name="cache_limit_restart_note">Takes effect after restarting the app</string>
 
     <!-- Diagnostics -->
     <string name="diagnostics_title">Diagnostics</string>

@@ -93,6 +93,8 @@
     <string name="cache_size_unknown">Obliczanie…</string>
     <string name="cache_clear_button">Wyczyść cache</string>
     <string name="cache_cleared">Cache wyczyszczony</string>
+    <string name="cache_limit_label">Limit rozmiaru cache</string>
+    <string name="cache_limit_restart_note">Zmiana działa dopiero po restarcie aplikacji</string>
 
     <!-- Diagnostyka -->
     <string name="diagnostics_title">Diagnostyka</string>
