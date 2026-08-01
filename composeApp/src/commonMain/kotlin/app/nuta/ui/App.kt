@@ -1305,18 +1305,16 @@ private fun CompactPlayerBar(
         Column(Modifier.weight(1f).clickable { onOpenQueue() }) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Text(track?.title ?: stringResource(Res.string.nothing_playing), maxLines = 2, overflow = TextOverflow.Clip, softWrap = true, fontWeight = FontWeight.Bold, fontSize = 14.sp, modifier = Modifier.weight(1f))
-                Text(
-                    // Kodek i bitrate na osobnych liniach — węższa kolumna niż jedna długa linia z "•".
-                    streamDescription(state).replace(" • ", "\n"),
-                    color = Color(0xFF8D9BA6),
-                    fontSize = 10.sp,
-                    maxLines = 2,
-                    overflow = TextOverflow.Clip,
-                    textAlign = TextAlign.End,
-                    modifier = Modifier.width(70.dp).padding(start = 4.dp),
-                )
+                streamBitrateLabel(state)?.let {
+                    Text(it, color = Color(0xFF8D9BA6), fontSize = 10.sp, maxLines = 1, modifier = Modifier.padding(start = 4.dp))
+                }
             }
-            Text(track?.artists?.joinToString() ?: stringResource(Res.string.choose_track), color = Color(0xFF8D9BA6), fontSize = 11.sp, maxLines = 2, overflow = TextOverflow.Clip, softWrap = true)
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text(track?.artists?.joinToString() ?: stringResource(Res.string.choose_track), color = Color(0xFF8D9BA6), fontSize = 11.sp, maxLines = 2, overflow = TextOverflow.Clip, softWrap = true, modifier = Modifier.weight(1f))
+                streamCodecLabel(state)?.let {
+                    Text(it, color = Color(0xFF8D9BA6), fontSize = 10.sp, maxLines = 1, modifier = Modifier.padding(start = 4.dp))
+                }
+            }
         }
         val pinnedSettings by container.playbackSettings.settings.collectAsState()
         Text(
@@ -1391,6 +1389,19 @@ private fun CompactPlayerBar(
 private fun playerSubtitle(track: Track, state: PlayerState): String {
     val stream = streamDescription(state).takeIf(String::isNotBlank)
     return listOfNotNull(track.artists.joinToString().takeIf(String::isNotBlank), stream).joinToString(" • ")
+}
+
+private fun streamCodecLabel(state: PlayerState): String? = state.streamBitrate?.takeIf { it > 0 }?.let {
+    when {
+        state.streamCodec.orEmpty().contains("mp4a", ignoreCase = true) -> "AAC"
+        state.streamCodec.orEmpty().contains("opus", ignoreCase = true) -> "Opus"
+        state.streamCodec.isNullOrBlank() -> null
+        else -> state.streamCodec
+    }
+}
+
+private fun streamBitrateLabel(state: PlayerState): String? = state.streamBitrate?.takeIf { it > 0 }?.let { bitrate ->
+    "${(bitrate + 500) / 1_000} kb/s"
 }
 
 private fun streamDescription(state: PlayerState): String = state.streamBitrate?.takeIf { it > 0 }?.let { bitrate ->
