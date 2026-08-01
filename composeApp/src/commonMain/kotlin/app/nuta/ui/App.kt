@@ -1526,7 +1526,11 @@ private fun QueueScreen(state: PlayerState, container: AppContainer) {
                                     Text(
                                         buildString {
                                             append(item.artists.joinToString())
-                                            if (item.album.isNotBlank()) append(" • ${item.album}")
+                                            // Utwory rozwiązywane z YouTube często nie mają prawdziwego albumu —
+                                            // pole album bywa wtedy wypełnione tytułem utworu, co dawało widoczne powtórzenie.
+                                            if (item.album.isNotBlank() && !item.album.equals(item.title, ignoreCase = true)) {
+                                                append(" • ${item.album}")
+                                            }
                                         },
                                         color = Color(0xFF8F9CA6),
                                         fontSize = 12.sp,
