@@ -1012,18 +1012,22 @@ private fun TrackRow(
             Text(if (active) "▶" else "♪", color = if (active) MaterialTheme.colors.primary else Color(0xFF7D8B95), modifier = Modifier.width(28.dp))
         }
         Column(Modifier.weight(1f)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(track.title, modifier = Modifier.weight(1f), fontWeight = if (active) FontWeight.Bold else FontWeight.Normal)
-                titleAction?.invoke()
-            }
+            Text(track.title, fontWeight = if (active) FontWeight.Bold else FontWeight.Normal)
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(track.artists.joinToString(), modifier = Modifier.weight(1f), color = Color(0xFF8F9CA6), fontSize = 12.sp)
                 Text(formatTime(track.durationMs), color = Color(0xFF8F9CA6), fontSize = 12.sp, modifier = Modifier.padding(end = 8.dp))
-                subtitleAction?.invoke()
             }
         }
         if (!compact) Text(track.album, color = Color(0xFF8F9CA6), fontSize = 12.sp, modifier = Modifier.width(170.dp), maxLines = 1, overflow = TextOverflow.Ellipsis)
-        trailingAction?.invoke()
+        // Wszystkie trzy akcje w jednej pionowej kolumnie zamiast rozrzucone w linii tytułu/podtytułu —
+        // przy różnych wysokościach tych linii nakładały się na siebie zamiast się ładnie ułożyć.
+        if (titleAction != null || subtitleAction != null || trailingAction != null) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                titleAction?.invoke()
+                subtitleAction?.invoke()
+                trailingAction?.invoke()
+            }
+        }
     }
     }
 }
