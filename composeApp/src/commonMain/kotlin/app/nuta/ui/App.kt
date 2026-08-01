@@ -1378,35 +1378,35 @@ private fun PlayerBar(
             Text(track?.let { playerSubtitle(it, state) } ?: stringResource(Res.string.choose_track), color = Color(0xFF8D9BA6), fontSize = 12.sp, maxLines = 1, lineHeight = 14.sp)
         }
         Spacer(Modifier.width(14.dp))
-        OutlinedButton(onClick = { scope.launch { container.audioPlayer.previous() } }, enabled = track != null, modifier = Modifier.size(42.dp), contentPadding = PaddingValues(0.dp)) { Text("⏮") }
+        OutlinedButton(onClick = { scope.launch { container.audioPlayer.previous() } }, enabled = track != null, modifier = Modifier.size(52.dp), contentPadding = PaddingValues(0.dp)) { Text("⏮", fontSize = 20.sp) }
         Spacer(Modifier.width(6.dp))
-        Button(onClick = { scope.launch { if (state.status == PlayerStatus.PLAYING) container.audioPlayer.pause() else container.audioPlayer.play() } }, enabled = track != null && state.status != PlayerStatus.LOADING, modifier = Modifier.size(42.dp), contentPadding = PaddingValues(0.dp)) {
-            if (state.status == PlayerStatus.LOADING) Text("⏳︎")
-            else Text(if (state.status == PlayerStatus.PLAYING) "⏸" else "▶")
+        Button(onClick = { scope.launch { if (state.status == PlayerStatus.PLAYING) container.audioPlayer.pause() else container.audioPlayer.play() } }, enabled = track != null && state.status != PlayerStatus.LOADING, modifier = Modifier.size(52.dp), contentPadding = PaddingValues(0.dp)) {
+            if (state.status == PlayerStatus.LOADING) Text("⏳︎", fontSize = 20.sp)
+            else Text(if (state.status == PlayerStatus.PLAYING) "⏸" else "▶", fontSize = 20.sp)
         }
         Spacer(Modifier.width(6.dp))
-        OutlinedButton(onClick = { scope.launch { container.audioPlayer.stop() } }, enabled = track != null && state.status != PlayerStatus.IDLE, modifier = Modifier.size(42.dp), contentPadding = PaddingValues(0.dp)) { Text("⏹") }
+        OutlinedButton(onClick = { scope.launch { container.audioPlayer.stop() } }, enabled = track != null && state.status != PlayerStatus.IDLE, modifier = Modifier.size(52.dp), contentPadding = PaddingValues(0.dp)) { Text("⏹", fontSize = 20.sp) }
         Spacer(Modifier.width(6.dp))
-        OutlinedButton(onClick = { scope.launch { container.audioPlayer.next() } }, enabled = track != null, modifier = Modifier.size(42.dp), contentPadding = PaddingValues(0.dp)) { Text("⏭") }
+        OutlinedButton(onClick = { scope.launch { container.audioPlayer.next() } }, enabled = track != null, modifier = Modifier.size(52.dp), contentPadding = PaddingValues(0.dp)) { Text("⏭", fontSize = 20.sp) }
         Spacer(Modifier.width(6.dp))
         OutlinedButton(
             onClick = onToggleLiked,
             enabled = track != null && !favoriteLoading,
-            modifier = Modifier.size(42.dp),
+            modifier = Modifier.size(52.dp),
             contentPadding = PaddingValues(0.dp),
             colors = ButtonDefaults.outlinedButtonColors(contentColor = if (isLiked) Color(0xFFFF4D67) else Color.White),
-        ) { Text(if (favoriteLoading) "…" else if (isLiked) "♥" else "♡", fontSize = 18.sp) }
+        ) { Text(if (favoriteLoading) "…" else if (isLiked) "♥" else "♡", fontSize = 22.sp) }
         Spacer(Modifier.width(6.dp))
         OutlinedButton(
             onClick = { scope.launch { container.audioPlayer.shuffleUpcoming(); onOpenQueue() } },
             enabled = state.queue.size > 1,
-            modifier = Modifier.size(42.dp),
+            modifier = Modifier.size(52.dp),
             contentPadding = PaddingValues(0.dp),
             colors = ButtonDefaults.outlinedButtonColors(
                 backgroundColor = if (state.shuffleEnabled) Color(0xFF2F6B45) else Color.Transparent,
                 contentColor = if (state.shuffleEnabled) Color.White else MaterialTheme.colors.primary,
             ),
-        ) { Text("⇄", fontWeight = FontWeight.Bold) }
+        ) { Text("⇄", fontWeight = FontWeight.Bold, fontSize = 20.sp) }
         Spacer(Modifier.width(6.dp))
         OutlinedButton(
             onClick = {
@@ -1439,13 +1439,13 @@ private fun PlayerBar(
                 }
             },
             enabled = track != null && !radioLoading,
-            modifier = Modifier.size(42.dp),
+            modifier = Modifier.size(52.dp),
             contentPadding = PaddingValues(0.dp),
             colors = ButtonDefaults.outlinedButtonColors(
                 backgroundColor = if (similarModeActive) Color(0xFF2F6B45) else Color.Transparent,
                 contentColor = if (similarModeActive) Color.White else MaterialTheme.colors.primary,
             ),
-        ) { Text(if (radioLoading) "…" else "♬+") }
+        ) { Text(if (radioLoading) "…" else "♬+", fontSize = 18.sp) }
         Spacer(Modifier.width(18.dp))
         Text(formatTime(state.positionMs), color = Color(0xFF8D9BA6), fontSize = 11.sp)
         Slider(
