@@ -51,7 +51,7 @@ class SpotifyWebSearchRepository(
                     "timeZone" to JsonPrimitive("Europe/Warsaw"),
                     "sp_t" to JsonPrimitive(""),
                     "facet" to JsonPrimitive(""),
-                    "sectionItemsLimit" to JsonPrimitive(10),
+                    "sectionItemsLimit" to JsonPrimitive(20),
                     "includeEpisodeContentRatingsV2" to JsonPrimitive(false),
                 )),
                 "operationName" to JsonPrimitive("home"),
@@ -60,7 +60,7 @@ class SpotifyWebSearchRepository(
                 )))),
             )).toString()
             val root = postJson("https://api-partner.spotify.com/pathfinder/v2/query", body, token)
-            val playlists = collectPlaylists(root).distinctBy(Playlist::id).take(30)
+            val playlists = collectPlaylists(root).distinctBy(Playlist::id).take(60)
             logger.info("SpotifyHome", "home_completed", "Pobrano rekomendowane playlisty", operationId, mapOf("count" to playlists.size.toString()))
             playlists
         } catch (error: Throwable) {
