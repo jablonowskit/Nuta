@@ -1010,7 +1010,7 @@ private fun TrackRow(
         Modifier.fillMaxWidth()
             .background(if (active) Color(0xFF203129) else Color.Transparent, RoundedCornerShape(8.dp))
             .clickable(onClick = onPlay)
-            .padding(horizontal = 12.dp, vertical = 11.dp),
+            .padding(horizontal = 12.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (active && loading) {
@@ -1019,7 +1019,10 @@ private fun TrackRow(
             Text(if (active) "▶" else "♪", color = if (active) MaterialTheme.colors.primary else Color(0xFF7D8B95), modifier = Modifier.width(28.dp))
         }
         Column(Modifier.weight(1f)) {
-            Text(track.title, fontWeight = if (active) FontWeight.Bold else FontWeight.Normal)
+            // Jedna linia z wielokropkiem zamiast zawijania do 2 linii — długie tytuły
+            // (częste, np. "(feat. ...)"/"Radio Edit") wcześniej prawie zawsze zajmowały
+            // dodatkową linię, znacząco zmniejszając liczbę widocznych utworów na ekranie.
+            Text(track.title, fontWeight = if (active) FontWeight.Bold else FontWeight.Normal, maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false)
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(track.artists.joinToString(), modifier = Modifier.weight(1f), color = Color(0xFF8F9CA6), fontSize = 12.sp)
                 Text(formatTime(track.durationMs), color = Color(0xFF8F9CA6), fontSize = 12.sp, modifier = Modifier.padding(end = 8.dp))
