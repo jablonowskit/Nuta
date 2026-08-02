@@ -1,0 +1,46 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Skala <1 i pivot na środku canvasu: oryginalna grafika sięgała niemal do krawędzi
+         108x108 (zaprojektowana pod stałe, okrągłe tło), co w adaptive iconie wystaje poza
+         bezpieczną strefę i bywa przycinane przez maski squircle/rounded-square launcherów. -->
+    <group
+        android:scaleX="0.8"
+        android:scaleY="0.8"
+        android:pivotX="54"
+        android:pivotY="54">
+        <!-- główka nuty (pierścień) -->
+        <path
+            android:strokeColor="#39FF88"
+            android:strokeWidth="9"
+            android:pathData="M45,80A11,11 0,1 1,67 80A11,11 0,1 1,45 80" />
+        <!-- laska nuty -->
+        <path
+            android:strokeColor="#39FF88"
+            android:strokeWidth="8"
+            android:strokeLineCap="round"
+            android:pathData="M67,80L67,18" />
+        <!-- chorągiewka ósemki -->
+        <path
+            android:fillColor="#39FF88"
+            android:pathData="M67,14C81,18 92,26 92,40C92,48 88,54 82,58C86,50 85,42 76,35C73,32.5 69,31 67,30Z" />
+        <!-- fale dźwiękowe -->
+        <path
+            android:strokeColor="#39FF88"
+            android:strokeWidth="8"
+            android:strokeLineCap="round"
+            android:pathData="M34,74A22,22 0,0 1,56 52" />
+        <path
+            android:strokeColor="#39FF88"
+            android:strokeWidth="8"
+            android:strokeLineCap="round"
+            android:pathData="M22,72A34,34 0,0 1,56 38" />
+        <path
+            android:strokeColor="#39FF88"
+            android:strokeWidth="8"
+            android:strokeLineCap="round"
+            android:pathData="M10,70A46,46 0,0 1,56 24" />
+    </group>
+</vector>
