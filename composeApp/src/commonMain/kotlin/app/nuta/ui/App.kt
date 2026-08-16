@@ -1,5 +1,6 @@
 package app.nuta.ui
 
+import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.keyframes
@@ -29,6 +30,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.AlertDialog
@@ -68,6 +70,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import org.jetbrains.compose.resources.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
@@ -406,14 +409,16 @@ private fun NutaAppContent(container: AppContainer) {
                     selectedPlaylist = null
                     loadError = null
                 }
-                // Przypięty pasek (📌) jest widoczny na każdej zakładce, dopóki coś gra/jest wczytane;
-                // bez przypięcia zachowanie jak dotąd — tylko na zakładce Player/Kolejka.
-                val showPlayerBar = destination == Destination.QUEUE ||
-                    (playbackSettings.playerPinned && playerState.currentTrack != null)
+                // Player jest częścią chrome'u aplikacji: widoczny na każdej zakładce, gdy jest co grać.
+                // Na zakładce Kolejka pokazujemy go nawet bez utworu (stan „Nic nie gra”).
+                val showPlayerBar = destination == Destination.QUEUE || playerState.currentTrack != null
+                val setCollapsed: (Boolean) -> Unit = {
+                    container.playbackSettings.update(playbackSettings.copy(playerCollapsed = it))
+                }
                 if (compact) {
                     if (showPlayerBar) {
                         Divider(color = Color(0xFF2A343D))
-                        CompactPlayerBar(playerState, container, similarModeActive, { similarModeActive = it }, openQueue, displayedTrackLiked, favoriteLoading, toggleCurrentTrackLiked)
+                        CompactPlayerBar(playerState, container, similarModeActive, { similarModeActive = it }, openQueue, displayedTrackLiked, favoriteLoading, toggleCurrentTrackLiked, playbackSettings.playerCollapsed, setCollapsed)
                     }
                     BottomNavigation(destination) {
                         destination = it
@@ -432,6 +437,8 @@ private fun NutaAppContent(container: AppContainer) {
                         isLiked = displayedTrackLiked,
                         favoriteLoading = favoriteLoading,
                         onToggleLiked = toggleCurrentTrackLiked,
+                        collapsed = playbackSettings.playerCollapsed,
+                        onCollapsedChange = setCollapsed,
                     )
                 }
             }
@@ -1293,13 +1300,64 @@ private fun CompactPlayerBar(
     isLiked: Boolean,
     favoriteLoading: Boolean,
     onToggleLiked: () -> Unit,
+    collapsed: Boolean,
+    onCollapsedChange: (Boolean) -> Unit,
 ) {
     val scope = rememberCoroutineScope()
     val track = state.currentTrack
     var radioLoading by remember { mutableStateOf(false) }
+    val dragThresholdPx = with(LocalDensity.current) { 24.dp.toPx() }
+    var dragAccumulated by remember { mutableStateOf(0f) }
     // Bez stałej wysokości: tytuł i wykonawca mogą zająć do 2 linii każdy (patrz niżej),
     // a przy stałych 164dp/76dp długi tekst nachodziłby na przyciski zamiast rozepchnąć układ.
-    Column(Modifier.fillMaxWidth().background(Color(0xFF131A20)).padding(horizontal = 10.dp, vertical = 5.dp)) {
+    Column(
+        Modifier.fillMaxWidth()
+            .background(Color(0xFF131A20))
+            .pointerInput(collapsed) {
+                // Palec w dół zwija pasek do jednej linii, w górę rozwija. Pasek leży poza
+                // LazyColumn treści, więc gest nie konkuruje ze scrollem listy.
+                detectVerticalDragGestures(
+                    onDragStart = { dragAccumulated = 0f },
+                    onDragEnd = {
+                        if (dragAccumulated > dragThresholdPx) onCollapsedChange(true)
+                        else if (dragAccumulated < -dragThresholdPx) onCollapsedChange(false)
+                        dragAccumulated = 0f
+                    },
+                ) { _, dy -> dragAccumulated += dy }
+            }
+            .padding(horizontal = 10.dp, vertical = 5.dp)
+            .animateContentSize(),
+    ) {
+    // Uchwyt: sygnalizuje, że pasek da się przeciągnąć, i sam działa jako tap-toggle.
+    Box(
+        Modifier.fillMaxWidth().height(14.dp).clickable { onCollapsedChange(!collapsed) },
+        contentAlignment = Alignment.Center,
+    ) {
+        Box(Modifier.width(36.dp).height(4.dp).background(Color(0xFF3A4650), RoundedCornerShape(2.dp)))
+    }
+    if (collapsed) {
+        Row(Modifier.fillMaxWidth().height(44.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                track?.title ?: stringResource(Res.string.nothing_playing),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                softWrap = false,
+                fontWeight = FontWeight.Bold,
+                fontSize = 14.sp,
+                modifier = Modifier.weight(1f).clickable { onOpenQueue() },
+            )
+            Box(Modifier.size(40.dp), contentAlignment = Alignment.Center) {
+                if (state.status == PlayerStatus.LOADING) {
+                    Text("⏳︎", color = MaterialTheme.colors.primary, fontSize = 30.sp)
+                } else {
+                    Box(Modifier.fillMaxSize().clickable(enabled = track != null) { scope.launch { if (state.status == PlayerStatus.PLAYING) container.audioPlayer.pause() else container.audioPlayer.play() } }, contentAlignment = Alignment.Center) {
+                        Text(if (state.status == PlayerStatus.PLAYING) "⏸" else "▶", color = MaterialTheme.colors.primary, fontSize = 30.sp)
+                    }
+                }
+            }
+        }
+        return@Column
+    }
     Row(
         Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
@@ -1318,14 +1376,6 @@ private fun CompactPlayerBar(
                 }
             }
         }
-        val pinnedSettings by container.playbackSettings.settings.collectAsState()
-        Text(
-            if (pinnedSettings.playerPinned) "📌" else "📍",
-            fontSize = 18.sp,
-            modifier = Modifier.padding(start = 6.dp).clickable {
-                container.playbackSettings.update(pinnedSettings.copy(playerPinned = !pinnedSettings.playerPinned))
-            },
-        )
     }
     Box(Modifier.fillMaxWidth().height(40.dp)) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
@@ -1447,9 +1497,37 @@ private fun PlayerBar(
     isLiked: Boolean,
     favoriteLoading: Boolean,
     onToggleLiked: () -> Unit,
+    collapsed: Boolean,
+    onCollapsedChange: (Boolean) -> Unit,
 ) {
     val scope = rememberCoroutineScope()
     val track = state.currentTrack
+    if (collapsed) {
+        // Na desktopie gest przeciągania nie ma sensu — zwijanie/rozwijanie idzie przyciskiem ▴/▾.
+        Row(
+            Modifier.fillMaxWidth().height(40.dp).background(Color(0xFF131A20)).padding(horizontal = 18.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                track?.title ?: stringResource(Res.string.nothing_playing),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.weight(1f).clickable { onOpenQueue() },
+            )
+            Text(
+                if (state.status == PlayerStatus.LOADING) "⏳︎" else if (state.status == PlayerStatus.PLAYING) "⏸" else "▶",
+                color = MaterialTheme.colors.primary,
+                fontSize = 20.sp,
+                modifier = Modifier.padding(horizontal = 12.dp)
+                    .clickable(enabled = track != null && state.status != PlayerStatus.LOADING) {
+                        scope.launch { if (state.status == PlayerStatus.PLAYING) container.audioPlayer.pause() else container.audioPlayer.play() }
+                    },
+            )
+            Text("▴", fontSize = 18.sp, modifier = Modifier.clickable { onCollapsedChange(false) })
+        }
+        return
+    }
     var radioLoading by remember { mutableStateOf(false) }
     var radioMessage by remember { mutableStateOf<String?>(null) }
     var radioMessageIsError by remember { mutableStateOf(false) }
@@ -1467,14 +1545,7 @@ private fun PlayerBar(
             Text(track?.title ?: stringResource(Res.string.nothing_playing), maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.Bold, lineHeight = 16.sp)
             Text(track?.let { playerSubtitle(it, state) } ?: stringResource(Res.string.choose_track), color = Color(0xFF8D9BA6), fontSize = 12.sp, maxLines = 1, lineHeight = 14.sp)
         }
-        val pinnedSettings by container.playbackSettings.settings.collectAsState()
-        Text(
-            if (pinnedSettings.playerPinned) "📌" else "📍",
-            fontSize = 18.sp,
-            modifier = Modifier.padding(start = 4.dp).clickable {
-                container.playbackSettings.update(pinnedSettings.copy(playerPinned = !pinnedSettings.playerPinned))
-            },
-        )
+        Text("▾", fontSize = 18.sp, modifier = Modifier.padding(start = 4.dp).clickable { onCollapsedChange(true) })
         Spacer(Modifier.width(14.dp))
         OutlinedButton(onClick = { scope.launch { container.audioPlayer.previous() } }, enabled = track != null, modifier = Modifier.size(74.dp), contentPadding = PaddingValues(0.dp)) { Text("⏮", fontSize = 28.sp) }
         Spacer(Modifier.width(6.dp))

@@ -23,7 +23,7 @@ class AndroidPlaybackSettingsStore(private val preferences: SharedPreferences) :
             .putString("youtubeBuffer", value.bufferSize.name)
             .putString("loudnessNormalization", value.loudnessNormalization.name)
             .putBoolean("prefetchEnabled", value.prefetchEnabled)
-            .putBoolean("playerPinned", value.playerPinned)
+            .putBoolean("playerCollapsed", value.playerCollapsed)
             .putInt("cacheSizeMb", value.cacheSizeMb)
             .apply()
         state.value = value
@@ -36,7 +36,7 @@ class AndroidPlaybackSettingsStore(private val preferences: SharedPreferences) :
         bufferSize = enumValue(preferences.getString("youtubeBuffer", null), BufferSize.STANDARD),
         loudnessNormalization = enumValue(preferences.getString("loudnessNormalization", null), LoudnessNormalization.OFF),
         prefetchEnabled = preferences.getBoolean("prefetchEnabled", false),
-        playerPinned = preferences.getBoolean("playerPinned", false),
+        playerCollapsed = preferences.getBoolean("playerCollapsed", false),
         cacheSizeMb = preferences.getInt("cacheSizeMb", 150).coerceIn(25, 500),
     )
 
