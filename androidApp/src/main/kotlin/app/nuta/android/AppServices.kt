@@ -44,7 +44,7 @@ object AppServices {
         future.addListener({
             runCatching { future.get() }
                 .onSuccess { controller ->
-                    audioPlayer.value = Media3AudioPlayer(controller, scope, youtubeMediaService, logger, context.getSharedPreferences("playback-queue", Context.MODE_PRIVATE))
+                    audioPlayer.value = Media3AudioPlayer(controller, scope, youtubeMediaService, logger, context.getSharedPreferences("playback-queue", Context.MODE_PRIVATE), playbackSettings)
                 }
                 .onFailure { error ->
                     playerConnectFailed.value = true

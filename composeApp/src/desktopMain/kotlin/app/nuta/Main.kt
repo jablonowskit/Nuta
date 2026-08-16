@@ -41,7 +41,7 @@ fun main() {
     // zapisywałyby się do innego obiektu niż ten, który czyta wybór formatu.
     val playbackSettings = InMemoryPlaybackSettingsStore()
     val youtubeMediaService = NutaYouTubeMediaService(logger, playbackSettings)
-    val audioPlayer = MpvAudioPlayer(scope, youtubeMediaService, logger)
+    val audioPlayer = MpvAudioPlayer(scope, youtubeMediaService, logger, playbackSettings)
     val tokenStore = SpotifyTestTokenStore(logger)
     val restoredToken = tokenStore.load()
     val container = AppContainer(

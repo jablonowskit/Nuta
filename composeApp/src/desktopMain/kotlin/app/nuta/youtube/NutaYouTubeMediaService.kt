@@ -170,7 +170,10 @@ class NutaYouTubeMediaService(
             "YouTubeResolver", "youtube_stream_selected", "Wybrano strumień audio-only", operationId,
             mapOf("codec" to selected.codec, "container" to selected.container, "bitrateBucket" to bitrateBucket(selected.bitrate)),
         )
-        return selected
+        // loudnessDb jest wspólne dla całego wideo (siostra streamingData), nie per format
+        val loudnessDb = playerRoot["playerConfig"]?.jsonObject?.get("audioConfig")?.jsonObject
+            ?.get("loudnessDb")?.jsonPrimitive?.content?.toDoubleOrNull()
+        return selected.copy(loudnessDb = loudnessDb)
     }
 
     private suspend fun requestPlayer(apiKey: String, videoId: String, visitorData: String?, profile: PlayerProfile): JsonObject {

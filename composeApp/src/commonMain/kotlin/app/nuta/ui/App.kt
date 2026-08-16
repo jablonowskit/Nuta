@@ -1312,93 +1312,18 @@ private fun LogRow(item: LogEvent) {
     }
 }
 
+/** Komplet przycisków sterowania — ten sam w pasku rozwiniętym i zwiniętym. */
 @Composable
-private fun CompactPlayerBar(
+private fun CompactTransportRow(
     state: PlayerState,
     container: AppContainer,
-    similarModeActive: Boolean,
-    onSimilarModeChange: (Boolean) -> Unit,
-    onOpenQueue: () -> Unit,
     isLiked: Boolean,
     favoriteLoading: Boolean,
     onToggleLiked: () -> Unit,
-    collapsed: Boolean,
-    onCollapsedChange: (Boolean) -> Unit,
+    onOpenQueue: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
     val track = state.currentTrack
-    var radioLoading by remember { mutableStateOf(false) }
-    val dragThresholdPx = with(LocalDensity.current) { 24.dp.toPx() }
-    var dragAccumulated by remember { mutableStateOf(0f) }
-    // Bez stałej wysokości: tytuł i wykonawca mogą zająć do 2 linii każdy (patrz niżej),
-    // a przy stałych 164dp/76dp długi tekst nachodziłby na przyciski zamiast rozepchnąć układ.
-    Column(
-        Modifier.fillMaxWidth()
-            .background(Color(0xFF131A20))
-            .pointerInput(collapsed) {
-                // Palec w dół zwija pasek do jednej linii, w górę rozwija. Pasek leży poza
-                // LazyColumn treści, więc gest nie konkuruje ze scrollem listy.
-                detectVerticalDragGestures(
-                    onDragStart = { dragAccumulated = 0f },
-                    onDragEnd = {
-                        if (dragAccumulated > dragThresholdPx) onCollapsedChange(true)
-                        else if (dragAccumulated < -dragThresholdPx) onCollapsedChange(false)
-                        dragAccumulated = 0f
-                    },
-                ) { _, dy -> dragAccumulated += dy }
-            }
-            .padding(horizontal = 10.dp, vertical = 5.dp)
-            .animateContentSize(),
-    ) {
-    // Uchwyt: sygnalizuje, że pasek da się przeciągnąć, i sam działa jako tap-toggle.
-    Box(
-        Modifier.fillMaxWidth().height(14.dp).clickable { onCollapsedChange(!collapsed) },
-        contentAlignment = Alignment.Center,
-    ) {
-        Box(Modifier.width(36.dp).height(4.dp).background(Color(0xFF3A4650), RoundedCornerShape(2.dp)))
-    }
-    if (collapsed) {
-        Row(Modifier.fillMaxWidth().height(44.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                track?.title ?: stringResource(Res.string.nothing_playing),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                softWrap = false,
-                fontWeight = FontWeight.Bold,
-                fontSize = 14.sp,
-                modifier = Modifier.weight(1f).clickable { onOpenQueue() },
-            )
-            Box(Modifier.size(40.dp), contentAlignment = Alignment.Center) {
-                if (state.status == PlayerStatus.LOADING) {
-                    Text("⏳︎", color = MaterialTheme.colors.primary, fontSize = 30.sp)
-                } else {
-                    Box(Modifier.fillMaxSize().clickable(enabled = track != null) { scope.launch { if (state.status == PlayerStatus.PLAYING) container.audioPlayer.pause() else container.audioPlayer.play() } }, contentAlignment = Alignment.Center) {
-                        Text(if (state.status == PlayerStatus.PLAYING) "⏸" else "▶", color = MaterialTheme.colors.primary, fontSize = 30.sp)
-                    }
-                }
-            }
-        }
-        return@Column
-    }
-    Row(
-        Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Column(Modifier.weight(1f).clickable { onOpenQueue() }) {
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Text(track?.title ?: stringResource(Res.string.nothing_playing), maxLines = 2, overflow = TextOverflow.Clip, softWrap = true, fontWeight = FontWeight.Bold, fontSize = 14.sp, modifier = Modifier.weight(1f))
-                streamBitrateLabel(state)?.let {
-                    Text(it, color = Color(0xFF8D9BA6), fontSize = 10.sp, maxLines = 1, modifier = Modifier.padding(start = 4.dp))
-                }
-            }
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Text(track?.artists?.joinToString() ?: stringResource(Res.string.choose_track), color = Color(0xFF8D9BA6), fontSize = 11.sp, maxLines = 2, overflow = TextOverflow.Clip, softWrap = true, modifier = Modifier.weight(1f))
-                streamCodecLabel(state)?.let {
-                    Text(it, color = Color(0xFF8D9BA6), fontSize = 10.sp, maxLines = 1, modifier = Modifier.padding(start = 4.dp))
-                }
-            }
-        }
-    }
     Box(Modifier.fillMaxWidth().height(40.dp)) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
             // Box(contentAlignment = Center) zamiast samego textAlign na Text — textAlign centruje
@@ -1448,6 +1373,88 @@ private fun CompactPlayerBar(
             }
         }
     }
+}
+
+@Composable
+private fun CompactPlayerBar(
+    state: PlayerState,
+    container: AppContainer,
+    similarModeActive: Boolean,
+    onSimilarModeChange: (Boolean) -> Unit,
+    onOpenQueue: () -> Unit,
+    isLiked: Boolean,
+    favoriteLoading: Boolean,
+    onToggleLiked: () -> Unit,
+    collapsed: Boolean,
+    onCollapsedChange: (Boolean) -> Unit,
+) {
+    val scope = rememberCoroutineScope()
+    val track = state.currentTrack
+    var radioLoading by remember { mutableStateOf(false) }
+    val dragThresholdPx = with(LocalDensity.current) { 24.dp.toPx() }
+    var dragAccumulated by remember { mutableStateOf(0f) }
+    // Bez stałej wysokości: tytuł i wykonawca mogą zająć do 2 linii każdy (patrz niżej),
+    // a przy stałych 164dp/76dp długi tekst nachodziłby na przyciski zamiast rozepchnąć układ.
+    Column(
+        Modifier.fillMaxWidth()
+            .background(Color(0xFF131A20))
+            .pointerInput(collapsed) {
+                // Palec w dół zwija pasek do jednej linii, w górę rozwija. Pasek leży poza
+                // LazyColumn treści, więc gest nie konkuruje ze scrollem listy.
+                detectVerticalDragGestures(
+                    onDragStart = { dragAccumulated = 0f },
+                    onDragEnd = {
+                        if (dragAccumulated > dragThresholdPx) onCollapsedChange(true)
+                        else if (dragAccumulated < -dragThresholdPx) onCollapsedChange(false)
+                        dragAccumulated = 0f
+                    },
+                ) { _, dy -> dragAccumulated += dy }
+            }
+            .padding(horizontal = 10.dp, vertical = 5.dp)
+            .animateContentSize(),
+    ) {
+    // Uchwyt: sygnalizuje, że pasek da się przeciągnąć, i sam działa jako tap-toggle.
+    Box(
+        Modifier.fillMaxWidth().height(14.dp).clickable { onCollapsedChange(!collapsed) },
+        contentAlignment = Alignment.Center,
+    ) {
+        Box(Modifier.width(36.dp).height(4.dp).background(Color(0xFF3A4650), RoundedCornerShape(2.dp)))
+    }
+    if (collapsed) {
+        // Zwinięty pasek to jedna linia: tytuł (skrócony) plus pełny komplet przycisków —
+        // rezygnujemy tylko z wykonawcy, sliderem pozycji i etykiet kodeka/bitrate'u.
+        Text(
+            track?.title ?: stringResource(Res.string.nothing_playing),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            softWrap = false,
+            fontWeight = FontWeight.Bold,
+            fontSize = 12.sp,
+            modifier = Modifier.fillMaxWidth().clickable { onOpenQueue() },
+        )
+        CompactTransportRow(state, container, isLiked, favoriteLoading, onToggleLiked, onOpenQueue)
+        return@Column
+    }
+    Row(
+        Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f).clickable { onOpenQueue() }) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text(track?.title ?: stringResource(Res.string.nothing_playing), maxLines = 2, overflow = TextOverflow.Clip, softWrap = true, fontWeight = FontWeight.Bold, fontSize = 14.sp, modifier = Modifier.weight(1f))
+                streamBitrateLabel(state)?.let {
+                    Text(it, color = Color(0xFF8D9BA6), fontSize = 10.sp, maxLines = 1, modifier = Modifier.padding(start = 4.dp))
+                }
+            }
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text(track?.artists?.joinToString() ?: stringResource(Res.string.choose_track), color = Color(0xFF8D9BA6), fontSize = 11.sp, maxLines = 2, overflow = TextOverflow.Clip, softWrap = true, modifier = Modifier.weight(1f))
+                streamCodecLabel(state)?.let {
+                    Text(it, color = Color(0xFF8D9BA6), fontSize = 10.sp, maxLines = 1, modifier = Modifier.padding(start = 4.dp))
+                }
+            }
+        }
+    }
+    CompactTransportRow(state, container, isLiked, favoriteLoading, onToggleLiked, onOpenQueue)
     Row(Modifier.fillMaxWidth().height(38.dp), verticalAlignment = Alignment.CenterVertically) {
         Text(formatTime(state.positionMs), color = Color(0xFF8D9BA6), fontSize = 10.sp)
         Slider(
