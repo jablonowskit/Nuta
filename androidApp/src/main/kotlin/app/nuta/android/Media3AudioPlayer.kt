@@ -47,6 +47,9 @@ class Media3AudioPlayer(
     private val loadMutex = Mutex()
     private var ticker: Job? = null
     private var retryingAfterError = false
+    /** Ile utworów z rzędu padło — po MAX_CONSECUTIVE_FAILURES przestajemy skakać, żeby zepsuty
+        ogon kolejki nie zapętlił przeskoków. Zerowane przy udanym starcie i przy ręcznej akcji. */
+    private var consecutiveFailures = 0
     private val prefetchCache = ConcurrentHashMap<String, Deferred<YouTubeResolution>>()
     private val streamPreloadedIds = ConcurrentHashMap.newKeySet<String>()
 
@@ -65,12 +68,16 @@ class Media3AudioPlayer(
             override fun onPlayerError(error: PlaybackException) {
                 stateFlow.value = stateFlow.value.copy(status = PlayerStatus.ERROR, errorMessage = error.errorCodeName)
                 if (!retryingAfterError && stateFlow.value.currentTrack != null) {
+                    // błędy runtime bywają przejściowe (np. wygasły URL strumienia) — jedna próba
+                    // odtworzenia tego samego utworu, dopiero potem przeskok dalej
                     retryingAfterError = true
                     scope.launch {
                         delay(250)
                         withContext(Dispatchers.Main) { player.stop(); player.clearMediaItems() }
                         play()
                     }
+                } else if (stateFlow.value.currentTrack != null) {
+                    scope.launch { skipAfterFailure(error.errorCodeName) }
                 }
                 logger.error("Media3Player", "playback_failed", "Media3 zgłosił błąd odtwarzania", throwable = error)
             }
@@ -104,6 +111,7 @@ class Media3AudioPlayer(
 
     override suspend fun setQueue(tracks: List<Track>, startIndex: Int) {
         require(startIndex in tracks.indices || tracks.isEmpty())
+        consecutiveFailures = 0
         pendingResumePositionMs = 0
         withContext(Dispatchers.Main) { player.stop(); player.clearMediaItems() }
         stateFlow.value = PlayerState(queue = tracks, currentIndex = if (tracks.isEmpty()) -1 else startIndex)
@@ -242,6 +250,9 @@ class Media3AudioPlayer(
         // zakładkę zaraz po kliknięciu "odtwórz" anulowało trwające rozwiązywanie streamu
         // w trakcie — CancellationException trafiał w runCatching poniżej i był mylnie
         // pokazywany jako PlayerStatus.ERROR, mimo że to nie była prawdziwa awaria.
+        // przeskok po nieudanym rozwiązaniu strumienia musi pójść POZA loadMutex — move() woła
+        // z powrotem play(), które bierze ten sam mutex, więc w środku byłby deadlock
+        var failureReason: String? = null
         withContext(NonCancellable) {
             loadMutex.withLock {
                 // wznowienie po restarcie: pierwszy start przywróconego utworu zaczyna od zapisanej pozycji
@@ -250,6 +261,7 @@ class Media3AudioPlayer(
                 stateFlow.value = stateFlow.value.copy(status = PlayerStatus.LOADING, positionMs = resumeFromMs ?: 0, errorMessage = null, streamBitrate = null, streamCodec = null)
                 runCatching { resolveForPlayback(track) }.onSuccess { resolution ->
                     retryingAfterError = false
+                    consecutiveFailures = 0
                     val url = resolution.stream.url.use { it }
                     stateFlow.value = stateFlow.value.copy(
                         streamBitrate = resolution.stream.bitrate,
@@ -276,16 +288,36 @@ class Media3AudioPlayer(
                 }.onFailure { error ->
                     stateFlow.value = stateFlow.value.copy(status = PlayerStatus.ERROR, errorMessage = error.message)
                     logger.error("Media3Player", "resolution_failed", "Nie udało się przygotować strumienia YouTube", throwable = error)
+                    failureReason = error.message ?: "resolve_failed"
                 }
             }
         }
+        failureReason?.let { skipAfterFailure(it) }
+    }
+
+    /** Nieudany utwór nie zatrzymuje odtwarzania — przechodzimy do następnego, z limitem na wypadek zepsutego ogona kolejki. */
+    private suspend fun skipAfterFailure(reason: String) {
+        consecutiveFailures += 1
+        val next = stateFlow.value.currentIndex + 1
+        if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES || next !in stateFlow.value.queue.indices) {
+            logger.warn("Media3Player", "skip_after_error_stopped", "Przerywam po nieudanych utworach", fields = mapOf(
+                "failures" to consecutiveFailures.toString(),
+                "reason" to reason,
+            ))
+            return
+        }
+        logger.info("Media3Player", "skip_after_error", "Utwór się nie odtworzył — przechodzę dalej", fields = mapOf("reason" to reason))
+        delay(SKIP_AFTER_ERROR_DELAY_MS)
+        move(next)
     }
     override suspend fun pause() = withContext(Dispatchers.Main) { player.pause(); savePosition(player.currentPosition) }
     override suspend fun stop() { ticker?.cancel(); withContext(Dispatchers.Main) { player.stop() }; savePosition(0); stateFlow.value = stateFlow.value.copy(status = PlayerStatus.IDLE, positionMs = 0) }
     override suspend fun seekTo(positionMs: Long) { withContext(Dispatchers.Main) { player.seekTo(positionMs.coerceIn(0, stateFlow.value.durationMs)) } }
-    override suspend fun next() = move(stateFlow.value.currentIndex + 1)
-    override suspend fun previous() = move(stateFlow.value.currentIndex - 1)
-    override suspend fun playAt(index: Int) = move(index)
+    // ręczna akcja użytkownika zawsze zeruje licznik awarii — inaczej po zatrzymaniu na limicie
+    // kolejny klik "następny" natychmiast znów wpadałby w limit
+    override suspend fun next() { consecutiveFailures = 0; move(stateFlow.value.currentIndex + 1) }
+    override suspend fun previous() { consecutiveFailures = 0; move(stateFlow.value.currentIndex - 1) }
+    override suspend fun playAt(index: Int) { consecutiveFailures = 0; move(index) }
     override suspend fun simulateError() { stateFlow.value = stateFlow.value.copy(status = PlayerStatus.ERROR, errorMessage = "Symulowany błąd") }
 
     private suspend fun move(index: Int) {
@@ -328,6 +360,8 @@ class Media3AudioPlayer(
         const val PREFETCH_LIMIT = 5
         const val PREFETCH_EXPIRY_MARGIN_MS = 30_000L
         const val PRELOAD_SECONDS = 10L
+        const val MAX_CONSECUTIVE_FAILURES = 3
+        const val SKIP_AFTER_ERROR_DELAY_MS = 600L
         val TERMINAL_STATUSES = setOf(PlayerStatus.IDLE, PlayerStatus.ENDED, PlayerStatus.ERROR)
     }
 }
