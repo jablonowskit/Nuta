@@ -70,6 +70,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
@@ -1073,25 +1074,37 @@ private fun TrackRow(
     }
 }
 
+/**
+ * Ikonka akcji przy utworze z wyraźnym potwierdzeniem kliknięcia: sam ripple na przycisku 24dp jest
+ * ledwo widoczny, a efekt akcji (start odtwarzania, dopisanie do kolejki) bywa opóźniony o sieć,
+ * więc przez chwilę wyglądało to, jakby przycisk nie działał.
+ */
 @Composable
-private fun TrackPlayButton(onClick: () -> Unit) {
-    OutlinedButton(
-        onClick = onClick,
-        modifier = Modifier.size(24.dp),
-        contentPadding = PaddingValues(0.dp),
-        border = null,
-    ) { Text("▶", fontSize = 11.sp) }
+private fun TrackActionButton(label: String, confirmLabel: String, fontSize: TextUnit, onClick: () -> Unit) {
+    var confirming by remember { mutableStateOf(false) }
+    LaunchedEffect(confirming) {
+        if (confirming) { delay(700); confirming = false }
+    }
+    Box(
+        Modifier.size(24.dp)
+            .background(if (confirming) MaterialTheme.colors.primary else Color.Transparent, RoundedCornerShape(6.dp))
+            .clickable { confirming = true; onClick() },
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            if (confirming) confirmLabel else label,
+            fontSize = fontSize,
+            color = if (confirming) Color(0xFF0B1116) else MaterialTheme.colors.primary,
+            fontWeight = FontWeight.Bold,
+        )
+    }
 }
 
 @Composable
-private fun TrackQueueButton(onClick: () -> Unit) {
-    OutlinedButton(
-        onClick = onClick,
-        modifier = Modifier.size(24.dp),
-        contentPadding = PaddingValues(0.dp),
-        border = null,
-    ) { Text("+", fontSize = 12.sp) }
-}
+private fun TrackPlayButton(onClick: () -> Unit) = TrackActionButton("▶", "▶", 11.sp, onClick)
+
+@Composable
+private fun TrackQueueButton(onClick: () -> Unit) = TrackActionButton("+", "✓", 12.sp, onClick)
 
 @Composable
 private fun BufferingIndicator(color: Color = MaterialTheme.colors.primary) {
