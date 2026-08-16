@@ -106,8 +106,11 @@ class AndroidYouTubeMediaService(
             last = root["playabilityStatus"]?.jsonObject?.get("status")?.jsonPrimitive?.contentOrNull ?: "UNKNOWN"
             if (last != "OK") continue
             val formats = root["streamingData"]?.jsonObject?.get("adaptiveFormats") as? JsonArray ?: continue
-            return selectFormat(formats.mapNotNull { format(it.jsonObject) })
-                ?: error("Brak bezpośredniego audio YouTube")
+            // loudnessDb jest wspólne dla całego wideo (siostra streamingData), nie per format
+            val loudnessDb = root["playerConfig"]?.jsonObject?.get("audioConfig")?.jsonObject
+                ?.get("loudnessDb")?.jsonPrimitive?.content?.toDoubleOrNull()
+            return (selectFormat(formats.mapNotNull { format(it.jsonObject) })
+                ?: error("Brak bezpośredniego audio YouTube")).copy(loudnessDb = loudnessDb)
         }
         error("YouTube playability: $last")
     }
