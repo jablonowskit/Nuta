@@ -17,8 +17,8 @@ data class YouTubePlaybackSettings(
     val loudnessNormalization: LoudnessNormalization = LoudnessNormalization.OFF,
     /** Eksperymentalne: rozwiązuj strumień dla widocznych utworów zanim użytkownik kliknie play. */
     val prefetchEnabled: Boolean = false,
-    /** Gdy true, pasek playera zostaje przypięty i widoczny na każdej zakładce, nie tylko na Player/Kolejce. */
-    val playerPinned: Boolean = false,
+    /** Pasek playera jest zawsze widoczny; to pole trzyma tylko stan zwinięcia do wąskiego paska. */
+    val playerCollapsed: Boolean = false,
     /** Limit cache'u zbuforowanych strumieni audio (MB). Zmiana działa dopiero po restarcie aplikacji. */
     val cacheSizeMb: Int = 150,
 )
