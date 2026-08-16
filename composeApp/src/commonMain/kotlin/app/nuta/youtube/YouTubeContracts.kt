@@ -25,6 +25,12 @@ data class AudioStreamSource(
     val bitrate: Int,
     val contentLength: Long?,
     val expiresAtMs: Long?,
+    /**
+     * `playerConfig.audioConfig.loudnessDb` z odpowiedzi playera YouTube: o ile decybeli utwór jest
+     * głośniejszy od poziomu odniesienia. Wartość dodatnia = trzeba ściszyć. Null, gdy YouTube jej
+     * nie podał — wtedy wyrównanie głośności nic nie robi dla tego utworu.
+     */
+    val loudnessDb: Double? = null,
 )
 
 data class YouTubeResolution(

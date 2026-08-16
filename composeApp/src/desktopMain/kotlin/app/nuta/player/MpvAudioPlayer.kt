@@ -5,6 +5,8 @@ import app.nuta.core.models.PlayerState
 import app.nuta.core.models.PlayerStatus
 import app.nuta.core.models.Track
 import app.nuta.domain.AudioPlayer
+import app.nuta.settings.PlaybackSettingsStore
+import app.nuta.youtube.LoudnessGain
 import app.nuta.youtube.YouTubeMediaService
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -34,6 +36,7 @@ class MpvAudioPlayer(
     private val scope: CoroutineScope,
     private val youtube: YouTubeMediaService,
     private val logger: NutaLogger,
+    private val settingsStore: PlaybackSettingsStore,
 ) : AudioPlayer {
     private val _state = MutableStateFlow(PlayerState())
     override val state: StateFlow<PlayerState> = _state.asStateFlow()
@@ -113,6 +116,9 @@ class MpvAudioPlayer(
                 ensureProcess()
                 val loadCommand = resolution.stream.url.use { url -> arrayOf("loadfile", url, "replace") }
                 sendCommand(*loadCommand)
+                // wyrównanie głośności: mpv przyjmuje procenty, nasza skala jest liniowa 0..1
+                val volume = LoudnessGain.volumeFor(resolution.stream.loudnessDb, settingsStore.settings.value.loudnessNormalization)
+                sendCommand("set_property", "volume", (volume * 100).toDouble())
                 sendCommand("set_property", "pause", false)
                 _state.value = _state.value.copy(status = PlayerStatus.PLAYING)
                 logger.info("MpvPlayer", "playback_started", "Rozpoczęto odtwarzanie audio", fields = mapOf("codec" to resolution.stream.codec, "container" to resolution.stream.container))
