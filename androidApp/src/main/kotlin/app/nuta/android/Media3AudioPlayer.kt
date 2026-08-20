@@ -53,6 +53,12 @@ class Media3AudioPlayer(
     /** Ile utworów z rzędu padło — po MAX_CONSECUTIVE_FAILURES przestajemy skakać, żeby zepsuty
         ogon kolejki nie zapętlił przeskoków. Zerowane przy udanym starcie i przy ręcznej akcji. */
     private var consecutiveFailures = 0
+    /** Zerowanie liczników awarii czeka na STABLE_PLAYBACK_MS realnie lecacego dzwieku, nie na
+        samo chwilowe player.isPlaying == true. Bez tego utwor, ktory pada np. po 3-4 s (typowe dla
+        wygasajacych/blokowanych URLi YouTube z HTTP 403) zdazyl na moment "zagrac", zerujac liczniki
+        PRZED wystapieniem bledu — retry i limit przeskoku nigdy sie nie wysycaly i player w kolko
+        wlaczal/wylaczal ten sam zepsuty utwor. */
+    private var stabilityJob: Job? = null
     private val prefetchCache = ConcurrentHashMap<String, Deferred<YouTubeResolution>>()
     private val streamPreloadedIds = ConcurrentHashMap.newKeySet<String>()
 
@@ -69,6 +75,11 @@ class Media3AudioPlayer(
                 refreshPlayingState()
             }
             override fun onPlayerError(error: PlaybackException) {
+                // musi pojsc PRZED odczytem retryingAfterError/consecutiveFailures — inaczej
+                // opoznione zerowanie ze stabilityJob (zaplanowane, gdy dzwiek na chwile ruszyl)
+                // moglo wskoczyc miedzy start bledu a te odczyty i zresetowac liczniki tuz przed
+                // ich uzyciem
+                cancelStabilityJob()
                 stateFlow.value = stateFlow.value.copy(status = PlayerStatus.ERROR, errorMessage = error.errorCodeName)
                 if (!retryingAfterError && stateFlow.value.currentTrack != null) {
                     // błędy runtime bywają przejściowe (np. wygasły URL strumienia) — jedna próba
@@ -103,22 +114,30 @@ class Media3AudioPlayer(
     private fun refreshPlayingState() {
         if (stateFlow.value.currentTrack == null) return
         when {
-            PlaybackQueueBridge.buffering.value -> stateFlow.value = stateFlow.value.copy(status = PlayerStatus.LOADING)
+            PlaybackQueueBridge.buffering.value -> {
+                cancelStabilityJob()
+                stateFlow.value = stateFlow.value.copy(status = PlayerStatus.LOADING)
+            }
             player.isPlaying -> {
-                // Liczniki awarii zeruje TYLKO faktycznie lecacy dzwiek. Zerowanie ich po samym
-                // udanym rozwiazaniu strumienia sprawialo, ze utwor psujacy sie dopiero na etapie
-                // odtwarzania w kolko dostawal swiezy retry i swiezy limit przeskokow — stad
-                // ciagle wlaczanie/wylaczanie zamiast jednego przeskoku i spokoju.
-                retryingAfterError = false
-                consecutiveFailures = 0
+                if (stabilityJob?.isActive != true) {
+                    stabilityJob = scope.launch {
+                        delay(STABLE_PLAYBACK_MS)
+                        retryingAfterError = false
+                        consecutiveFailures = 0
+                    }
+                }
                 stateFlow.value = stateFlow.value.copy(status = PlayerStatus.PLAYING)
             }
             // dowolny status "w trakcie" (w tym LOADING po seeku podczas pauzy) wraca do PAUSED — nie tylko z PLAYING,
             // inaczej pauza + seek zostawiały UI zablokowane na LOADING (brak pasującej gałęzi)
-            player.playbackState == Player.STATE_READY && stateFlow.value.status !in TERMINAL_STATUSES ->
+            player.playbackState == Player.STATE_READY && stateFlow.value.status !in TERMINAL_STATUSES -> {
+                cancelStabilityJob()
                 stateFlow.value = stateFlow.value.copy(status = PlayerStatus.PAUSED)
+            }
         }
     }
+
+    private fun cancelStabilityJob() { stabilityJob?.cancel(); stabilityJob = null }
 
     override suspend fun setQueue(tracks: List<Track>, startIndex: Int) {
         require(startIndex in tracks.indices || tracks.isEmpty())
@@ -337,6 +356,7 @@ class Media3AudioPlayer(
 
     private suspend fun move(index: Int) {
         if (index !in stateFlow.value.queue.indices) return
+        cancelStabilityJob()
         retryingAfterError = false
         pendingResumePositionMs = 0
         stateFlow.value = stateFlow.value.copy(currentIndex = index, status = PlayerStatus.IDLE, positionMs = 0, errorMessage = null, streamBitrate = null, streamCodec = null)
@@ -378,6 +398,9 @@ class Media3AudioPlayer(
         const val PRELOAD_SECONDS = 10L
         const val MAX_CONSECUTIVE_FAILURES = 3
         const val SKIP_AFTER_ERROR_DELAY_MS = 600L
+        /** Dluzsze niz obserwowany w praktyce czas do bledu HTTP 403 (~3.4 s) dla zepsutych URLi
+            YouTube — inaczej takie utwory zdazalyby "ustabilizowac" liczniki tuz przed kolejnym bledem. */
+        const val STABLE_PLAYBACK_MS = 6_000L
         val TERMINAL_STATUSES = setOf(PlayerStatus.IDLE, PlayerStatus.ENDED, PlayerStatus.ERROR)
     }
 }
