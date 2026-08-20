@@ -104,7 +104,15 @@ class Media3AudioPlayer(
         if (stateFlow.value.currentTrack == null) return
         when {
             PlaybackQueueBridge.buffering.value -> stateFlow.value = stateFlow.value.copy(status = PlayerStatus.LOADING)
-            player.isPlaying -> stateFlow.value = stateFlow.value.copy(status = PlayerStatus.PLAYING)
+            player.isPlaying -> {
+                // Liczniki awarii zeruje TYLKO faktycznie lecacy dzwiek. Zerowanie ich po samym
+                // udanym rozwiazaniu strumienia sprawialo, ze utwor psujacy sie dopiero na etapie
+                // odtwarzania w kolko dostawal swiezy retry i swiezy limit przeskokow — stad
+                // ciagle wlaczanie/wylaczanie zamiast jednego przeskoku i spokoju.
+                retryingAfterError = false
+                consecutiveFailures = 0
+                stateFlow.value = stateFlow.value.copy(status = PlayerStatus.PLAYING)
+            }
             // dowolny status "w trakcie" (w tym LOADING po seeku podczas pauzy) wraca do PAUSED — nie tylko z PLAYING,
             // inaczej pauza + seek zostawiały UI zablokowane na LOADING (brak pasującej gałęzi)
             player.playbackState == Player.STATE_READY && stateFlow.value.status !in TERMINAL_STATUSES ->
@@ -263,8 +271,6 @@ class Media3AudioPlayer(
                 pendingResumePositionMs = 0
                 stateFlow.value = stateFlow.value.copy(status = PlayerStatus.LOADING, positionMs = resumeFromMs ?: 0, errorMessage = null, streamBitrate = null, streamCodec = null)
                 runCatching { resolveForPlayback(track) }.onSuccess { resolution ->
-                    retryingAfterError = false
-                    consecutiveFailures = 0
                     val url = resolution.stream.url.use { it }
                     stateFlow.value = stateFlow.value.copy(
                         streamBitrate = resolution.stream.bitrate,
@@ -331,6 +337,7 @@ class Media3AudioPlayer(
 
     private suspend fun move(index: Int) {
         if (index !in stateFlow.value.queue.indices) return
+        retryingAfterError = false
         pendingResumePositionMs = 0
         stateFlow.value = stateFlow.value.copy(currentIndex = index, status = PlayerStatus.IDLE, positionMs = 0, errorMessage = null, streamBitrate = null, streamCodec = null)
         saveQueue()
