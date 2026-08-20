@@ -91,11 +91,13 @@ class AndroidYouTubeMediaService(
         val key = Regex("\"INNERTUBE_API_KEY\":\"([^\"]+)\"").find(watch)?.groupValues?.get(1) ?: error("Brak klucza YouTube")
         val webVersion = Regex("\"INNERTUBE_CONTEXT_CLIENT_VERSION\":\"([^\"]+)\"").find(watch)?.groupValues?.get(1) ?: error("Brak wersji YouTube")
         val visitor = Regex("\"VISITOR_DATA\":\"([^\"]+)\"").find(watch)?.groupValues?.get(1)
-        // ANDROID_VR pierwszy: URL-e z klienta webowego wymagają transformacji parametru "n"
-        // (mechanizm antyscrapingowy YouTube — bez niej serwer odrzuca pobieranie strumienia HTTP 403
-        // mimo że sam URL wygląda poprawnie), a klienci mobilni tej transformacji nie wymagają.
-        // WEB zostaje jako fallback, gdyby ANDROID_VR akurat nie miał tego wideo w ogóle.
-        val profiles = listOf(Profile("ANDROID_VR", "1.65.10", "28", VR_AGENT), Profile("WEB", webVersion, "1", USER_AGENT))
+        // WEB pierwszy: zmierzone diagnostycznie (log profile_selected: hasNParam=false,
+        // expiresInSec≈21600) wykluczyło teorię throttlingu "n" jako przyczyny HTTP 403 —
+        // każdy utwór z profilu ANDROID_VR padał ~3.5-4s po playback_prepared niezależnie od
+        // tego parametru. To wskazuje, że URL-e ANDROID_VR nie tolerują ponownego połączenia
+        // HTTP (nowy Range po wyczerpaniu bufora), które ExoPlayer robi samodzielnie w trakcie
+        // odtwarzania. ANDROID_VR zostaje jako fallback, gdyby WEB nie miał wideo.
+        val profiles = listOf(Profile("WEB", webVersion, "1", USER_AGENT), Profile("ANDROID_VR", "1.65.10", "28", VR_AGENT))
         var last = "UNKNOWN"
         for (profile in profiles) {
             val client = mutableMapOf<String, JsonElement>("clientName" to JsonPrimitive(profile.name), "clientVersion" to JsonPrimitive(profile.version), "hl" to JsonPrimitive("en"), "gl" to JsonPrimitive("US"))
@@ -184,10 +186,11 @@ class AndroidYouTubeMediaService(
     private fun extractObjects(source: String, marker: String): List<String> { val out=mutableListOf<String>(); var from=0; while(out.size<40){val m=source.indexOf(marker,from);if(m<0)break;val start=source.indexOf('{',m+marker.length);if(start<0)break;var depth=0;var quoted=false;var escaped=false;var end=-1;for(i in start until source.length){val c=source[i];if(quoted){if(escaped)escaped=false else if(c=='\\')escaped=true else if(c=='\"')quoted=false}else if(c=='\"')quoted=true else if(c=='{')depth++ else if(c=='}'&&--depth==0){end=i+1;break}};if(end<0)break;out+=source.substring(start,end);from=end};return out }
     private data class Profile(val name: String, val version: String, val id: String, val agent: String)
     companion object {
-        private const val USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/128.0 Safari/537.36"
         /** Musi być zgodny z User-Agent, którym PlaybackService realnie ściąga bajty audio (Media3
-            DefaultHttpDataSource) — Google CDN odrzuca (HTTP 403) URL wynegocjowany dla klienta
-            ANDROID_VR, jeśli faktyczne żądanie o dane przyjdzie z UA wyglądającym jak przeglądarka. */
+            DefaultHttpDataSource) — Google CDN odrzuca (HTTP 403) URL wynegocjowany dla klienta WEB,
+            jeśli faktyczne żądanie o dane przyjdzie z UA innym niż przeglądarkowy. */
+        const val USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/128.0 Safari/537.36"
+        /** Analogicznie dla profilu fallbackowego ANDROID_VR. */
         const val VR_AGENT = "com.google.android.apps.youtube.vr.oculus/1.65.10 (Linux; U; Android 12L) gzip"
     }
 }
