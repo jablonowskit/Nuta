@@ -7,7 +7,6 @@ import app.nuta.core.models.Track
 import app.nuta.domain.AudioPlayer
 import app.nuta.settings.PlaybackSettingsStore
 import app.nuta.youtube.LoudnessGain
-import app.nuta.youtube.NutaYouTubeMediaService
 import app.nuta.youtube.YouTubeMediaService
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -47,15 +46,11 @@ class MpvAudioPlayer(
     private var ticker: Job? = null
     private var processLogReader: Job? = null
     private var commandId = 0L
-    /** Ile utworów z rzędu padło — po MAX_CONSECUTIVE_FAILURES przestajemy skakać, żeby zepsuty
-        ogon kolejki nie zapętlił przeskoków. Zerowane przy udanym starcie i przy ręcznej akcji. */
-    private var consecutiveFailures = 0
 
     init { scope.coroutineContext[Job]?.invokeOnCompletion { shutdown() } }
 
     override suspend fun setQueue(tracks: List<Track>, startIndex: Int) {
         require(startIndex in tracks.indices || tracks.isEmpty()) { "Nieprawidłowy indeks kolejki" }
-        consecutiveFailures = 0
         ticker?.cancel()
         _state.value = PlayerState(queue = tracks, currentIndex = if (tracks.isEmpty()) -1 else startIndex)
         logger.info("MpvPlayer", "queue_set", "Ustawiono kolejkę playera", fields = mapOf("count" to tracks.size.toString()))
@@ -112,8 +107,6 @@ class MpvAudioPlayer(
             startTicker()
             return
         }
-        // przeskok po błędzie musi pójść poza loadMutex — moveTo() woła z powrotem play()
-        var failureReason: String? = null
         loadMutex.withLock {
             _state.value = _state.value.copy(status = PlayerStatus.LOADING, positionMs = 0, errorMessage = null)
             logger.info("MpvPlayer", "track_resolving", "Rozpoczęto przygotowanie źródła audio")
@@ -128,32 +121,13 @@ class MpvAudioPlayer(
                 sendCommand("set_property", "volume", (volume * 100).toDouble())
                 sendCommand("set_property", "pause", false)
                 _state.value = _state.value.copy(status = PlayerStatus.PLAYING)
-                consecutiveFailures = 0
                 logger.info("MpvPlayer", "playback_started", "Rozpoczęto odtwarzanie audio", fields = mapOf("codec" to resolution.stream.codec, "container" to resolution.stream.container))
                 startTicker()
             } catch (error: Throwable) {
                 _state.value = _state.value.copy(status = PlayerStatus.ERROR, errorMessage = error.message)
                 logger.error("MpvPlayer", "playback_failed", "Nie udało się uruchomić odtwarzania", throwable = error)
-                failureReason = error.message ?: "playback_failed"
             }
         }
-        failureReason?.let { skipAfterFailure(it) }
-    }
-
-    /** Nieudany utwór nie zatrzymuje odtwarzania — przechodzimy do następnego, z limitem na wypadek zepsutego ogona kolejki. */
-    private suspend fun skipAfterFailure(reason: String) {
-        consecutiveFailures += 1
-        val next = _state.value.currentIndex + 1
-        if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES || next !in _state.value.queue.indices) {
-            logger.warn("MpvPlayer", "skip_after_error_stopped", "Przerywam po nieudanych utworach", fields = mapOf(
-                "failures" to consecutiveFailures.toString(),
-                "reason" to reason,
-            ))
-            return
-        }
-        logger.info("MpvPlayer", "skip_after_error", "Utwór się nie odtworzył — przechodzę dalej", fields = mapOf("reason" to reason))
-        delay(SKIP_AFTER_ERROR_DELAY_MS)
-        moveTo(next)
     }
 
     override suspend fun pause() {
@@ -176,10 +150,9 @@ class MpvAudioPlayer(
         _state.value = _state.value.copy(positionMs = bounded)
     }
 
-    // ręczna akcja użytkownika zawsze zeruje licznik awarii
-    override suspend fun next() { consecutiveFailures = 0; moveTo(_state.value.currentIndex + 1) }
-    override suspend fun previous() { consecutiveFailures = 0; moveTo(_state.value.currentIndex - 1) }
-    override suspend fun playAt(index: Int) { consecutiveFailures = 0; moveTo(index) }
+    override suspend fun next() = moveTo(_state.value.currentIndex + 1)
+    override suspend fun previous() = moveTo(_state.value.currentIndex - 1)
+    override suspend fun playAt(index: Int) = moveTo(index)
     override suspend fun simulateError() { ticker?.cancel(); _state.value = _state.value.copy(status = PlayerStatus.ERROR, errorMessage = "Symulowany błąd playera") }
 
     private suspend fun moveTo(index: Int) {
@@ -196,9 +169,6 @@ class MpvAudioPlayer(
         process = ProcessBuilder(
             "mpv", "--idle=yes", "--no-video", "--audio-display=no", "--no-terminal",
             "--msg-level=all=warn", "--ao=$output", "--input-ipc-server=$socketPath",
-            // musi być zgodny z UA klienta ANDROID_VR, dla którego resolver wynegocjował URL —
-            // inaczej Google CDN odrzuca (HTTP 403) samo pobranie bajtów audio
-            "--user-agent=${NutaYouTubeMediaService.VrAgent}",
         ).redirectErrorStream(true).start()
         processLogReader = scope.launch(Dispatchers.IO) {
             process?.inputStream?.bufferedReader()?.useLines { lines ->
@@ -326,10 +296,5 @@ class MpvAudioPlayer(
         runCatching { process?.destroyForcibly() }
         process = null
         runCatching { Files.deleteIfExists(socketPath) }
-    }
-
-    private companion object {
-        const val MAX_CONSECUTIVE_FAILURES = 3
-        const val SKIP_AFTER_ERROR_DELAY_MS = 600L
     }
 }

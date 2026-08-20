@@ -146,11 +146,7 @@ class PlaybackService : MediaSessionService() {
     }
 
     companion object {
-        // Musi być zgodny z UA, którym AndroidYouTubeMediaService wynegocjował URL strumienia —
-        // Google CDN odrzuca (HTTP 403) pobranie bajtów audio, jeśli UA żądania danych nie
-        // zgadza się z UA klienta, dla którego URL został podpisany. Profil WEB jest teraz
-        // preferowany (ANDROID_VR tylko jako fallback), więc UA musi być przeglądarkowy.
-        private val USER_AGENT = AndroidYouTubeMediaService.USER_AGENT
+        private const val USER_AGENT = "Mozilla/5.0 (Linux; Android 15) AppleWebKit/537.36 Chrome/128.0 Mobile Safari/537.36"
         private const val COMMAND_SEEK_BACK_10 = "app.nuta.SEEK_BACK_10"
         private const val COMMAND_SEEK_FORWARD_10 = "app.nuta.SEEK_FORWARD_10"
 

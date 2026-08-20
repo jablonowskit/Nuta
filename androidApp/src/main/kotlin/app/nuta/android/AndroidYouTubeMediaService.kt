@@ -91,12 +91,6 @@ class AndroidYouTubeMediaService(
         val key = Regex("\"INNERTUBE_API_KEY\":\"([^\"]+)\"").find(watch)?.groupValues?.get(1) ?: error("Brak klucza YouTube")
         val webVersion = Regex("\"INNERTUBE_CONTEXT_CLIENT_VERSION\":\"([^\"]+)\"").find(watch)?.groupValues?.get(1) ?: error("Brak wersji YouTube")
         val visitor = Regex("\"VISITOR_DATA\":\"([^\"]+)\"").find(watch)?.groupValues?.get(1)
-        // WEB pierwszy: zmierzone diagnostycznie (log profile_selected: hasNParam=false,
-        // expiresInSec≈21600) wykluczyło teorię throttlingu "n" jako przyczyny HTTP 403 —
-        // każdy utwór z profilu ANDROID_VR padał ~3.5-4s po playback_prepared niezależnie od
-        // tego parametru. To wskazuje, że URL-e ANDROID_VR nie tolerują ponownego połączenia
-        // HTTP (nowy Range po wyczerpaniu bufora), które ExoPlayer robi samodzielnie w trakcie
-        // odtwarzania. ANDROID_VR zostaje jako fallback, gdyby WEB nie miał wideo.
         val profiles = listOf(Profile("WEB", webVersion, "1", USER_AGENT), Profile("ANDROID_VR", "1.65.10", "28", VR_AGENT))
         var last = "UNKNOWN"
         for (profile in profiles) {
@@ -112,22 +106,11 @@ class AndroidYouTubeMediaService(
             last = root["playabilityStatus"]?.jsonObject?.get("status")?.jsonPrimitive?.contentOrNull ?: "UNKNOWN"
             if (last != "OK") continue
             val formats = root["streamingData"]?.jsonObject?.get("adaptiveFormats") as? JsonArray ?: continue
-            // profil ma playability OK, ale może nie mieć bezpośredniego (nieszyfrowanego) audio —
-            // wtedy próbujemy następny profil, zamiast od razu poddawać się na całym rozwiązywaniu
-            val selected = selectFormat(formats.mapNotNull { format(it.jsonObject) }) ?: continue
             // loudnessDb jest wspólne dla całego wideo (siostra streamingData), nie per format
             val loudnessDb = root["playerConfig"]?.jsonObject?.get("audioConfig")?.jsonObject
                 ?.get("loudnessDb")?.jsonPrimitive?.content?.toDoubleOrNull()
-            // diagnostyka: sprawdzamy TYLKO obecność parametru "n" (throttling YouTube), nie logujemy
-            // samego URL-a (sekret) — potrzebne do potwierdzenia/wykluczenia przyczyny HTTP 403
-            val hasNParam = selected.url.use { url -> Regex("[?&]n=").containsMatchIn(url) }
-            val expiresInSec = selected.expiresAtMs?.let { (it - System.currentTimeMillis()) / 1000 }
-            logger.info("AndroidYouTube", "profile_selected", "Profil klienta zwrócił bezpośrednie audio", fields = mapOf(
-                "profile" to profile.name,
-                "hasNParam" to hasNParam.toString(),
-                "expiresInSec" to (expiresInSec?.toString() ?: "brak"),
-            ))
-            return selected.copy(loudnessDb = loudnessDb)
+            return (selectFormat(formats.mapNotNull { format(it.jsonObject) })
+                ?: error("Brak bezpośredniego audio YouTube")).copy(loudnessDb = loudnessDb)
         }
         error("YouTube playability: $last")
     }
@@ -185,12 +168,5 @@ class AndroidYouTubeMediaService(
     private fun normalize(value: String) = value.lowercase().replace(Regex("[^a-z0-9]+"), " ").trim()
     private fun extractObjects(source: String, marker: String): List<String> { val out=mutableListOf<String>(); var from=0; while(out.size<40){val m=source.indexOf(marker,from);if(m<0)break;val start=source.indexOf('{',m+marker.length);if(start<0)break;var depth=0;var quoted=false;var escaped=false;var end=-1;for(i in start until source.length){val c=source[i];if(quoted){if(escaped)escaped=false else if(c=='\\')escaped=true else if(c=='\"')quoted=false}else if(c=='\"')quoted=true else if(c=='{')depth++ else if(c=='}'&&--depth==0){end=i+1;break}};if(end<0)break;out+=source.substring(start,end);from=end};return out }
     private data class Profile(val name: String, val version: String, val id: String, val agent: String)
-    companion object {
-        /** Musi być zgodny z User-Agent, którym PlaybackService realnie ściąga bajty audio (Media3
-            DefaultHttpDataSource) — Google CDN odrzuca (HTTP 403) URL wynegocjowany dla klienta WEB,
-            jeśli faktyczne żądanie o dane przyjdzie z UA innym niż przeglądarkowy. */
-        const val USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/128.0 Safari/537.36"
-        /** Analogicznie dla profilu fallbackowego ANDROID_VR. */
-        const val VR_AGENT = "com.google.android.apps.youtube.vr.oculus/1.65.10 (Linux; U; Android 12L) gzip"
-    }
+    companion object { private const val USER_AGENT="Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/128.0 Safari/537.36"; private const val VR_AGENT="com.google.android.apps.youtube.vr.oculus/1.65.10 (Linux; U; Android 12L) gzip" }
 }
