@@ -138,17 +138,21 @@ class NutaYouTubeMediaService(
             ?: error("Brak wersji klienta YouTube")
         val visitorData = Regex("\"VISITOR_DATA\":\"([^\"]+)\"").find(watchHtml)?.groupValues?.get(1)
             ?: Regex("\"visitorData\":\"([^\"]+)\"").find(watchHtml)?.groupValues?.get(1)
+        // ANDROID_VR pierwszy: URL-e z klienta webowego wymagają transformacji parametru "n"
+        // (mechanizm antyscrapingowy YouTube — bez niej serwer odrzuca pobieranie strumienia HTTP 403
+        // mimo że sam URL wygląda poprawnie), a klienci mobilni tej transformacji nie wymagają.
+        // WEB/WEB_EMBEDDED_PLAYER zostają jako fallback, gdyby ANDROID_VR nie miał tego wideo.
         val profiles = listOf(
-            PlayerProfile("WEB", clientVersion, "1", UserAgent, emptyMap()),
             PlayerProfile(
                 "ANDROID_VR", "1.65.10", "28",
                 "com.google.android.apps.youtube.vr.oculus/1.65.10 (Linux; U; Android 12L; eureka-user Build/SQ3A.220605.009.A1) gzip",
                 mapOf("deviceMake" to "Oculus", "deviceModel" to "Quest 3", "androidSdkVersion" to 32, "osName" to "Android", "osVersion" to "12L"),
             ),
+            PlayerProfile("WEB", clientVersion, "1", UserAgent, emptyMap()),
             PlayerProfile("WEB_EMBEDDED_PLAYER", clientVersion, "56", UserAgent, emptyMap(), embedded = true),
         )
-        var root: JsonObject? = null
         var lastStatus = "UNKNOWN"
+        var hadDirectAudioMiss = false
         for (profile in profiles) {
             val candidate = requestPlayer(apiKey, videoId, visitorData, profile)
             lastStatus = candidate["playabilityStatus"]?.jsonObject?.get("status")?.jsonPrimitive?.contentOrNull ?: "UNKNOWN"
@@ -156,24 +160,26 @@ class NutaYouTubeMediaService(
                 "YouTubeResolver", "youtube_player_response_received", "Odebrano odpowiedź profilu playera", operationId,
                 mapOf("profile" to profile.name, "playability" to lastStatus),
             )
-            if (lastStatus == "OK") { root = candidate; break }
+            if (lastStatus != "OK") continue
+            val formats = candidate["streamingData"]?.jsonObject?.get("adaptiveFormats") as? JsonArray ?: continue
+            val audio = formats.mapNotNull { parseAudioFormat(it.jsonObject) }
+            val settings = settingsStore.settings.value
+            // profil ma playability OK, ale może nie mieć bezpośredniego (nieszyfrowanego) audio —
+            // wtedy próbujemy następny profil, zamiast od razu poddawać się na całym rozwiązywaniu
+            val selected = AudioFormatSelector.select(audio, settings.quality, settings.codec) ?: run {
+                if (formats.any { it.jsonObject["signatureCipher"] != null || it.jsonObject["cipher"] != null }) hadDirectAudioMiss = true
+                null
+            } ?: continue
+            logger.info(
+                "YouTubeResolver", "youtube_stream_selected", "Wybrano strumień audio-only", operationId,
+                mapOf("codec" to selected.codec, "container" to selected.container, "bitrateBucket" to bitrateBucket(selected.bitrate)),
+            )
+            // loudnessDb jest wspólne dla całego wideo (siostra streamingData), nie per format
+            val loudnessDb = candidate["playerConfig"]?.jsonObject?.get("audioConfig")?.jsonObject
+                ?.get("loudnessDb")?.jsonPrimitive?.content?.toDoubleOrNull()
+            return selected.copy(loudnessDb = loudnessDb)
         }
-        val playerRoot = requireNotNull(root) { "YouTube playability: $lastStatus" }
-        val formats = playerRoot["streamingData"]?.jsonObject?.get("adaptiveFormats") as? JsonArray ?: error("Brak formatów adaptacyjnych")
-        val audio = formats.mapNotNull { parseAudioFormat(it.jsonObject) }
-        val settings = settingsStore.settings.value
-        val selected = AudioFormatSelector.select(audio, settings.quality, settings.codec)
-            ?: if (formats.any { it.jsonObject["signatureCipher"] != null || it.jsonObject["cipher"] != null }) {
-                error("YouTube wymaga transformacji podpisu dla dostępnych formatów")
-            } else error("Brak bezpośredniego formatu audio-only")
-        logger.info(
-            "YouTubeResolver", "youtube_stream_selected", "Wybrano strumień audio-only", operationId,
-            mapOf("codec" to selected.codec, "container" to selected.container, "bitrateBucket" to bitrateBucket(selected.bitrate)),
-        )
-        // loudnessDb jest wspólne dla całego wideo (siostra streamingData), nie per format
-        val loudnessDb = playerRoot["playerConfig"]?.jsonObject?.get("audioConfig")?.jsonObject
-            ?.get("loudnessDb")?.jsonPrimitive?.content?.toDoubleOrNull()
-        return selected.copy(loudnessDb = loudnessDb)
+        error(if (hadDirectAudioMiss) "YouTube wymaga transformacji podpisu dla dostępnych formatów" else "YouTube playability: $lastStatus")
     }
 
     private suspend fun requestPlayer(apiKey: String, videoId: String, visitorData: String?, profile: PlayerProfile): JsonObject {

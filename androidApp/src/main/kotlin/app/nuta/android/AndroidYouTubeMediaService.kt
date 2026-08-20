@@ -91,7 +91,11 @@ class AndroidYouTubeMediaService(
         val key = Regex("\"INNERTUBE_API_KEY\":\"([^\"]+)\"").find(watch)?.groupValues?.get(1) ?: error("Brak klucza YouTube")
         val webVersion = Regex("\"INNERTUBE_CONTEXT_CLIENT_VERSION\":\"([^\"]+)\"").find(watch)?.groupValues?.get(1) ?: error("Brak wersji YouTube")
         val visitor = Regex("\"VISITOR_DATA\":\"([^\"]+)\"").find(watch)?.groupValues?.get(1)
-        val profiles = listOf(Profile("WEB", webVersion, "1", USER_AGENT), Profile("ANDROID_VR", "1.65.10", "28", VR_AGENT))
+        // ANDROID_VR pierwszy: URL-e z klienta webowego wymagają transformacji parametru "n"
+        // (mechanizm antyscrapingowy YouTube — bez niej serwer odrzuca pobieranie strumienia HTTP 403
+        // mimo że sam URL wygląda poprawnie), a klienci mobilni tej transformacji nie wymagają.
+        // WEB zostaje jako fallback, gdyby ANDROID_VR akurat nie miał tego wideo w ogóle.
+        val profiles = listOf(Profile("ANDROID_VR", "1.65.10", "28", VR_AGENT), Profile("WEB", webVersion, "1", USER_AGENT))
         var last = "UNKNOWN"
         for (profile in profiles) {
             val client = mutableMapOf<String, JsonElement>("clientName" to JsonPrimitive(profile.name), "clientVersion" to JsonPrimitive(profile.version), "hl" to JsonPrimitive("en"), "gl" to JsonPrimitive("US"))
@@ -106,11 +110,13 @@ class AndroidYouTubeMediaService(
             last = root["playabilityStatus"]?.jsonObject?.get("status")?.jsonPrimitive?.contentOrNull ?: "UNKNOWN"
             if (last != "OK") continue
             val formats = root["streamingData"]?.jsonObject?.get("adaptiveFormats") as? JsonArray ?: continue
+            // profil ma playability OK, ale może nie mieć bezpośredniego (nieszyfrowanego) audio —
+            // wtedy próbujemy następny profil, zamiast od razu poddawać się na całym rozwiązywaniu
+            val selected = selectFormat(formats.mapNotNull { format(it.jsonObject) }) ?: continue
             // loudnessDb jest wspólne dla całego wideo (siostra streamingData), nie per format
             val loudnessDb = root["playerConfig"]?.jsonObject?.get("audioConfig")?.jsonObject
                 ?.get("loudnessDb")?.jsonPrimitive?.content?.toDoubleOrNull()
-            return (selectFormat(formats.mapNotNull { format(it.jsonObject) })
-                ?: error("Brak bezpośredniego audio YouTube")).copy(loudnessDb = loudnessDb)
+            return selected.copy(loudnessDb = loudnessDb)
         }
         error("YouTube playability: $last")
     }
