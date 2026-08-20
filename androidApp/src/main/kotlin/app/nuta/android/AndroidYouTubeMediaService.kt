@@ -116,7 +116,15 @@ class AndroidYouTubeMediaService(
             // loudnessDb jest wspólne dla całego wideo (siostra streamingData), nie per format
             val loudnessDb = root["playerConfig"]?.jsonObject?.get("audioConfig")?.jsonObject
                 ?.get("loudnessDb")?.jsonPrimitive?.content?.toDoubleOrNull()
-            logger.info("AndroidYouTube", "profile_selected", "Profil klienta zwrócił bezpośrednie audio", fields = mapOf("profile" to profile.name))
+            // diagnostyka: sprawdzamy TYLKO obecność parametru "n" (throttling YouTube), nie logujemy
+            // samego URL-a (sekret) — potrzebne do potwierdzenia/wykluczenia przyczyny HTTP 403
+            val hasNParam = selected.url.use { url -> Regex("[?&]n=").containsMatchIn(url) }
+            val expiresInSec = selected.expiresAtMs?.let { (it - System.currentTimeMillis()) / 1000 }
+            logger.info("AndroidYouTube", "profile_selected", "Profil klienta zwrócił bezpośrednie audio", fields = mapOf(
+                "profile" to profile.name,
+                "hasNParam" to hasNParam.toString(),
+                "expiresInSec" to (expiresInSec?.toString() ?: "brak"),
+            ))
             return selected.copy(loudnessDb = loudnessDb)
         }
         error("YouTube playability: $last")
