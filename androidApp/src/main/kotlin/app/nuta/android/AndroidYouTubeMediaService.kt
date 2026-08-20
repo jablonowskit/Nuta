@@ -116,6 +116,7 @@ class AndroidYouTubeMediaService(
             // loudnessDb jest wspólne dla całego wideo (siostra streamingData), nie per format
             val loudnessDb = root["playerConfig"]?.jsonObject?.get("audioConfig")?.jsonObject
                 ?.get("loudnessDb")?.jsonPrimitive?.content?.toDoubleOrNull()
+            logger.info("AndroidYouTube", "profile_selected", "Profil klienta zwrócił bezpośrednie audio", fields = mapOf("profile" to profile.name))
             return selected.copy(loudnessDb = loudnessDb)
         }
         error("YouTube playability: $last")
@@ -174,5 +175,11 @@ class AndroidYouTubeMediaService(
     private fun normalize(value: String) = value.lowercase().replace(Regex("[^a-z0-9]+"), " ").trim()
     private fun extractObjects(source: String, marker: String): List<String> { val out=mutableListOf<String>(); var from=0; while(out.size<40){val m=source.indexOf(marker,from);if(m<0)break;val start=source.indexOf('{',m+marker.length);if(start<0)break;var depth=0;var quoted=false;var escaped=false;var end=-1;for(i in start until source.length){val c=source[i];if(quoted){if(escaped)escaped=false else if(c=='\\')escaped=true else if(c=='\"')quoted=false}else if(c=='\"')quoted=true else if(c=='{')depth++ else if(c=='}'&&--depth==0){end=i+1;break}};if(end<0)break;out+=source.substring(start,end);from=end};return out }
     private data class Profile(val name: String, val version: String, val id: String, val agent: String)
-    companion object { private const val USER_AGENT="Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/128.0 Safari/537.36"; private const val VR_AGENT="com.google.android.apps.youtube.vr.oculus/1.65.10 (Linux; U; Android 12L) gzip" }
+    companion object {
+        private const val USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/128.0 Safari/537.36"
+        /** Musi być zgodny z User-Agent, którym PlaybackService realnie ściąga bajty audio (Media3
+            DefaultHttpDataSource) — Google CDN odrzuca (HTTP 403) URL wynegocjowany dla klienta
+            ANDROID_VR, jeśli faktyczne żądanie o dane przyjdzie z UA wyglądającym jak przeglądarka. */
+        const val VR_AGENT = "com.google.android.apps.youtube.vr.oculus/1.65.10 (Linux; U; Android 12L) gzip"
+    }
 }

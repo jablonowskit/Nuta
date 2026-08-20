@@ -145,7 +145,7 @@ class NutaYouTubeMediaService(
         val profiles = listOf(
             PlayerProfile(
                 "ANDROID_VR", "1.65.10", "28",
-                "com.google.android.apps.youtube.vr.oculus/1.65.10 (Linux; U; Android 12L; eureka-user Build/SQ3A.220605.009.A1) gzip",
+                VrAgent,
                 mapOf("deviceMake" to "Oculus", "deviceModel" to "Quest 3", "androidSdkVersion" to 32, "osName" to "Android", "osVersion" to "12L"),
             ),
             PlayerProfile("WEB", clientVersion, "1", UserAgent, emptyMap()),
@@ -286,8 +286,12 @@ class NutaYouTubeMediaService(
         client.send(request, handler)
     }
 
-    private companion object {
+    companion object {
         const val UserAgent = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/128.0 Safari/537.36"
+        /** Musi być zgodny z UA, którym MpvAudioPlayer realnie ściąga bajty audio (opcja --user-agent
+            mpv) — Google CDN odrzuca (HTTP 403) URL wynegocjowany dla klienta ANDROID_VR, jeśli
+            żądanie o dane przyjdzie z UA wyglądającym jak przeglądarka. */
+        const val VrAgent = "com.google.android.apps.youtube.vr.oculus/1.65.10 (Linux; U; Android 12L; eureka-user Build/SQ3A.220605.009.A1) gzip"
     }
 
     private data class PlayerProfile(

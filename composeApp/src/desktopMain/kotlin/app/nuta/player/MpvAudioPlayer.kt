@@ -7,6 +7,7 @@ import app.nuta.core.models.Track
 import app.nuta.domain.AudioPlayer
 import app.nuta.settings.PlaybackSettingsStore
 import app.nuta.youtube.LoudnessGain
+import app.nuta.youtube.NutaYouTubeMediaService
 import app.nuta.youtube.YouTubeMediaService
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -195,6 +196,9 @@ class MpvAudioPlayer(
         process = ProcessBuilder(
             "mpv", "--idle=yes", "--no-video", "--audio-display=no", "--no-terminal",
             "--msg-level=all=warn", "--ao=$output", "--input-ipc-server=$socketPath",
+            // musi być zgodny z UA klienta ANDROID_VR, dla którego resolver wynegocjował URL —
+            // inaczej Google CDN odrzuca (HTTP 403) samo pobranie bajtów audio
+            "--user-agent=${NutaYouTubeMediaService.VrAgent}",
         ).redirectErrorStream(true).start()
         processLogReader = scope.launch(Dispatchers.IO) {
             process?.inputStream?.bufferedReader()?.useLines { lines ->
