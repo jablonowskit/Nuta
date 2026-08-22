@@ -141,7 +141,11 @@ class PlaybackService : MediaSessionService() {
                         else -> AndroidYouTubeMediaService.VISIONOS_AGENT
                     })
                     val contentLength = Regex("[?&]clen=(\\d+)").find(url)?.groupValues?.get(1)?.toLongOrNull()
-                    val boundedSpec = if (contentLength != null && dataSpec.length == androidx.media3.common.C.LENGTH_UNSET.toLong()) {
+                    // Tylko prawdziwe kontynuacje (position > 0) dostają wymuszony górny limit z "clen".
+                    // Pierwsze żądanie (position == 0) zostaje bez jawnego Range, tak jak wcześniej —
+                    // dodanie Range od bajtu 0 samo w sobie okazało się powodować natychmiastowe 403,
+                    // czego nie było, gdy pierwsze żądanie szło bez nagłówka Range wcale.
+                    val boundedSpec = if (contentLength != null && dataSpec.position > 0 && dataSpec.length == androidx.media3.common.C.LENGTH_UNSET.toLong()) {
                         dataSpec.buildUpon().setLength(contentLength - dataSpec.position).build()
                     } else dataSpec
                     logger.debug("PlaybackHttp", "range_open", "Otwieram żądanie bajtów", fields = mapOf(
