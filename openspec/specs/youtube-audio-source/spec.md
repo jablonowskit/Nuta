@@ -85,6 +85,17 @@ resolved URL. A mismatched User-Agent at byte-fetch time results in an HTTP
   uses a browser User-Agent (or vice versa)
 - THEN Google's CDN SHALL reject the byte-fetch request with HTTP 403
 
+**Implementation note (learned the hard way, three times, in August 2026):**
+do not hardcode a single UA constant for byte-fetch — every time a new
+client profile was added and the UA constant wasn't updated to match, this
+requirement broke silently (persistent 403s that looked like a new,
+unrelated problem each time). The durable fix (Android, commit `bc981ae`):
+derive the UA per-request from the `c=` query parameter Google embeds in
+every signed `videoplayback` URL (e.g. `&c=ANDROID_VR&`), via a wrapping
+`DataSource.Factory`. This needs no state synchronized with the resolver and
+is correct regardless of which profile actually won a fallback race or was
+force-selected by the user.
+
 ### Requirement: No duplicate connections to the same signed URL
 The system SHALL make exactly one HTTP connection per signed stream URL for
 the full lifetime of that URL. A second, independent connection to the same
