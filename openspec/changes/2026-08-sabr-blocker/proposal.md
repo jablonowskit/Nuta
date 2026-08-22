@@ -178,3 +178,30 @@ relevant as fallback options for whenever `VISIONOS` itself gets enforced.
   months on a ~21k-line subsystem. Not realistic for a solo/small-team
   timeframe. NewPipeExtractor's success confirms this was the right call —
   the actual working fix needed zero SABR/UMP code, just a client swap.
+
+## Full curl-tested client matrix (2026-08-22, from a desktop host — not the phone)
+
+Tested all 6 profiles directly against `/youtubei/v1/player` with the exact
+field values used in code, right before shipping the AUTO reorder below:
+
+| Profile | Playability | Format shape |
+|---|---|---|
+| `VISIONOS` | OK | direct `url` — confirmed byte-fetch too (HTTP 206) |
+| `ANDROID_VR` | OK | direct `url` — confirmed byte-fetch too (HTTP 206) |
+| `ANDROID` | OK | SABR-shaped (no `url`) |
+| `IOS` | OK | SABR-shaped (no `url`) |
+| `WEB` | UNPLAYABLE | — |
+| `TVHTML5` | UNPLAYABLE ("The page needs to be reloaded.") | — |
+
+Only `VISIONOS` and `ANDROID_VR` are currently usable. The `AUTO` fallback
+order was reordered to `VISIONOS → ANDROID_VR → WEB → ANDROID → IOS → TVHTML5`
+(commit after `1ad406c`) so the two working profiles are tried first,
+instead of wasting two failed requests (`WEB`, `ANDROID`) before reaching
+`ANDROID_VR` third. `resolveViaVisionOs()` handles `VISIONOS` specially
+(different endpoint/host/headers, see above); the rest share the generic
+per-profile loop in `resolveStream()`.
+
+An explicit `YouTubeClientProfile` setting (AUTO/VISIONOS/ANDROID_VR/ANDROID/
+WEB/IOS/TVHTML5) was added in Settings so a specific client can be forced
+(no fallback) for manual diagnosis, rather than only inferring from log
+timing which profile actually succeeded.
