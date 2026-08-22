@@ -91,14 +91,18 @@ class AndroidYouTubeMediaService(
         val key = Regex("\"INNERTUBE_API_KEY\":\"([^\"]+)\"").find(watch)?.groupValues?.get(1) ?: error("Brak klucza YouTube")
         val webVersion = Regex("\"INNERTUBE_CONTEXT_CLIENT_VERSION\":\"([^\"]+)\"").find(watch)?.groupValues?.get(1) ?: error("Brak wersji YouTube")
         val visitor = Regex("\"VISITOR_DATA\":\"([^\"]+)\"").find(watch)?.groupValues?.get(1)
-        val profiles = listOf(Profile("WEB", webVersion, "1", USER_AGENT), Profile("ANDROID_VR", "1.65.10", "28", VR_AGENT))
+        // ANDROID_VR dawał bezpośrednie (nieszyfrowane) audio bez transformacji podpisu — ale od
+        // 17.08.2026 YouTube zaczął go aktywnie blokować (wymóg PO Tokena dla formatów audio-only;
+        // patrz yt-dlp #17348/#16150, usunięty z domyślnych klientów w yt-dlp 2026.08.19). Zastąpione
+        // wariantem "ANDROID bez androidSdkVersion" — ten sam trik zastosował youtube_explode_dart
+        // (PR #371, "androidSdkless"): samo pole androidSdkVersion w kontekście klienta ANDROID
+        // uruchamiało to samo wymaganie PO Tokena, więc jego usunięcie wystarcza, żeby dalej dostawać
+        // gotowe, nieszyfrowane URL-e audio bez implementowania deszyfrowania signatureCipher dla WEB.
+        val profiles = listOf(Profile("WEB", webVersion, "1", USER_AGENT), Profile("ANDROID", "19.29.37", "3", ANDROID_AGENT))
         var last = "UNKNOWN"
         for (profile in profiles) {
             val client = mutableMapOf<String, JsonElement>("clientName" to JsonPrimitive(profile.name), "clientVersion" to JsonPrimitive(profile.version), "hl" to JsonPrimitive("en"), "gl" to JsonPrimitive("US"))
             visitor?.let { client["visitorData"] = JsonPrimitive(it) }
-            if (profile.name == "ANDROID_VR") {
-                client["androidSdkVersion"] = JsonPrimitive(32); client["osName"] = JsonPrimitive("Android"); client["osVersion"] = JsonPrimitive("12L")
-            }
             val body = JsonObject(mapOf("videoId" to JsonPrimitive(videoId), "contentCheckOk" to JsonPrimitive(true), "racyCheckOk" to JsonPrimitive(true),
                 "context" to JsonObject(mapOf("client" to JsonObject(client))))).toString()
             val root = json.parseToJsonElement(request("https://www.youtube.com/youtubei/v1/player?key=$key", body, profile.agent,
@@ -165,5 +169,13 @@ class AndroidYouTubeMediaService(
     private fun normalize(value: String) = value.lowercase().replace(Regex("[^a-z0-9]+"), " ").trim()
     private fun extractObjects(source: String, marker: String): List<String> { val out=mutableListOf<String>(); var from=0; while(out.size<40){val m=source.indexOf(marker,from);if(m<0)break;val start=source.indexOf('{',m+marker.length);if(start<0)break;var depth=0;var quoted=false;var escaped=false;var end=-1;for(i in start until source.length){val c=source[i];if(quoted){if(escaped)escaped=false else if(c=='\\')escaped=true else if(c=='\"')quoted=false}else if(c=='\"')quoted=true else if(c=='{')depth++ else if(c=='}'&&--depth==0){end=i+1;break}};if(end<0)break;out+=source.substring(start,end);from=end};return out }
     private data class Profile(val name: String, val version: String, val id: String, val agent: String)
-    companion object { private const val USER_AGENT="Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/128.0 Safari/537.36"; private const val VR_AGENT="com.google.android.apps.youtube.vr.oculus/1.65.10 (Linux; U; Android 12L) gzip" }
+    companion object {
+        private const val USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/128.0 Safari/537.36"
+        /** Musi być zgodny z User-Agent, którym PlaybackService realnie ściąga bajty audio (Media3
+            DefaultHttpDataSource) — Google CDN odrzuca (HTTP 403) URL wynegocjowany dla klienta
+            ANDROID, jeśli faktyczne żądanie o dane przyjdzie z UA wyglądającym jak przeglądarka.
+            WEB w praktyce nigdy nie daje bezpośredniego (nieszyfrowanego) audio, więc to ten UA,
+            nie przeglądarkowy USER_AGENT, jest używany przy każdym realnym odtwarzaniu. */
+        const val ANDROID_AGENT = "com.google.android.youtube/19.29.37 (Linux; U; Android 14) gzip"
+    }
 }
