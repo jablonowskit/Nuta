@@ -88,6 +88,7 @@ import app.nuta.core.models.SearchResult
 import app.nuta.core.models.Track
 import app.nuta.settings.BufferSize
 import app.nuta.settings.LoudnessNormalization
+import app.nuta.settings.YouTubeClientProfile
 import app.nuta.settings.CodecPreference
 import app.nuta.settings.StreamQuality
 import kotlinx.coroutines.Job
@@ -689,6 +690,25 @@ private fun SettingsScreen(container: AppContainer) {
                     ),
                     selected = settings.loudnessNormalization,
                 ) { container.playbackSettings.update(settings.copy(loudnessNormalization = it)) }
+            }
+        }
+        item {
+            SettingsGroup(
+                "Profil klienta YouTube",
+                "Który klient próbujemy przy rozwiązywaniu strumienia audio. YouTube regularnie blokuje różne profile w różnym tempie — AUTO próbuje ich po kolei, wybór konkretnego wymusza tylko ten jeden (przydatne do diagnozowania).",
+            ) {
+                SettingOptions(
+                    options = listOf(
+                        YouTubeClientProfile.AUTO to "Automatycznie",
+                        YouTubeClientProfile.VISIONOS to "VISIONOS",
+                        YouTubeClientProfile.ANDROID_VR to "ANDROID_VR",
+                        YouTubeClientProfile.ANDROID to "ANDROID",
+                        YouTubeClientProfile.WEB to "WEB",
+                        YouTubeClientProfile.IOS to "IOS",
+                        YouTubeClientProfile.TVHTML5 to "TVHTML5",
+                    ),
+                    selected = settings.youtubeClientProfile,
+                ) { container.playbackSettings.update(settings.copy(youtubeClientProfile = it)) }
             }
         }
         item {

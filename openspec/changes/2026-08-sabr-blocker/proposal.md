@@ -1,8 +1,9 @@
 # Change: YouTube audio source blocked by SABR rollout
 
-- Status: **client-rotation mitigation in flight (`VISIONOS` profile,
-  commit `cdeee89`), outcome not yet confirmed on-device** — not a durable fix
-- Date opened: 2026-08-22
+- Status: **RESOLVED (mitigated) — `VISIONOS` client profile confirmed
+  working on-device**, commit `cdeee89`. Not a durable fix — see
+  "Explicitly not pursued" / rotation risk below.
+- Date opened: 2026-08-22, confirmed working same day
 - Affects: `youtube-audio-source` (Android side; desktop resolver
   `NutaYouTubeMediaService` not yet re-tested against this but almost
   certainly hits the same wall, since it's the same YouTube backend)
@@ -136,9 +137,23 @@ minimal headers):
 Implemented as `resolveViaVisionOs()` in `AndroidYouTubeMediaService.kt`,
 tried first, falling through to the existing WEB/ANDROID/IOS/TVHTML5 loop on
 any failure (commit `cdeee89`). `PlaybackService`'s byte-fetch User-Agent
-updated to match. **On-device confirmation still pending** as of this
-writing (CI build in flight) — spec doc will be updated to "resolved" once
-verified end-to-end on the phone, not just via curl.
+updated to match.
+
+**Confirmed working on-device** (2026-08-22, same day): multiple different
+tracks resolved and played back-to-back with zero `playback_failed`/
+`resolution_failed` errors in the logs after installing the build containing
+`cdeee89`. Playback is restored.
+
+Also worth recording: a `curl` re-test of the *old* `ANDROID_VR` client (the
+one that failed all day on-device) succeeded cleanly from a desktop machine
+around the same time — playable URL, three independent connections to the
+same signed URL all returning HTTP 206, no 403. This directly contradicts
+the on-device 403s logged earlier for the same client and was **not**
+root-caused (candidate causes: time-windowed enforcement, phone-specific
+network path, or a request-pattern difference between curl and ExoPlayer).
+Left as an open, unresolved discrepancy since `VISIONOS` was independently
+confirmed working and shipped — see the earlier section in this doc for
+detail if this needs revisiting later.
 
 **This is explicitly not a durable fix.** It is the same reactive
 client-string-spoofing arms race NewPipeExtractor itself is running — expect
