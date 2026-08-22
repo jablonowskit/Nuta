@@ -9,6 +9,7 @@ import androidx.media3.database.StandaloneDatabaseProvider
 import androidx.media3.datasource.DataSource
 import androidx.media3.datasource.DataSpec
 import androidx.media3.datasource.DefaultHttpDataSource
+import androidx.media3.datasource.HttpDataSource
 import androidx.media3.datasource.cache.CacheDataSource
 import androidx.media3.datasource.cache.LeastRecentlyUsedCacheEvictor
 import androidx.media3.datasource.cache.SimpleCache
@@ -31,8 +32,9 @@ class PlaybackService : MediaSessionService() {
 
     override fun onCreate() {
         super.onCreate()
+        AppServices.start(this)
         val settingsStore = AndroidPlaybackSettingsStore(getSharedPreferences("playback-settings", MODE_PRIVATE))
-        val upstreamFactory = ClientAwareDataSourceFactory(DefaultHttpDataSource.Factory().setAllowCrossProtocolRedirects(true))
+        val upstreamFactory = ClientAwareDataSourceFactory(DefaultHttpDataSource.Factory().setAllowCrossProtocolRedirects(true), AppServices.logger)
         val cacheSizeBytes = settingsStore.settings.value.cacheSizeMb.toLong() * 1024 * 1024
         val cache = SimpleCache(File(cacheDir, "stream-cache"), LeastRecentlyUsedCacheEvictor(cacheSizeBytes), StandaloneDatabaseProvider(this))
         streamCache = cache
@@ -124,12 +126,16 @@ class PlaybackService : MediaSessionService() {
      * górną granicę zakresu na podstawie parametru "clen" (długość treści), który Google umieszcza
      * w samym URL-u — więc żadne żądanie nigdy nie jest "otwarte".
      */
-    private class ClientAwareDataSourceFactory(private val upstream: DefaultHttpDataSource.Factory) : DataSource.Factory {
+    private class ClientAwareDataSourceFactory(
+        private val upstream: DefaultHttpDataSource.Factory,
+        private val logger: app.nuta.core.logging.NutaLogger,
+    ) : DataSource.Factory {
         override fun createDataSource(): DataSource {
             val inner = upstream.createDataSource()
             return object : DataSource by inner {
                 override fun open(dataSpec: DataSpec): Long {
                     val url = dataSpec.uri.toString()
+                    val itag = Regex("[?&]itag=(\\d+)").find(url)?.groupValues?.get(1)
                     inner.setRequestProperty("User-Agent", when {
                         "c=ANDROID_VR" in url -> AndroidYouTubeMediaService.VR_AGENT
                         else -> AndroidYouTubeMediaService.VISIONOS_AGENT
@@ -138,7 +144,28 @@ class PlaybackService : MediaSessionService() {
                     val boundedSpec = if (contentLength != null && dataSpec.length == androidx.media3.common.C.LENGTH_UNSET.toLong()) {
                         dataSpec.buildUpon().setLength(contentLength - dataSpec.position).build()
                     } else dataSpec
-                    return inner.open(boundedSpec)
+                    logger.debug("PlaybackHttp", "range_open", "Otwieram żądanie bajtów", fields = mapOf(
+                        "itag" to (itag ?: "?"),
+                        "position" to dataSpec.position.toString(),
+                        "requestedLength" to dataSpec.length.toString(),
+                        "clen" to (contentLength?.toString() ?: "null"),
+                        "boundedLength" to boundedSpec.length.toString(),
+                    ))
+                    return try {
+                        inner.open(boundedSpec)
+                    } catch (e: HttpDataSource.InvalidResponseCodeException) {
+                        logger.error("PlaybackHttp", "range_open_failed", "HTTP błąd przy otwieraniu zakresu bajtów", fields = mapOf(
+                            "itag" to (itag ?: "?"),
+                            "responseCode" to e.responseCode.toString(),
+                            "position" to dataSpec.position.toString(),
+                            "requestedLength" to dataSpec.length.toString(),
+                            "clen" to (contentLength?.toString() ?: "null"),
+                            "boundedLength" to boundedSpec.length.toString(),
+                            "responseHeaders" to e.responseHeaders.entries.joinToString(";") { (k, v) -> "$k=${v.joinToString(",")}" },
+                            "responseBody" to (e.responseBody?.let { String(it).take(300) } ?: ""),
+                        ))
+                        throw e
+                    }
                 }
             }
         }
