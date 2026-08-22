@@ -97,6 +97,13 @@ class AndroidYouTubeMediaService(
         val key = Regex("\"INNERTUBE_API_KEY\":\"([^\"]+)\"").find(watch)?.groupValues?.get(1) ?: error("Brak klucza YouTube")
         val webVersion = Regex("\"INNERTUBE_CONTEXT_CLIENT_VERSION\":\"([^\"]+)\"").find(watch)?.groupValues?.get(1) ?: error("Brak wersji YouTube")
         val visitor = Regex("\"VISITOR_DATA\":\"([^\"]+)\"").find(watch)?.groupValues?.get(1)
+        // VISIONOS (klient YouTube na Apple Vision Pro) — jedyny profil, którego YouTube jeszcze
+        // nie objął wymuszeniem SABR, według NewPipeExtractor (który realnie działa dziś w Spotube
+        // na tym urządzeniu — sprawdzone bezpośrednio w ich źródle: WEB/ANDROID/ANDROID_VR/IOS/TV
+        // już są enforced, VISIONOS to ich obecny "kolejny przystanek" w tej samej gonitwie).
+        // To NIE jest trwałe rozwiązanie — samo NewPipe śledzi to centralnie w issue #12248 i co
+        // kilka tygodni przeskakuje na nowego klienta, gdy ten aktualny też zostanie zablokowany.
+        resolveViaVisionOs(videoId, visitor, watch)?.let { return it }
         // ANDROID_VR dawał bezpośrednie (nieszyfrowane) audio bez transformacji podpisu — ale od
         // 17.08.2026 YouTube zaczął go aktywnie blokować (wymóg PO Tokena dla formatów audio-only;
         // patrz yt-dlp #17348/#16150, usunięty z domyślnych klientów w yt-dlp 2026.08.19). Zastąpione
@@ -151,6 +158,42 @@ class AndroidYouTubeMediaService(
         }
         error("YouTube playability: $last")
     }
+
+    /**
+     * Profil VISIONOS ma zupełnie inny kształt żądania niż resztka (endpoint youtubei.googleapis.com
+     * bez klucza API, losowy token "t" w query, minimalne nagłówki) — sprawdzone wprost w źródłach
+     * NewPipeExtractor. Zwraca null (nie rzuca) na każdą awarię, żeby zwykła pętla profili WEB/
+     * ANDROID/IOS/TVHTML5 dalej działała jako fallback, gdyby ten eksperyment nie zadziałał.
+     */
+    private suspend fun resolveViaVisionOs(videoId: String, visitor: String?, watchHtml: String): AudioStreamSource? = runCatching {
+        val client = mutableMapOf<String, JsonElement>(
+            "clientName" to JsonPrimitive("VISIONOS"),
+            "clientVersion" to JsonPrimitive("1.04"),
+            "platform" to JsonPrimitive("MOBILE"),
+            "deviceMake" to JsonPrimitive("Apple"),
+            "deviceModel" to JsonPrimitive("RealityDevice17,1"),
+            "osName" to JsonPrimitive("visionOS"),
+            "osVersion" to JsonPrimitive("26.6.0.23O770"),
+            "clientScreen" to JsonPrimitive("WATCH"),
+            "hl" to JsonPrimitive("en"),
+            "gl" to JsonPrimitive("US"),
+        )
+        visitor?.let { client["visitorData"] = JsonPrimitive(it) }
+        val body = JsonObject(mapOf(
+            "videoId" to JsonPrimitive(videoId),
+            "contentCheckOk" to JsonPrimitive(true),
+            "racyCheckOk" to JsonPrimitive(true),
+            "context" to JsonObject(mapOf("client" to JsonObject(client))),
+        )).toString()
+        val token = (1..12).map { VISIONOS_TOKEN_CHARS.random() }.joinToString("")
+        val url = "https://youtubei.googleapis.com/youtubei/v1/player?prettyPrint=false&t=$token&id=$videoId"
+        val root = json.parseToJsonElement(request(url, body, VISIONOS_AGENT, mapOf("X-Goog-Api-Format-Version" to "2"))).jsonObject
+        val status = root["playabilityStatus"]?.jsonObject?.get("status")?.jsonPrimitive?.contentOrNull
+        if (status != "OK") { logger.warn("AndroidYouTube", "visionos_not_ok", "VISIONOS playability nie OK", fields = mapOf("status" to (status ?: "brak"))); return@runCatching null }
+        val formats = root["streamingData"]?.jsonObject?.get("adaptiveFormats") as? JsonArray ?: return@runCatching null
+        val audioItems = formats.map(JsonElement::jsonObject).filter { it["mimeType"]?.jsonPrimitive?.contentOrNull?.startsWith("audio/") == true }
+        selectFormat(resolveFormats(audioItems, watchHtml))
+    }.onFailure { logger.warn("AndroidYouTube", "visionos_failed", "Profil VISIONOS nie zadziałał", fields = mapOf("reason" to (it.message ?: "unknown"))) }.getOrNull()
 
     /**
      * Dla formatów z gotowym "url" (klient ANDROID) tylko rozwiązuje ewentualny throttling "n".
@@ -284,5 +327,7 @@ class AndroidYouTubeMediaService(
         const val ANDROID_AGENT = "com.google.android.youtube/21.26.364 (Linux; U; Android 11) gzip"
         const val IOS_AGENT = "com.google.ios.youtube/21.26.4 (iPhone16,2; U; CPU iOS 18_3_2 like Mac OS X;)"
         const val TV_AGENT = "Mozilla/5.0 (ChromiumStylePlatform) Cobalt/25.lts.30.1034943-gold (unlike Gecko), Unknown_TV_Unknown_0/Unknown (Unknown, Unknown)"
+        const val VISIONOS_AGENT = "com.google.visionos.youtube/1.04(RealityDevice17,1; U; CPU visionOS 26_6_0 like Mac OS X; US)"
+        private const val VISIONOS_TOKEN_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
     }
 }
