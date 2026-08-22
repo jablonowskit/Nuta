@@ -148,9 +148,10 @@ class PlaybackService : MediaSessionService() {
     companion object {
         // Musi być zgodny z UA, którym AndroidYouTubeMediaService wynegocjował URL strumienia —
         // Google CDN odrzuca (HTTP 403) pobranie bajtów audio, jeśli UA żądania danych nie
-        // zgadza się z UA klienta, dla którego URL został podpisany. WEB nigdy w praktyce nie
-        // daje bezpośredniego audio, więc realnie zawsze gramy z profilu ANDROID.
-        private val USER_AGENT = AndroidYouTubeMediaService.ANDROID_AGENT
+        // zgadza się z UA klienta, dla którego URL został podpisany. VISIONOS jest teraz próbowany
+        // pierwszy (jedyny profil, który wg NewPipeExtractor jeszcze omija wymuszenie SABR) —
+        // WEB/ANDROID dają tylko formaty SABR, więc realnie ich UA nie ma znaczenia.
+        private val USER_AGENT = AndroidYouTubeMediaService.VISIONOS_AGENT
         private const val COMMAND_SEEK_BACK_10 = "app.nuta.SEEK_BACK_10"
         private const val COMMAND_SEEK_FORWARD_10 = "app.nuta.SEEK_FORWARD_10"
 
