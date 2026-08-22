@@ -382,4 +382,24 @@ Node.js (LTS, via winget) was installed on the dev machine for this spike
 and left in place. No app code changed as a result of the PO-token
 investigation itself — only the `AUTO`→`ANDROID_VR` fallback removal
 (point 3 above) is a shipped fix.
+
+**Follow-up conclusion (same day, CDP spike completed):** minting the
+PoToken via a genuine Chrome tab over raw CDP (instead of jsdom) worked —
+a real, validly-signed token was produced — but made no difference: `WEB`
+still returned `UNPLAYABLE` / "The page needs to be reloaded" identically
+*with or without* the token attached, proving PO-token was never the
+actual gate for `WEB` either. Sniffing the real browser's own network
+traffic for the same video (via CDP `Network.requestWillBeSent`, which
+sees plaintext before TLS — no router/packet-capture needed) confirmed
+why: real YouTube playback in a browser sends `POST` requests to
+`videoplayback` with an **opaque binary payload** (SABR/UMP), to a URL
+that has no `itag=`/`pot=`/format query params at all — a completely
+different protocol shape than the `adaptiveFormats[].url` + `GET`+`Range`
+approach this app (and yt-dlp/NewPipe generally) relies on. A PoToken
+alone cannot unlock the old-style response on a client that has fully
+moved to SABR; the classic mechanism this app depends on only survives on
+whichever client hasn't been SABR-enforced yet (`VISIONOS`, for now).
+**This closes the PO-token investigation for good** — it was never the
+right lever for either `ANDROID_VR` (ignores it) or `WEB` (bypassed
+entirely by SABR). No further PO-token work is planned.
 again later.
