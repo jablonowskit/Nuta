@@ -71,6 +71,25 @@ blocker. Recording all of it here so nobody re-derives the same path.
   URL, no cipher, nothing to decrypt); `IOS`/`TVHTML5` fail earlier still.
 - This is **not a code bug in this app** — the same SABR-only response
   happens on freshly-verified, exactly-matched client field values.
+- **Puzzling counter-evidence found later the same day**: re-tested
+  `ANDROID_VR` directly with `curl` from a desktop/dev machine (not the
+  phone) using the exact same client fields that failed all day on-device
+  — and it succeeded cleanly: `playabilityStatus: OK`, direct `url` (not
+  SABR-shaped), no `n` param, and three independent `curl` connections to
+  the same signed URL (including one after a 4s gap, simulating ExoPlayer's
+  post-buffer reconnect) all returned `HTTP 206` with zero 403s. This
+  directly contradicts the persistent on-device 403s logged earlier in
+  this same investigation for the same client. Not root-caused — candidate
+  explanations: (a) YouTube's SABR/PO-token enforcement is time-windowed or
+  was briefly rolled back, (b) something specific to the phone's network
+  path (its IP, DNS resolution, or the particular Google CDN edge/PoP it
+  gets routed to) differs from this dev machine's, or (c) ExoPlayer's
+  actual request pattern differs from a plain `curl -H Range` in some way
+  not replicated here (headers, connection reuse behavior, etc.). Left
+  unresolved — `VISIONOS` was verified as a working fix by the same
+  curl-first method and shipped instead of chasing this further, but if
+  `VISIONOS` also mysteriously fails on-device despite curl succeeding,
+  this discrepancy point should be revisited first.
 - **yt-dlp itself does not have merged/stable SABR support.** Researched
   directly: the implementation is yt-dlp PR #13515 ("[fd/sabr] Add YouTube
   SABR protocol downloader"), opened 2025-06-21, still open and unmerged as
