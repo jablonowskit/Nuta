@@ -94,15 +94,21 @@ class AndroidYouTubeMediaService(
         // ANDROID_VR dawał bezpośrednie (nieszyfrowane) audio bez transformacji podpisu — ale od
         // 17.08.2026 YouTube zaczął go aktywnie blokować (wymóg PO Tokena dla formatów audio-only;
         // patrz yt-dlp #17348/#16150, usunięty z domyślnych klientów w yt-dlp 2026.08.19). Zastąpione
-        // wariantem "ANDROID bez androidSdkVersion" — ten sam trik zastosował youtube_explode_dart
-        // (PR #371, "androidSdkless"): samo pole androidSdkVersion w kontekście klienta ANDROID
-        // uruchamiało to samo wymaganie PO Tokena, więc jego usunięcie wystarcza, żeby dalej dostawać
-        // gotowe, nieszyfrowane URL-e audio bez implementowania deszyfrowania signatureCipher dla WEB.
-        val profiles = listOf(Profile("WEB", webVersion, "1", USER_AGENT), Profile("ANDROID", "19.29.37", "3", ANDROID_AGENT))
+        // zwykłym klientem ANDROID — dokładne pola (clientVersion, androidSdkVersion, osName/osVersion,
+        // User-Agent) zgodne 1:1 z yt-dlp's INNERTUBE_CLIENTS['android'] (sprawdzone bezpośrednio
+        // w źródłach yt-dlp), bo błędna/przestarzała wersja klienta kończy się HTTP 400 z serwera
+        // YouTube — sam zestaw pól nie wystarczy, muszą się zgadzać też konkretne wartości.
+        val profiles = listOf(Profile("WEB", webVersion, "1", USER_AGENT), Profile("ANDROID", "21.26.364", "3", ANDROID_AGENT))
         var last = "UNKNOWN"
         for (profile in profiles) {
             val client = mutableMapOf<String, JsonElement>("clientName" to JsonPrimitive(profile.name), "clientVersion" to JsonPrimitive(profile.version), "hl" to JsonPrimitive("en"), "gl" to JsonPrimitive("US"))
             visitor?.let { client["visitorData"] = JsonPrimitive(it) }
+            if (profile.name == "ANDROID") {
+                client["androidSdkVersion"] = JsonPrimitive(30)
+                client["osName"] = JsonPrimitive("Android")
+                client["osVersion"] = JsonPrimitive("11")
+                client["userAgent"] = JsonPrimitive(profile.agent)
+            }
             val body = JsonObject(mapOf("videoId" to JsonPrimitive(videoId), "contentCheckOk" to JsonPrimitive(true), "racyCheckOk" to JsonPrimitive(true),
                 "context" to JsonObject(mapOf("client" to JsonObject(client))))).toString()
             val root = json.parseToJsonElement(request("https://www.youtube.com/youtubei/v1/player?key=$key", body, profile.agent,
@@ -176,6 +182,6 @@ class AndroidYouTubeMediaService(
             ANDROID, jeśli faktyczne żądanie o dane przyjdzie z UA wyglądającym jak przeglądarka.
             WEB w praktyce nigdy nie daje bezpośredniego (nieszyfrowanego) audio, więc to ten UA,
             nie przeglądarkowy USER_AGENT, jest używany przy każdym realnym odtwarzaniu. */
-        const val ANDROID_AGENT = "com.google.android.youtube/19.29.37 (Linux; U; Android 14) gzip"
+        const val ANDROID_AGENT = "com.google.android.youtube/21.26.364 (Linux; U; Android 11) gzip"
     }
 }
