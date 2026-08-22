@@ -154,7 +154,11 @@ class AndroidYouTubeMediaService(
             }
         }
         if (pending.isEmpty()) {
-            logger.warn("AndroidYouTube", "no_pending_formats", "Żaden format audio nie miał url ani signatureCipher", fields = mapOf("items" to items.size.toString()))
+            logger.warn("AndroidYouTube", "no_pending_formats", "Żaden format audio nie miał url ani signatureCipher", fields = mapOf(
+                "items" to items.size.toString(),
+                "firstItemKeys" to (items.firstOrNull()?.keys?.joinToString(",") ?: "brak"),
+                "firstItem" to (items.firstOrNull()?.toString()?.take(800) ?: "brak"),
+            ))
             return emptyList()
         }
         val nChallenges = pending.mapNotNull { it.nChallenge }.distinct()
