@@ -116,9 +116,19 @@ but that URL is unconditionally rejected with HTTP 403 on the very first
 byte-fetch request — confirmed on 2026-08-22 to be independent of Range
 header shape (bounded vs open-ended vs no Range at all), User-Agent, and
 client IP (verified identical between the signed URL's `ip=` parameter and
-the device's actual public IP). This is consistent with YouTube's PO-token
-enforcement for this client (tracked informally since 2026-08-17). The
-`AUTO` client-profile setting SHALL NOT fall back to `ANDROID_VR` when
+the device's actual public IP). **A PO-token is NOT the cause either** —
+tested the same day with a real BotGuard-minted PoToken (via a local
+`bgutil-ytdlp-pot-provider` spike, both video-ID-bound and
+visitor-ID-bound), attached to the `/player` request's
+`serviceIntegrityDimensions.poToken`: `playabilityStatus` stayed `OK`
+(identical to no token at all), the returned `videoplayback` URL never
+contained a `pot=` parameter regardless, and the byte-fetch still 403'd
+every time. `/player` for this client appears to silently ignore the
+PO-token field entirely, so whatever blocks `ANDROID_VR` happens at a
+layer this app cannot address by supplying any token it can generate
+itself. `ANDROID_VR` is treated as a dead end; no further investigation
+planned unless new evidence appears. The `AUTO` client-profile setting
+SHALL NOT fall back to `ANDROID_VR` when
 `VISIONOS` fails to resolve a track — that fallback silently sent some
 fraction of tracks through a profile with a 100% byte-fetch failure rate,
 which looked like an intermittent/environmental bug (Range shape, ISP CDN
