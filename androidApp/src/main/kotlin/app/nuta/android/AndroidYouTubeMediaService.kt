@@ -14,6 +14,7 @@ import app.nuta.youtube.YouTubeMediaService
 import app.nuta.youtube.YouTubeResolution
 import app.nuta.settings.PlaybackSettingsStore
 import java.net.HttpURLConnection
+import java.net.URLDecoder
 import java.net.URLEncoder
 import java.net.URL
 import kotlinx.coroutines.Dispatchers
@@ -33,6 +34,11 @@ class AndroidYouTubeMediaService(
     private val context: Context,
 ) : YouTubeMediaService {
     private val json = Json { ignoreUnknownKeys = true }
+    private val ejsSolver = YtEjsSolver(context)
+    /** base.js zwykle jest stabilny między kolejnymi rozwiązaniami (zmienia się tylko przy nowej
+        wersji odtwarzacza YouTube) — jeden slot cache oszczędza osobne pobranie ~200-300 KB przy
+        każdym utworze. */
+    private var cachedPlayerJs: Pair<String, String>? = null
 
     override suspend fun resolve(track: Track): YouTubeResolution {
         val matches = search(track)
@@ -116,10 +122,68 @@ class AndroidYouTubeMediaService(
             last = root["playabilityStatus"]?.jsonObject?.get("status")?.jsonPrimitive?.contentOrNull ?: "UNKNOWN"
             if (last != "OK") continue
             val formats = root["streamingData"]?.jsonObject?.get("adaptiveFormats") as? JsonArray ?: continue
-            return selectFormat(formats.mapNotNull { format(it.jsonObject) })
-                ?: error("Brak bezpośredniego audio YouTube")
+            val audioItems = formats.map(JsonElement::jsonObject).filter { it["mimeType"]?.jsonPrimitive?.contentOrNull?.startsWith("audio/") == true }
+            val resolved = runCatching { resolveFormats(audioItems, watch) }.getOrElse {
+                logger.warn("AndroidYouTube", "cipher_resolve_failed", "Nie udało się rozwiązać sygnatur/n dla profilu", fields = mapOf("profile" to profile.name, "reason" to (it.message ?: "unknown")))
+                emptyList()
+            }
+            selectFormat(resolved)?.let { return it }
         }
         error("YouTube playability: $last")
+    }
+
+    /**
+     * Dla formatów z gotowym "url" (klient ANDROID) tylko rozwiązuje ewentualny throttling "n".
+     * Dla formatów z "signatureCipher" (klient WEB — jedyny sposób na audio, gdy ANDROID akurat
+     * nie ma dobrego formatu) doklejamy do tego jeszcze deszyfrowanie podpisu "s". Oba wyzwania
+     * idą w JEDNYM wywołaniu solvera (YtEjsSolver, uruchamiający oficjalny JS z yt-dlp/ejs w
+     * WebView), żeby nie inicjalizować silnika JS ani nie parsować base.js osobno na format.
+     */
+    private suspend fun resolveFormats(items: List<JsonObject>, watchHtml: String): List<AudioStreamSource> {
+        data class Pending(val item: JsonObject, val url: String, val nChallenge: String?, val sigChallenge: String?, val sigParamName: String)
+        val pending = items.mapNotNull { item ->
+            val direct = item["url"]?.jsonPrimitive?.contentOrNull
+            if (direct != null) {
+                Pending(item, direct, Regex("[?&]n=([^&]+)").find(direct)?.groupValues?.get(1), null, "")
+            } else {
+                val cipher = item["signatureCipher"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
+                val fields = parseQuery(cipher)
+                val innerUrl = fields["url"] ?: return@mapNotNull null
+                val sig = fields["s"] ?: return@mapNotNull null
+                Pending(item, innerUrl, Regex("[?&]n=([^&]+)").find(innerUrl)?.groupValues?.get(1), sig, fields["sp"] ?: "signature")
+            }
+        }
+        if (pending.isEmpty()) return emptyList()
+        val nChallenges = pending.mapNotNull { it.nChallenge }.distinct()
+        val sigChallenges = pending.mapNotNull { it.sigChallenge }.distinct()
+        val solutions = if (nChallenges.isEmpty() && sigChallenges.isEmpty()) emptyMap() else {
+            val playerJs = fetchPlayerJs(watchHtml) ?: return pending.filter { it.nChallenge == null && it.sigChallenge == null }.map { format(it.item, it.url) }
+            ejsSolver.solve(playerJs, nChallenges, sigChallenges)
+        }
+        return pending.mapNotNull { p ->
+            var url = p.url
+            p.nChallenge?.let { n -> url = replaceQueryParam(url, "n", solutions[n] ?: return@mapNotNull null) }
+            p.sigChallenge?.let { sig -> url = "$url&${p.sigParamName}=${URLEncoder.encode(solutions[sig] ?: return@mapNotNull null, "UTF-8")}" }
+            format(p.item, url)
+        }
+    }
+
+    private fun parseQuery(query: String): Map<String, String> = query.split('&').mapNotNull { pair ->
+        val idx = pair.indexOf('=')
+        if (idx < 0) null else URLDecoder.decode(pair.substring(0, idx), "UTF-8") to URLDecoder.decode(pair.substring(idx + 1), "UTF-8")
+    }.toMap()
+
+    private fun replaceQueryParam(url: String, name: String, value: String): String {
+        val encoded = URLEncoder.encode(value, "UTF-8")
+        return if (Regex("[?&]$name=[^&]*").containsMatchIn(url)) Regex("([?&]$name=)[^&]*").replace(url) { it.groupValues[1] + encoded }
+        else "$url&$name=$encoded"
+    }
+
+    private suspend fun fetchPlayerJs(watchHtml: String): String? {
+        val jsPath = Regex("\"jsUrl\":\"([^\"]+)\"").find(watchHtml)?.groupValues?.get(1) ?: return null
+        val jsUrl = if (jsPath.startsWith("http")) jsPath else "https://www.youtube.com$jsPath"
+        cachedPlayerJs?.let { (url, content) -> if (url == jsUrl) return content }
+        return runCatching { request(jsUrl) }.onSuccess { cachedPlayerJs = jsUrl to it }.getOrNull()
     }
 
     private fun selectFormat(formats: List<AudioStreamSource>): AudioStreamSource? {
@@ -149,10 +213,8 @@ class AndroidYouTubeMediaService(
         manager.restrictBackgroundStatus == ConnectivityManager.RESTRICT_BACKGROUND_STATUS_ENABLED
     }.getOrDefault(false)
 
-    private fun format(item: JsonObject): AudioStreamSource? {
-        val mime = item["mimeType"]?.jsonPrimitive?.contentOrNull ?: return null
-        if (!mime.startsWith("audio/")) return null
-        val url = item["url"]?.jsonPrimitive?.contentOrNull ?: return null
+    private fun format(item: JsonObject, url: String): AudioStreamSource {
+        val mime = item["mimeType"]!!.jsonPrimitive.content
         return AudioStreamSource(SecretValue.of(url), mime, mime.substringAfter("audio/").substringBefore(';'),
             Regex("codecs=\"([^\"]+)\"").find(mime)?.groupValues?.get(1).orEmpty(), item["bitrate"]?.jsonPrimitive?.content?.toIntOrNull() ?: 0,
             item["contentLength"]?.jsonPrimitive?.content?.toLongOrNull(), Regex("[?&]expire=(\\d+)").find(url)?.groupValues?.get(1)?.toLongOrNull()?.times(1_000))
