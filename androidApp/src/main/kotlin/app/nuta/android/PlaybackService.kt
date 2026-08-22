@@ -161,8 +161,9 @@ class PlaybackService : MediaSessionService() {
                             "requestedLength" to dataSpec.length.toString(),
                             "clen" to (contentLength?.toString() ?: "null"),
                             "boundedLength" to boundedSpec.length.toString(),
-                            "responseHeaders" to e.responseHeaders.entries.joinToString(";") { (k, v) -> "$k=${v.joinToString(",")}" },
-                            "responseBody" to (e.responseBody?.let { String(it).take(300) } ?: ""),
+                            "responseMessage" to (e.responseMessage ?: ""),
+                            "responseHeaders" to e.headerFields.entries.joinToString(";") { entry -> "${entry.key}=${entry.value.joinToString(",")}" },
+                            "responseBody" to String(e.responseBody).take(300),
                         ))
                         throw e
                     }
