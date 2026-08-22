@@ -2,6 +2,7 @@ package app.nuta.android
 
 import android.content.Context
 import android.webkit.WebView
+import app.nuta.core.logging.NutaLogger
 import kotlin.coroutines.resume
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
@@ -26,7 +27,7 @@ import kotlinx.serialization.json.jsonPrimitive
  * XMLHttpRequest/window/document) — więc WebView.evaluateJavascript działa jako drop-in
  * zamiennik bez potrzeby pisania własnego parsera base.js.
  */
-class YtEjsSolver(private val context: Context) {
+class YtEjsSolver(private val context: Context, private val logger: NutaLogger) {
     private val json = Json { ignoreUnknownKeys = true }
     private val initMutex = Mutex()
     private var webView: WebView? = null
@@ -63,18 +64,23 @@ class YtEjsSolver(private val context: Context) {
             "requests" to JsonArray(requests),
         )).toString()
         val raw = withContext(Dispatchers.Main) { evaluate(view, "JSON.stringify(jsc($input))") }
+        logger.info("YtEjsSolver", "solve_raw_result", "Surowy wynik evaluateJavascript", fields = mapOf("raw" to raw.take(1000)))
         // evaluateJavascript zwraca wynik jako JSON-zakodowany literał JS-a — nasz skrypt sam robi
         // JSON.stringify, więc trzeba odkodować dwa razy: raz jako string z callbacku (to, co realnie
         // zwrócił evaluateJavascript), drugi raz jako JSON, który ten string faktycznie zawiera.
-        val jsonText = json.parseToJsonElement(raw).jsonPrimitive.content
-        val result = json.parseToJsonElement(jsonText).jsonObject
         val solutions = mutableMapOf<String, String>()
-        (result["responses"] as? JsonArray)?.forEach { response ->
-            val obj = response.jsonObject
-            if (obj["type"]?.jsonPrimitive?.contentOrNull == "result") {
-                (obj["data"] as? JsonObject)?.forEach { (challenge, solution) -> solutions[challenge] = solution.jsonPrimitive.content }
+        runCatching {
+            val jsonText = json.parseToJsonElement(raw).jsonPrimitive.content
+            val result = json.parseToJsonElement(jsonText).jsonObject
+            (result["responses"] as? JsonArray)?.forEach { response ->
+                val obj = response.jsonObject
+                if (obj["type"]?.jsonPrimitive?.contentOrNull == "result") {
+                    (obj["data"] as? JsonObject)?.forEach { (challenge, solution) -> solutions[challenge] = solution.jsonPrimitive.content }
+                } else {
+                    logger.warn("YtEjsSolver", "solve_response_error", "Solver zgłosił błąd dla wyzwania", fields = mapOf("response" to obj.toString().take(500)))
+                }
             }
-        }
+        }.onFailure { logger.error("YtEjsSolver", "solve_parse_failed", "Nie udało się sparsować wyniku solvera", throwable = it) }
         return solutions
     }
 
