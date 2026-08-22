@@ -161,6 +161,24 @@ client-string-spoofing arms race NewPipeExtractor itself is running — expect
 `TeamNewPipe/NewPipe#12248` and `InnertubeClientRequestInfo.java` for
 whatever client they've since hopped to, rather than guessing blind.
 
+**The "ANDROID_VR curl-works-but-phone-403s" discrepancy above turned out to
+be a real code bug, not a network mystery** (found 2026-08-22, same day, via
+the explicit per-profile Settings toggle added below): `PlaybackService`'s
+byte-fetch User-Agent was hardcoded to `VISIONOS_AGENT` regardless of which
+client profile actually resolved the stream URL. This is the *exact* same
+UA-alignment bug already root-caused and fixed twice earlier this session
+(commits `1d8d1a5` and `6257a5b` — see the debugging timeline above) — it
+kept coming back because each new client-profile addition re-hardcoded a
+single UA constant instead of deriving it dynamically. Forcing `ANDROID_VR`
+via the new setting exposed it immediately: resolve always succeeded
+(`stream_resolved` every time) but playback consistently 403'd ~3.4s in,
+exactly the old symptom. Fixed properly this time (commit `bc981ae`):
+`ClientAwareDataSourceFactory` wraps the upstream HTTP data source and reads
+the `c=` query parameter Google embeds in every signed `videoplayback` URL
+(e.g. `&c=ANDROID_VR&`, `&c=VISIONOS&`) to pick the matching User-Agent per
+request — correct regardless of which profile AUTO falls back to or which
+one is force-selected in Settings, with no separate state to keep in sync.
+
 ## Options considered before the VISIONOS finding (superseded, kept for record)
 
 1. Depend on a Piped/Invidious public instance as a proxy.
