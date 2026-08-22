@@ -34,7 +34,7 @@ class AndroidYouTubeMediaService(
     private val context: Context,
 ) : YouTubeMediaService {
     private val json = Json { ignoreUnknownKeys = true }
-    private val ejsSolver = YtEjsSolver(context)
+    private val ejsSolver = YtEjsSolver(context, logger)
     /** base.js zwykle jest stabilny między kolejnymi rozwiązaniami (zmienia się tylko przy nowej
         wersji odtwarzacza YouTube) — jeden slot cache oszczędza osobne pobranie ~200-300 KB przy
         każdym utworze. */
@@ -153,13 +153,26 @@ class AndroidYouTubeMediaService(
                 Pending(item, innerUrl, Regex("[?&]n=([^&]+)").find(innerUrl)?.groupValues?.get(1), sig, fields["sp"] ?: "signature")
             }
         }
-        if (pending.isEmpty()) return emptyList()
+        if (pending.isEmpty()) {
+            logger.warn("AndroidYouTube", "no_pending_formats", "Żaden format audio nie miał url ani signatureCipher", fields = mapOf("items" to items.size.toString()))
+            return emptyList()
+        }
         val nChallenges = pending.mapNotNull { it.nChallenge }.distinct()
         val sigChallenges = pending.mapNotNull { it.sigChallenge }.distinct()
         val solutions = if (nChallenges.isEmpty() && sigChallenges.isEmpty()) emptyMap() else {
-            val playerJs = fetchPlayerJs(watchHtml) ?: return pending.filter { it.nChallenge == null && it.sigChallenge == null }.map { format(it.item, it.url) }
+            val playerJs = fetchPlayerJs(watchHtml)
+            if (playerJs == null) {
+                logger.warn("AndroidYouTube", "player_js_missing", "Nie znaleziono base.js — pomijam deszyfrowanie", fields = emptyMap())
+                return pending.filter { it.nChallenge == null && it.sigChallenge == null }.map { format(it.item, it.url) }
+            }
             ejsSolver.solve(playerJs, nChallenges, sigChallenges)
         }
+        logger.info("AndroidYouTube", "ejs_solved", "Wynik solvera EJS", fields = mapOf(
+            "pending" to pending.size.toString(),
+            "nChallenges" to nChallenges.size.toString(),
+            "sigChallenges" to sigChallenges.size.toString(),
+            "solutions" to solutions.size.toString(),
+        ))
         return pending.mapNotNull { p ->
             var url = p.url
             p.nChallenge?.let { n -> url = replaceQueryParam(url, "n", solutions[n] ?: return@mapNotNull null) }
