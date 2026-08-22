@@ -6,8 +6,6 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
-import androidx.media3.datasource.DataSpec
-import androidx.media3.datasource.cache.CacheWriter
 import app.nuta.core.logging.NutaLogger
 import app.nuta.core.models.PlayerState
 import app.nuta.core.models.PlayerStatus
@@ -54,7 +52,6 @@ class Media3AudioPlayer(
         wysycał i player w kółko odtwarzał ten sam zepsuty utwór (resolve → play → 403 → resolve...). */
     private var stabilityJob: Job? = null
     private val prefetchCache = ConcurrentHashMap<String, Deferred<YouTubeResolution>>()
-    private val streamPreloadedIds = ConcurrentHashMap.newKeySet<String>()
 
     init {
         player.addListener(object : Player.Listener {
@@ -181,10 +178,9 @@ class Media3AudioPlayer(
     override suspend fun prefetch(tracks: List<Track>) {
         if (prefetchCache.size > 40) return
         val state = stateFlow.value
-        val upcomingTwoIds = (state.currentIndex + 1..state.currentIndex + 2).mapNotNull { state.queue.getOrNull(it)?.id }.toSet()
         tracks.take(PREFETCH_LIMIT).forEach { track ->
             if (track.id == state.currentTrack?.id) return@forEach
-            val deferred = prefetchCache.computeIfAbsent(track.id) {
+            prefetchCache.computeIfAbsent(track.id) {
                 val startedAtMs = System.currentTimeMillis()
                 logger.info("Media3Player", "prefetch_started", "Rozpoczęto prefetch strumienia", fields = mapOf("track" to track.title))
                 scope.async {
@@ -194,12 +190,6 @@ class Media3AudioPlayer(
                             "ms" to (System.currentTimeMillis() - startedAtMs).toString(),
                         ))
                     }
-                }
-            }
-            // dla 2 najbliższych utworów z kolejki dograj do cache pierwsze ~10 s audio
-            if (track.id in upcomingTwoIds && streamPreloadedIds.add(track.id)) {
-                scope.launch {
-                    runCatching { deferred.await() }.getOrNull()?.let { preloadStreamStart(track, it) }
                 }
             }
         }
@@ -214,26 +204,7 @@ class Media3AudioPlayer(
         // usuwanie klucz po kluczu zamiast kasowania plików bezpośrednio — SimpleCache trzyma
         // własny indeks metadanych, więc ręczna ingerencja w katalog na dysku by go rozsynchronizowała
         cache.keys.toList().forEach { key -> runCatching { cache.removeResource(key) } }
-        streamPreloadedIds.clear()
         logger.info("Media3Player", "cache_cleared", "Wyczyszczono cache zbuforowanych strumieni")
-    }
-
-    /** Dogrywa początek strumienia do cache serwisu, żeby start odtwarzania nie czekał na sieć. */
-    private suspend fun preloadStreamStart(track: Track, resolution: YouTubeResolution) {
-        val factory = PlaybackQueueBridge.streamCacheFactory ?: return
-        val bytes = (resolution.stream.bitrate.toLong().coerceAtLeast(96_000) / 8 * PRELOAD_SECONDS)
-            .coerceAtMost(1_500_000)
-        val url = resolution.stream.url.use { it }
-        withContext(Dispatchers.IO) {
-            runCatching {
-                CacheWriter(factory.createDataSource(), DataSpec.Builder().setUri(url).setPosition(0).setLength(bytes).build(), null, null).cache()
-            }.onSuccess {
-                logger.info("Media3Player", "prefetch_stream_cached", "Zbuforowano początek strumienia", fields = mapOf("track" to track.title, "bytes" to bytes.toString()))
-            }.onFailure { error ->
-                streamPreloadedIds.remove(track.id)
-                logger.warn("Media3Player", "prefetch_stream_failed", "Nie udało się zbuforować początku strumienia", fields = mapOf("track" to track.title, "reason" to (error.message ?: "unknown")))
-            }
-        }
     }
 
     /** Zużywa wpis z cache prefetchu, jeśli jest świeży; w przeciwnym razie rozwiązuje strumień normalnie. */
@@ -348,7 +319,6 @@ class Media3AudioPlayer(
     private companion object {
         const val PREFETCH_LIMIT = 5
         const val PREFETCH_EXPIRY_MARGIN_MS = 30_000L
-        const val PRELOAD_SECONDS = 10L
         const val STABLE_PLAYBACK_MS = 8_000L
         val TERMINAL_STATUSES = setOf(PlayerStatus.IDLE, PlayerStatus.ENDED, PlayerStatus.ERROR)
     }
