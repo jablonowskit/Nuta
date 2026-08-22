@@ -413,4 +413,28 @@ now-running Chrome+CDP setup to capture a real page's *full* request
 sequence for a specific video (not just the homepage's autoplay preview
 requests captured so far) before writing a final conclusion — see next
 update below once that capture is done.
+
+**Final capture result**: navigated a real Chrome tab directly to
+`https://www.youtube.com/watch?v=dQw4w9WgXcQ` and sniffed every
+`videoplayback`/`/player` request via CDP `Network.requestWillBeSent`.
+Two distinct kinds of `videoplayback` request showed up:
+- Several with `itag=18` and `expire=1512402725` — that expire timestamp
+  decodes to **2017-12-04**, i.e. a stale/fixture URL baked into some
+  page asset (ad-related or a cached example), not a live request for
+  this video; also plain `GET`, no POST body.
+- One with a *current* `expire` (2026), no `itag=` param at all, and a
+  binary `POST` body (SABR/UMP) — the actual, live request this specific
+  video's real playback used.
+This is now confirmed twice (homepage autoplay previews, and now a full
+direct video load): **real browser playback of current YouTube video is
+SABR/UMP end-to-end, with no classic-shaped request anywhere in the real
+path.** PO-token is irrelevant to why the classic `adaptiveFormats[].url`
+approach fails for `WEB` — the classic approach itself isn't used by real
+clients anymore, PO-token or not. This closes both the PO-token
+investigation and the "why does `WEB` still not work" question:
+implementing SABR/UMP (a genuinely large undertaking, not attempted here)
+is the only way to use `WEB`-class clients again; until/unless that
+happens, `VISIONOS` (and, if it ever comes back, `ANDROID_VR`) are the
+only viable profiles precisely because they're the ones YouTube hasn't
+yet forced onto SABR.
 again later.
