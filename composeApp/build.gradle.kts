@@ -8,6 +8,40 @@ plugins {
     alias(libs.plugins.androidMultiplatformLibrary)
 }
 
+// GITHUB_SHA jest zawsze pełnym 40-znakowym SHA, nie krótkim jak `git rev-parse --short` —
+// przycinamy ręcznie, żeby build w CI i lokalny dawały ten sam format do wyświetlenia w UI.
+val gitShortSha = (System.getenv("GITHUB_SHA")?.take(7))
+    ?: runCatching {
+        providers.exec {
+            commandLine("git", "rev-parse", "--short", "HEAD")
+            isIgnoreExitValue = true
+        }.standardOutput.asText.get().trim().takeIf { it.isNotBlank() }
+    }.getOrNull()
+    ?: "dev"
+
+// Wygenerowany plik zamiast BuildConfig: BuildConfig wymaga oddzielnej konfiguracji per target
+// (androidLibrary/jvm), a to jest ten sam commit dla obu platform — wspólny plik w commonMain
+// unika duplikacji i pozwala na ekranie potwierdzić, z jakiego commita realnie zbudowano apkę
+// (przydatne przy diagnozowaniu, czy zainstalowany build faktycznie odpowiada danemu źródłu).
+val generateBuildInfo = tasks.register("generateBuildInfo") {
+    val outputDir = layout.buildDirectory.dir("generated/buildInfo")
+    outputs.dir(outputDir)
+    doLast {
+        val file = outputDir.get().file("app/nuta/core/BuildInfo.kt").asFile
+        file.parentFile.mkdirs()
+        file.writeText(
+            """
+            package app.nuta.core
+
+            object BuildInfo {
+                const val VERSION_NAME = "0.1.0"
+                const val GIT_SHA = "$gitShortSha"
+            }
+            """.trimIndent(),
+        )
+    }
+}
+
 kotlin {
     androidLibrary {
         namespace = "app.nuta.shared"
@@ -31,6 +65,7 @@ kotlin {
 
     sourceSets {
         val commonMain by getting {
+            kotlin.srcDir(generateBuildInfo.map { it.outputs.files.singleFile })
             dependencies {
                 implementation(compose.runtime)
                 implementation(compose.foundation)
