@@ -109,26 +109,63 @@ second connection to an already-used signed URL as suspicious.
 - THEN the second (real playback) request SHALL be at risk of HTTP 403,
   independent of client profile or User-Agent correctness
 
-### Requirement: No open-ended Range continuation requests
-The HTTP client that downloads audio bytes SHALL always send a Range request
-with an explicit upper bound, never an open-ended one (`bytes=X-` with no end).
-At least one real-world CDN edge (an ISP-hosted Google Global Cache node) is
-known to accept bounded ranges but reject an open-ended continuation request
-with HTTP 403, even against an otherwise-valid signed URL from the same
-session. The upper bound SHALL be derived from the `clen` query parameter
-already present in the signed `videoplayback` URL.
+### Requirement: ANDROID_VR is opt-in only, never an AUTO fallback
+The `ANDROID_VR` client profile's `/player` endpoint still returns
+`playabilityStatus: OK` with an apparently valid signed `videoplayback` URL,
+but that URL is unconditionally rejected with HTTP 403 on the very first
+byte-fetch request — confirmed on 2026-08-22 to be independent of Range
+header shape (bounded vs open-ended vs no Range at all), User-Agent, and
+client IP (verified identical between the signed URL's `ip=` parameter and
+the device's actual public IP). This is consistent with YouTube's PO-token
+enforcement for this client (tracked informally since 2026-08-17). The
+`AUTO` client-profile setting SHALL NOT fall back to `ANDROID_VR` when
+`VISIONOS` fails to resolve a track — that fallback silently sent some
+fraction of tracks through a profile with a 100% byte-fetch failure rate,
+which looked like an intermittent/environmental bug (Range shape, ISP CDN
+node, IP mismatch) for most of a day before the actual cause (which
+profile resolved the track) was identified by logging `videoId`-level
+resolution details. `ANDROID_VR` SHALL remain selectable only as an
+explicit, user-chosen Settings override, for future debugging.
 
-#### Scenario: Player requests a continuation after exhausting its buffer
-- WHEN the player has consumed an initial bounded chunk and needs more data
-- THEN the next Range request SHALL still carry an explicit upper bound
-  (from `clen`), not an open `bytes=X-` request
+#### Scenario: VISIONOS fails to resolve a specific track under AUTO
+- WHEN `resolveViaVisionOs` returns null for a track (no usable format) and
+  the active profile setting is `AUTO`
+- THEN resolution SHALL fail for that track (surfaced as a normal resolve
+  failure, letting the queue skip to the next track) rather than falling
+  back to `ANDROID_VR`
+
+### Requirement: Diagnose actual on-device HTTP behavior before re-theorizing
+When a 403 (or other HTTP failure) persists across a code change intended
+to fix it, the system's byte-fetch data source SHALL be able to log the
+exact request shape (position, requested length, computed Range) and the
+exact response (status code, message) for every attempt, rather than
+relying solely on external reproduction (curl, packet capture) that may
+not share the failing request's exact context (which client profile
+resolved it, which specific video, timing).
+
+#### Scenario: A plausible root-cause theory doesn't hold up on retest
+- WHEN a fix for a previously-diagnosed root cause is deployed and the
+  failure still reproduces
+- THEN on-device request/response logging SHALL be added (or already be
+  present) so the next test cycle produces evidence instead of another
+  guess
 
 ## Resolution history
 See `openspec/changes/2026-08-sabr-blocker/proposal.md` for the full
-debugging narrative (2026-08-22). Two independent bugs were found and fixed
-the same day: the SABR client-blocking rollout (mitigated via `VISIONOS`/
-`ANDROID_VR` client profiles — not a durable fix, expect renewed breakage
-when YouTube extends enforcement to these too) and, separately, a local ISP
-CDN node rejecting open-ended Range continuation requests (fixed durably via
-the requirement above — this fix does not depend on which client profile
-resolved the URL).
+debugging narrative (2026-08-22). The investigation went through several
+incorrect theories before finding the real cause:
+- SABR blocking WEB/ANDROID/IOS/TVHTML5 (confirmed real, led to adopting
+  VISIONOS/ANDROID_VR).
+- A local ISP CDN node supposedly rejecting open-ended Range continuations
+  (looked confirmed via packet capture + curl at the time, but did not
+  survive a same-day retest — a fresh curl reproduction of the identical
+  signed URL succeeded even for an open-ended Range, and the shipped fix
+  made the on-device failure worse, not better, since it added a Range
+  header to the position-0 request that previously had none).
+- A signed-URL-vs-actual-IP mismatch (ruled out directly: on-device logging
+  showed the signed URL's `ip=` parameter and the device's actual public IP
+  were identical on every failing request).
+- The real cause: `AUTO`'s silent fallback from `VISIONOS` to the
+  already-broken `ANDROID_VR` for whichever tracks `VISIONOS` didn't
+  resolve — invisible without per-attempt logging, since `ANDROID_VR`'s
+  `/player` call still reports `playabilityStatus: OK`.
