@@ -47,6 +47,12 @@ class Media3AudioPlayer(
     private val loadMutex = Mutex()
     private var ticker: Job? = null
     private var retryingAfterError = false
+    /** Reset retryingAfterError czeka na STABLE_PLAYBACK_MS realnie lecącego dźwięku, nie na samo
+        chwilowe player.isPlaying == true zaraz po udanym rozwiązaniu URL-a. Bez tego utwór, który
+        pada kilka sekund po starcie (typowe dla wygasających/blokowanych URLi YouTube z HTTP 403),
+        zdążył na moment "zagrać", zerując flagę PRZED wystąpieniem błędu — retry nigdy się nie
+        wysycał i player w kółko odtwarzał ten sam zepsuty utwór (resolve → play → 403 → resolve...). */
+    private var stabilityJob: Job? = null
     private val prefetchCache = ConcurrentHashMap<String, Deferred<YouTubeResolution>>()
     private val streamPreloadedIds = ConcurrentHashMap.newKeySet<String>()
 
@@ -63,6 +69,10 @@ class Media3AudioPlayer(
                 refreshPlayingState()
             }
             override fun onPlayerError(error: PlaybackException) {
+                // musi pójść PRZED odczytem retryingAfterError — inaczej opóźnione zerowanie ze
+                // stabilityJob (zaplanowane, gdy dźwięk na chwilę ruszył) mogło wskoczyć między
+                // start błędu a ten odczyt i zresetować flagę tuż przed jej użyciem
+                cancelStabilityJob()
                 stateFlow.value = stateFlow.value.copy(status = PlayerStatus.ERROR, errorMessage = error.errorCodeName)
                 if (!retryingAfterError && stateFlow.value.currentTrack != null) {
                     retryingAfterError = true
@@ -93,14 +103,26 @@ class Media3AudioPlayer(
     private fun refreshPlayingState() {
         if (stateFlow.value.currentTrack == null) return
         when {
-            PlaybackQueueBridge.buffering.value -> stateFlow.value = stateFlow.value.copy(status = PlayerStatus.LOADING)
-            player.isPlaying -> stateFlow.value = stateFlow.value.copy(status = PlayerStatus.PLAYING)
+            PlaybackQueueBridge.buffering.value -> {
+                cancelStabilityJob()
+                stateFlow.value = stateFlow.value.copy(status = PlayerStatus.LOADING)
+            }
+            player.isPlaying -> {
+                if (stabilityJob?.isActive != true) {
+                    stabilityJob = scope.launch { delay(STABLE_PLAYBACK_MS); retryingAfterError = false }
+                }
+                stateFlow.value = stateFlow.value.copy(status = PlayerStatus.PLAYING)
+            }
             // dowolny status "w trakcie" (w tym LOADING po seeku podczas pauzy) wraca do PAUSED — nie tylko z PLAYING,
             // inaczej pauza + seek zostawiały UI zablokowane na LOADING (brak pasującej gałęzi)
-            player.playbackState == Player.STATE_READY && stateFlow.value.status !in TERMINAL_STATUSES ->
+            player.playbackState == Player.STATE_READY && stateFlow.value.status !in TERMINAL_STATUSES -> {
+                cancelStabilityJob()
                 stateFlow.value = stateFlow.value.copy(status = PlayerStatus.PAUSED)
+            }
         }
     }
+
+    private fun cancelStabilityJob() { stabilityJob?.cancel(); stabilityJob = null }
 
     override suspend fun setQueue(tracks: List<Track>, startIndex: Int) {
         require(startIndex in tracks.indices || tracks.isEmpty())
@@ -249,7 +271,6 @@ class Media3AudioPlayer(
                 pendingResumePositionMs = 0
                 stateFlow.value = stateFlow.value.copy(status = PlayerStatus.LOADING, positionMs = resumeFromMs ?: 0, errorMessage = null, streamBitrate = null, streamCodec = null)
                 runCatching { resolveForPlayback(track) }.onSuccess { resolution ->
-                    retryingAfterError = false
                     val url = resolution.stream.url.use { it }
                     stateFlow.value = stateFlow.value.copy(
                         streamBitrate = resolution.stream.bitrate,
@@ -328,6 +349,7 @@ class Media3AudioPlayer(
         const val PREFETCH_LIMIT = 5
         const val PREFETCH_EXPIRY_MARGIN_MS = 30_000L
         const val PRELOAD_SECONDS = 10L
+        const val STABLE_PLAYBACK_MS = 8_000L
         val TERMINAL_STATUSES = setOf(PlayerStatus.IDLE, PlayerStatus.ENDED, PlayerStatus.ERROR)
     }
 }
