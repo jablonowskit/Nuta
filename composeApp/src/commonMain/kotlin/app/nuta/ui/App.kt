@@ -702,10 +702,6 @@ private fun SettingsScreen(container: AppContainer) {
                         YouTubeClientProfile.AUTO to "Automatycznie",
                         YouTubeClientProfile.VISIONOS to "VISIONOS",
                         YouTubeClientProfile.ANDROID_VR to "ANDROID_VR",
-                        YouTubeClientProfile.ANDROID to "ANDROID",
-                        YouTubeClientProfile.WEB to "WEB",
-                        YouTubeClientProfile.IOS to "IOS",
-                        YouTubeClientProfile.TVHTML5 to "TVHTML5",
                     ),
                     selected = settings.youtubeClientProfile,
                 ) { container.playbackSettings.update(settings.copy(youtubeClientProfile = it)) }
