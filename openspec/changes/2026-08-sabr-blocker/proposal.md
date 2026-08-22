@@ -1,12 +1,14 @@
 # Change: YouTube audio source blocked by SABR rollout
 
-- Status: **RESOLVED — two independent bugs fixed.** (1) SABR rollout
-  mitigated via `VISIONOS`/`ANDROID_VR` client profiles (commit `cdeee89`,
-  not durable long-term). (2) The *actual* remaining on-device 403 (which
-  persisted even after (1) and looked like a phone/network mystery) was a
-  separate, unrelated bug: this network's local CDN node rejects open-ended
-  Range continuation requests — see the dedicated section below. Fixed in
-  commit `e521bf6`.
+- Status: **PARTIALLY RESOLVED — real fix found; the Range/CDN theory below
+  was WRONG and later retracted.** What actually works today: `VISIONOS` as
+  the sole client profile, with `AUTO` no longer falling back to the
+  (permanently broken) `ANDROID_VR` (commit `da0e51f`). The "local CDN node
+  rejects open-ended Range" theory (commit `e521bf6`) looked confirmed via
+  packet capture at the time but did NOT survive a same-day retest — see
+  "2026-08-22 late update" at the end of this file for the real story and
+  why the section below is kept only as a cautionary tale about a
+  convincing-but-wrong root cause.
 - Date opened: 2026-08-22, both root causes found and fixed same day
 - Affects: `youtube-audio-source` (Android side; desktop resolver
   `NutaYouTubeMediaService` not yet re-tested against this but almost
@@ -300,4 +302,84 @@ already embeds in every signed `videoplayback` URL. Every request this app
 makes now has an explicit end byte, so it never hits this node's rejection
 path — independent of which client profile resolved the URL, so it will
 keep working even if the SABR client-rotation situation above changes
+
+## 2026-08-22 late update: the Range/CDN theory above was wrong
+
+After shipping `e521bf6`, on-device testing still showed the same 403s.
+Added per-request diagnostic logging directly in `ClientAwareDataSourceFactory`
+(commit `85571c4`/`8426788`/`f7dedd6`) instead of guessing again. Findings,
+each one falsifying the previous theory before moving to the next:
+
+1. Even the plain, unranged first request (`boundedLength=-1`, byte-for-byte
+   identical to the original pre-`e521bf6` code) still got an instant 403.
+   **The Range header was never the cause.**
+2. Logged the signed URL's `ip=` parameter against the device's actual
+   public IP (via a live `api.ipify.org` check on failure) — identical
+   every time. **Not an IP/CGNAT mismatch either.**
+3. The actual cause: `AUTO` was silently falling back from `VISIONOS` to
+   `ANDROID_VR` whenever `VISIONOS` failed to resolve a specific track.
+   `ANDROID_VR`'s `/player` call still reports `playabilityStatus: OK` with
+   a seemingly valid URL, but **every** byte-fetch to that URL 403s,
+   unconditionally — confirmed independently via `curl` from this dev
+   machine (same result, no phone involved). Fixed by removing the
+   `AUTO`→`ANDROID_VR` fallback entirely (commit `da0e51f`) — `ANDROID_VR`
+   is now selectable only as an explicit Settings override.
+
+**Lesson**: a theory "confirmed" by packet capture + curl reproduction can
+still be wrong if the reproduction doesn't carry the same context as the
+real failure (in this case: which client profile actually resolved the
+URL). On-device, per-attempt logging of the actual HTTP request/response
+settled it in minutes; the network-layer investigation the day before,
+despite being thorough, chased a coincidental correlation.
+
+### PO-token investigation for `ANDROID_VR` (same day, local spike only)
+
+Hypothesis: `ANDROID_VR`'s CDN-level 403 is Google's PO-token (BotGuard)
+enforcement. Tested locally (Node.js, no Android/phone involved):
+
+- Cloned `Brainicism/bgutil-ytdlp-pot-provider`, generated a real,
+  correctly-minted PoToken via its jsdom-based BotGuard runner (both
+  video-ID-bound and visitor-ID-bound content bindings).
+- Attached it to `ANDROID_VR`'s `/player` request
+  (`serviceIntegrityDimensions.poToken`): `playabilityStatus` stayed `OK`
+  (identical to no token), the returned `videoplayback` URL never got a
+  `pot=` parameter, and byte-fetch still 403'd. **`/player` for this client
+  appears to ignore the PO-token field entirely** — PO-token is not the
+  cause of `ANDROID_VR`'s block, closing that investigation (see
+  `spec.md`'s "ANDROID_VR is opt-in only" requirement for the durable
+  conclusion).
+- Same PoToken tried against the `WEB` client (which, unlike `ANDROID_VR`,
+  is documented to actually validate PO-tokens): made things *worse* —
+  `playabilityStatus` went from the normal SABR-only `OK` to `UNPLAYABLE`.
+  Read as: `WEB` detected the token as invalid/untrusted. Working theory:
+  a PoToken minted by running BotGuard's real JS inside `jsdom` (a fake,
+  freshly-spun-up DOM with no genuine render pipeline, event history, or
+  browser fingerprint) is distinguishable from one minted by a real
+  browser, and gets rejected outright rather than silently ignored.
+- Follow-up spike in progress (not yet concluded): running the exact same
+  BotGuard `program`/interpreter fetched from YouTube inside a genuine
+  Chrome tab, driven over raw CDP websockets (no puppeteer/playwright per
+  explicit preference), instead of `jsdom` — to test whether a token minted
+  in a real browser engine is trusted by `WEB` where the jsdom-minted one
+  wasn't. Blocked on locating the actual BotGuard challenge inside the
+  homepage's `ytAtN(...)` payload, whose `R` field is a double-JSON-encoded
+  string (`attData.R` is itself a JSON string, not an object) — the
+  extraction code in `bgutil-ytdlp-pot-provider`'s
+  `getChallengeFromHomepage` glosses over this by only using it from inside
+  real Node/jsdom where the same parsing subtlety was already handled
+  upstream; our from-scratch CDP script needed an explicit `JSON.parse` on
+  that nested string. Scratch script: `cdp_pot.mjs` in this session's
+  scratchpad — not part of the repo, purely exploratory.
+- Also curl-tested three more client profiles while at it, all dead ends:
+  `WEB_EMBEDDED_PLAYER` and `TVHTML5_SIMPLY_EMBEDDED_PLAYER` both fail at
+  `/player` itself (`status: ERROR`, "This video is unavailable" / error
+  code 152-18, reproduced across multiple videos so not video-specific);
+  `MWEB` fails with `UNPLAYABLE` / "The page needs to be reloaded" (classic
+  stale-or-blocked-client signature). None reach the format-extraction
+  stage at all.
+
+Node.js (LTS, via winget) was installed on the dev machine for this spike
+and left in place. No app code changed as a result of the PO-token
+investigation itself — only the `AUTO`→`ANDROID_VR` fallback removal
+(point 3 above) is a shipped fix.
 again later.
