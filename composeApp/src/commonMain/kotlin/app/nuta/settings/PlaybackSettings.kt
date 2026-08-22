@@ -10,12 +10,12 @@ enum class BufferSize { SMALL, STANDARD, LARGE }
 enum class LoudnessNormalization { OFF, GENTLE, NORMAL }
 /**
  * Który profil klienta InnerTube resolver ma próbować przy rozwiązywaniu strumienia YouTube.
- * AUTO = obecna kolejność (VISIONOS jako pierwszy, potem WEB/ANDROID/ANDROID_VR/IOS/TVHTML5 jako
- * fallback). Wybór konkretnego klienta próbuje TYLKO tego jednego, bez żadnego fallbacku — przydatne
- * do ręcznego diagnozowania, który profil akurat działa, bo YouTube regularnie blokuje różne klienty
- * w różnym tempie (patrz openspec/changes/2026-08-sabr-blocker/).
+ * AUTO = VISIONOS jako pierwszy, potem ANDROID_VR jako fallback (jedyne dwa profile, które wg
+ * testów z 22.08.2026 dają cokolwiek użyteczne — WEB/ANDROID/IOS/TVHTML5 usunięte jako bezsensowne,
+ * patrz openspec/changes/2026-08-sabr-blocker/). Wybór konkretnego klienta próbuje TYLKO tego
+ * jednego, bez fallbacku — przydatne do ręcznego diagnozowania, który profil akurat działa.
  */
-enum class YouTubeClientProfile { AUTO, VISIONOS, ANDROID_VR, ANDROID, WEB, IOS, TVHTML5 }
+enum class YouTubeClientProfile { AUTO, VISIONOS, ANDROID_VR }
 
 data class YouTubePlaybackSettings(
     val fontScale: Float = 1f,
