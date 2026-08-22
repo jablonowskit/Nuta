@@ -102,13 +102,17 @@ class AndroidYouTubeMediaService(
         // przechodzą nawet playability, a ANDROID/IOS mają playability OK, ale tylko SABR (bez
         // url). Usunięte jako bezsensowne, zamiast zaśmiecać listę profilami, które i tak zawodzą.
         val forcedProfile = settingsStore.settings.value.youtubeClientProfile
+        // ANDROID_VR jest potwierdzone martwe na poziomie CDN (403 na KAŻDYM żądaniu bajtów,
+        // niezależnie od Range/UA/IP — zweryfikowane 22.08.2026, patrz proposal.md) — mimo że
+        // jego /player wciąż zwraca playabilityStatus OK z pozornie prawidłowym URL-em. AUTO nie
+        // może więc spadać na ANDROID_VR, gdy VISIONOS zawiedzie — to tylko psuje część utworów
+        // (te, dla których VISIONOS akurat nie zwrócił formatu) bez żadnej szansy na sukces.
         if (forcedProfile == YouTubeClientProfile.VISIONOS || forcedProfile == YouTubeClientProfile.AUTO) {
             resolveViaVisionOs(videoId, visitor, watch)?.let { return it }
-            if (forcedProfile == YouTubeClientProfile.VISIONOS) error("YouTube playability: VISIONOS_FAILED")
+            error("YouTube playability: VISIONOS_FAILED")
         }
         val allProfiles = listOf(Profile("ANDROID_VR", "1.65.10", "28", VR_AGENT))
-        val profiles = if (forcedProfile == YouTubeClientProfile.AUTO) allProfiles
-            else allProfiles.filter { it.name == forcedProfile.name }
+        val profiles = allProfiles.filter { it.name == forcedProfile.name }
         var last = "UNKNOWN"
         for (profile in profiles) {
             val client = mutableMapOf<String, JsonElement>("clientName" to JsonPrimitive(profile.name), "clientVersion" to JsonPrimitive(profile.version), "hl" to JsonPrimitive("en"), "gl" to JsonPrimitive("US"))

@@ -136,7 +136,6 @@ class PlaybackService : MediaSessionService() {
                 override fun open(dataSpec: DataSpec): Long {
                     val url = dataSpec.uri.toString()
                     val itag = Regex("[?&]itag=(\\d+)").find(url)?.groupValues?.get(1)
-                    val urlBoundIp = Regex("[?&]ip=([0-9.]+)").find(url)?.groupValues?.get(1)
                     inner.setRequestProperty("User-Agent", when {
                         "c=ANDROID_VR" in url -> AndroidYouTubeMediaService.VR_AGENT
                         else -> AndroidYouTubeMediaService.VISIONOS_AGENT
@@ -159,13 +158,6 @@ class PlaybackService : MediaSessionService() {
                     return try {
                         inner.open(boundedSpec)
                     } catch (e: HttpDataSource.InvalidResponseCodeException) {
-                        val actualIp = runCatching {
-                            (java.net.URL("https://api.ipify.org").openConnection() as java.net.HttpURLConnection).run {
-                                connectTimeout = 3000
-                                readTimeout = 3000
-                                inputStream.bufferedReader().use { it.readText() }
-                            }
-                        }.getOrElse { "lookup_failed: ${it.message}" }
                         logger.error("PlaybackHttp", "range_open_failed", "HTTP błąd przy otwieraniu zakresu bajtów", fields = mapOf(
                             "itag" to (itag ?: "?"),
                             "responseCode" to e.responseCode.toString(),
@@ -174,10 +166,6 @@ class PlaybackService : MediaSessionService() {
                             "clen" to (contentLength?.toString() ?: "null"),
                             "boundedLength" to boundedSpec.length.toString(),
                             "responseMessage" to (e.responseMessage ?: ""),
-                            "responseHeaders" to e.headerFields.entries.joinToString(";") { entry -> "${entry.key}=${entry.value.joinToString(",")}" },
-                            "responseBody" to String(e.responseBody).take(300),
-                            "urlBoundIp" to (urlBoundIp ?: "?"),
-                            "actualDeviceIp" to actualIp,
                         ))
                         throw e
                     }
