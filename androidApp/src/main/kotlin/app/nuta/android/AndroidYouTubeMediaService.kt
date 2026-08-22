@@ -112,10 +112,14 @@ class AndroidYouTubeMediaService(
             resolveViaVisionOs(videoId, visitor, watch)?.let { return it }
             if (forcedProfile == YouTubeClientProfile.VISIONOS) error("YouTube playability: VISIONOS_FAILED")
         }
+        // Kolejność w AUTO dopasowana do wyników testów curlem z 22.08.2026: ANDROID_VR działa
+        // (playability OK + gotowy url + potwierdzony fetch bajtów bez 403), więc idzie od razu po
+        // VISIONOS — WEB/TVHTML5 nie przechodzą nawet playability, a ANDROID/IOS mają playability OK,
+        // ale tylko SABR (bez url). Zostają w liście na wypadek, gdyby to się zmieniło.
         val allProfiles = listOf(
+            Profile("ANDROID_VR", "1.65.10", "28", VR_AGENT),
             Profile("WEB", webVersion, "1", USER_AGENT),
             Profile("ANDROID", "21.26.364", "3", ANDROID_AGENT),
-            Profile("ANDROID_VR", "1.65.10", "28", VR_AGENT),
             Profile("IOS", "21.26.4", "5", IOS_AGENT),
             Profile("TVHTML5", "7.20260707.07.00", "7", TV_AGENT),
         )
