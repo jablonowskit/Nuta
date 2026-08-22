@@ -13,6 +13,7 @@ import app.nuta.youtube.YouTubeMatch
 import app.nuta.youtube.YouTubeMediaService
 import app.nuta.youtube.YouTubeResolution
 import app.nuta.settings.PlaybackSettingsStore
+import app.nuta.settings.YouTubeClientProfile
 import java.net.HttpURLConnection
 import java.net.URLDecoder
 import java.net.URLEncoder
@@ -97,33 +98,29 @@ class AndroidYouTubeMediaService(
         val key = Regex("\"INNERTUBE_API_KEY\":\"([^\"]+)\"").find(watch)?.groupValues?.get(1) ?: error("Brak klucza YouTube")
         val webVersion = Regex("\"INNERTUBE_CONTEXT_CLIENT_VERSION\":\"([^\"]+)\"").find(watch)?.groupValues?.get(1) ?: error("Brak wersji YouTube")
         val visitor = Regex("\"VISITOR_DATA\":\"([^\"]+)\"").find(watch)?.groupValues?.get(1)
-        // VISIONOS (klient YouTube na Apple Vision Pro) — jedyny profil, którego YouTube jeszcze
-        // nie objął wymuszeniem SABR, według NewPipeExtractor (który realnie działa dziś w Spotube
-        // na tym urządzeniu — sprawdzone bezpośrednio w ich źródle: WEB/ANDROID/ANDROID_VR/IOS/TV
-        // już są enforced, VISIONOS to ich obecny "kolejny przystanek" w tej samej gonitwie).
-        // To NIE jest trwałe rozwiązanie — samo NewPipe śledzi to centralnie w issue #12248 i co
-        // kilka tygodni przeskakuje na nowego klienta, gdy ten aktualny też zostanie zablokowany.
-        resolveViaVisionOs(videoId, visitor, watch)?.let { return it }
-        // ANDROID_VR dawał bezpośrednie (nieszyfrowane) audio bez transformacji podpisu — ale od
-        // 17.08.2026 YouTube zaczął go aktywnie blokować (wymóg PO Tokena dla formatów audio-only;
-        // patrz yt-dlp #17348/#16150, usunięty z domyślnych klientów w yt-dlp 2026.08.19). Zastąpione
-        // zwykłym klientem ANDROID — dokładne pola (clientVersion, androidSdkVersion, osName/osVersion,
-        // User-Agent) zgodne 1:1 z yt-dlp's INNERTUBE_CLIENTS['android'] (sprawdzone bezpośrednio
-        // w źródłach yt-dlp), bo błędna/przestarzała wersja klienta kończy się HTTP 400 z serwera
-        // YouTube — sam zestaw pól nie wystarczy, muszą się zgadzać też konkretne wartości.
-        // ANDROID i ANDROID_VR przestały dawać cokolwiek poza formatami SABR (bez "url" i bez
-        // "signatureCipher" — YouTube wymaga teraz osobnego binarnego protokołu UMP, którego nie
-        // implementujemy). IOS i TVHTML5 dodane jako kolejny eksperyment — być może omijają SABR,
-        // ale nawet yt-dlp nie daje na to gwarancji (obie mają w swojej polityce PO Tokena wymóg
-        // dla formatów HTTPS/DASH), więc traktujemy to jako "spróbuj, może się uda", nie jako
-        // potwierdzone rozwiązanie. Pola dla obu 1:1 z yt-dlp INNERTUBE_CLIENTS (sprawdzone wprost
-        // w źródłach yt-dlp) — błędna wersja/pole = HTTP 400, jak już się przekonaliśmy.
-        val profiles = listOf(
+        // YouTube regularnie blokuje różne profile klienckie w różnym tempie (patrz
+        // openspec/changes/2026-08-sabr-blocker/) — WEB/ANDROID dają teraz tylko formaty SABR
+        // (bez url, bez signatureCipher — inny protokół transportu, którego nie implementujemy),
+        // IOS/TVHTML5 padają jeszcze wcześniej, VISIONOS (klient Apple Vision Pro) obecnie działa
+        // (sprawdzone wprost w źródłach NewPipeExtractor, tego samego triku używa działający
+        // Spotube), a ANDROID_VR — mimo playability OK i braku 403 przy sprawdzeniu curlem z
+        // komputera — akurat wtedy padał 403 na telefonie (niewyjaśniona niezgodność, zapisana w
+        // tym samym dokumencie). Ustawienie w Settings pozwala wymusić konkretny profil do
+        // ręcznego diagnozowania, zamiast zgadywać na podstawie samej kolejności fallbacku.
+        val forcedProfile = settingsStore.settings.value.youtubeClientProfile
+        if (forcedProfile == YouTubeClientProfile.VISIONOS || forcedProfile == YouTubeClientProfile.AUTO) {
+            resolveViaVisionOs(videoId, visitor, watch)?.let { return it }
+            if (forcedProfile == YouTubeClientProfile.VISIONOS) error("YouTube playability: VISIONOS_FAILED")
+        }
+        val allProfiles = listOf(
             Profile("WEB", webVersion, "1", USER_AGENT),
             Profile("ANDROID", "21.26.364", "3", ANDROID_AGENT),
+            Profile("ANDROID_VR", "1.65.10", "28", VR_AGENT),
             Profile("IOS", "21.26.4", "5", IOS_AGENT),
             Profile("TVHTML5", "7.20260707.07.00", "7", TV_AGENT),
         )
+        val profiles = if (forcedProfile == YouTubeClientProfile.AUTO) allProfiles
+            else allProfiles.filter { it.name == forcedProfile.name }
         var last = "UNKNOWN"
         for (profile in profiles) {
             val client = mutableMapOf<String, JsonElement>("clientName" to JsonPrimitive(profile.name), "clientVersion" to JsonPrimitive(profile.version), "hl" to JsonPrimitive("en"), "gl" to JsonPrimitive("US"))
@@ -134,6 +131,11 @@ class AndroidYouTubeMediaService(
                     client["osName"] = JsonPrimitive("Android")
                     client["osVersion"] = JsonPrimitive("11")
                     client["userAgent"] = JsonPrimitive(profile.agent)
+                }
+                "ANDROID_VR" -> {
+                    client["androidSdkVersion"] = JsonPrimitive(32)
+                    client["osName"] = JsonPrimitive("Android")
+                    client["osVersion"] = JsonPrimitive("12L")
                 }
                 "IOS" -> {
                     client["deviceMake"] = JsonPrimitive("Apple")
@@ -325,6 +327,7 @@ class AndroidYouTubeMediaService(
             WEB w praktyce nigdy nie daje bezpośredniego (nieszyfrowanego) audio, więc to ten UA,
             nie przeglądarkowy USER_AGENT, jest używany przy każdym realnym odtwarzaniu. */
         const val ANDROID_AGENT = "com.google.android.youtube/21.26.364 (Linux; U; Android 11) gzip"
+        const val VR_AGENT = "com.google.android.apps.youtube.vr.oculus/1.65.10 (Linux; U; Android 12L) gzip"
         const val IOS_AGENT = "com.google.ios.youtube/21.26.4 (iPhone16,2; U; CPU iOS 18_3_2 like Mac OS X;)"
         const val TV_AGENT = "Mozilla/5.0 (ChromiumStylePlatform) Cobalt/25.lts.30.1034943-gold (unlike Gecko), Unknown_TV_Unknown_0/Unknown (Unknown, Unknown)"
         const val VISIONOS_AGENT = "com.google.visionos.youtube/1.04(RealityDevice17,1; U; CPU visionOS 26_6_0 like Mac OS X; US)"
