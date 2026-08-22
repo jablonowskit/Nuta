@@ -104,16 +104,36 @@ class AndroidYouTubeMediaService(
         // User-Agent) zgodne 1:1 z yt-dlp's INNERTUBE_CLIENTS['android'] (sprawdzone bezpośrednio
         // w źródłach yt-dlp), bo błędna/przestarzała wersja klienta kończy się HTTP 400 z serwera
         // YouTube — sam zestaw pól nie wystarczy, muszą się zgadzać też konkretne wartości.
-        val profiles = listOf(Profile("WEB", webVersion, "1", USER_AGENT), Profile("ANDROID", "21.26.364", "3", ANDROID_AGENT))
+        // ANDROID i ANDROID_VR przestały dawać cokolwiek poza formatami SABR (bez "url" i bez
+        // "signatureCipher" — YouTube wymaga teraz osobnego binarnego protokołu UMP, którego nie
+        // implementujemy). IOS i TVHTML5 dodane jako kolejny eksperyment — być może omijają SABR,
+        // ale nawet yt-dlp nie daje na to gwarancji (obie mają w swojej polityce PO Tokena wymóg
+        // dla formatów HTTPS/DASH), więc traktujemy to jako "spróbuj, może się uda", nie jako
+        // potwierdzone rozwiązanie. Pola dla obu 1:1 z yt-dlp INNERTUBE_CLIENTS (sprawdzone wprost
+        // w źródłach yt-dlp) — błędna wersja/pole = HTTP 400, jak już się przekonaliśmy.
+        val profiles = listOf(
+            Profile("WEB", webVersion, "1", USER_AGENT),
+            Profile("ANDROID", "21.26.364", "3", ANDROID_AGENT),
+            Profile("IOS", "21.26.4", "5", IOS_AGENT),
+            Profile("TVHTML5", "7.20260707.07.00", "7", TV_AGENT),
+        )
         var last = "UNKNOWN"
         for (profile in profiles) {
             val client = mutableMapOf<String, JsonElement>("clientName" to JsonPrimitive(profile.name), "clientVersion" to JsonPrimitive(profile.version), "hl" to JsonPrimitive("en"), "gl" to JsonPrimitive("US"))
             visitor?.let { client["visitorData"] = JsonPrimitive(it) }
-            if (profile.name == "ANDROID") {
-                client["androidSdkVersion"] = JsonPrimitive(30)
-                client["osName"] = JsonPrimitive("Android")
-                client["osVersion"] = JsonPrimitive("11")
-                client["userAgent"] = JsonPrimitive(profile.agent)
+            when (profile.name) {
+                "ANDROID" -> {
+                    client["androidSdkVersion"] = JsonPrimitive(30)
+                    client["osName"] = JsonPrimitive("Android")
+                    client["osVersion"] = JsonPrimitive("11")
+                    client["userAgent"] = JsonPrimitive(profile.agent)
+                }
+                "IOS" -> {
+                    client["deviceMake"] = JsonPrimitive("Apple")
+                    client["deviceModel"] = JsonPrimitive("iPhone16,2")
+                    client["osName"] = JsonPrimitive("iPhone")
+                    client["osVersion"] = JsonPrimitive("18.3.2.22D82")
+                }
             }
             val body = JsonObject(mapOf("videoId" to JsonPrimitive(videoId), "contentCheckOk" to JsonPrimitive(true), "racyCheckOk" to JsonPrimitive(true),
                 "context" to JsonObject(mapOf("client" to JsonObject(client))))).toString()
@@ -262,5 +282,7 @@ class AndroidYouTubeMediaService(
             WEB w praktyce nigdy nie daje bezpośredniego (nieszyfrowanego) audio, więc to ten UA,
             nie przeglądarkowy USER_AGENT, jest używany przy każdym realnym odtwarzaniu. */
         const val ANDROID_AGENT = "com.google.android.youtube/21.26.364 (Linux; U; Android 11) gzip"
+        const val IOS_AGENT = "com.google.ios.youtube/21.26.4 (iPhone16,2; U; CPU iOS 18_3_2 like Mac OS X;)"
+        const val TV_AGENT = "Mozilla/5.0 (ChromiumStylePlatform) Cobalt/25.lts.30.1034943-gold (unlike Gecko), Unknown_TV_Unknown_0/Unknown (Unknown, Unknown)"
     }
 }
