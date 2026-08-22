@@ -136,7 +136,7 @@ class PlaybackService : MediaSessionService() {
                 override fun open(dataSpec: DataSpec): Long {
                     val url = dataSpec.uri.toString()
                     val itag = Regex("[?&]itag=(\\d+)").find(url)?.groupValues?.get(1)
-                    val signedIp = Regex("[?&]ip=([0-9.]+)").find(url)?.groupValues?.get(1)
+                    val urlBoundIp = Regex("[?&]ip=([0-9.]+)").find(url)?.groupValues?.get(1)
                     inner.setRequestProperty("User-Agent", when {
                         "c=ANDROID_VR" in url -> AndroidYouTubeMediaService.VR_AGENT
                         else -> AndroidYouTubeMediaService.VISIONOS_AGENT
@@ -176,7 +176,7 @@ class PlaybackService : MediaSessionService() {
                             "responseMessage" to (e.responseMessage ?: ""),
                             "responseHeaders" to e.headerFields.entries.joinToString(";") { entry -> "${entry.key}=${entry.value.joinToString(",")}" },
                             "responseBody" to String(e.responseBody).take(300),
-                            "signedIp" to (signedIp ?: "?"),
+                            "urlBoundIp" to (urlBoundIp ?: "?"),
                             "actualDeviceIp" to actualIp,
                         ))
                         throw e
