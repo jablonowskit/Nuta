@@ -114,6 +114,15 @@ class PlaybackService : MediaSessionService() {
      * parametru "c=" wpisanego w sam URL strumienia przez Google — widoczny wprost w każdym
      * podpisanym linku (np. "&c=ANDROID_VR&" albo "&c=VISIONOS&"), więc zawsze zgodny z tym, co
      * faktycznie podpisało dany URL, niezależnie od ustawień.
+     *
+     * Druga, ważniejsza sprawa: lokalny węzeł CDN (Google Global Cache) u tego ISP akceptuje
+     * OGRANICZONE zakresy bajtów ("Range: bytes=X-Y"), ale odrzuca (HTTP 403) KONTYNUACJĘ otwartym
+     * zakresem ("Range: bytes=X-", bez górnej granicy) — potwierdzone curlem: pierwszy ograniczony
+     * zakres działa, kolejny otwarty od tego miejsca pada natychmiast. ExoPlayer po wyczerpaniu
+     * pierwszego bufora domyślnie właśnie tak kontynuuje odtwarzanie, stąd stały ~3.4s cutoff
+     * niezależny od profilu klienta, User-Agenta, telefonu czy sieci. Fix: zawsze dopisujemy
+     * górną granicę zakresu na podstawie parametru "clen" (długość treści), który Google umieszcza
+     * w samym URL-u — więc żadne żądanie nigdy nie jest "otwarte".
      */
     private class ClientAwareDataSourceFactory(private val upstream: DefaultHttpDataSource.Factory) : DataSource.Factory {
         override fun createDataSource(): DataSource {
@@ -125,7 +134,11 @@ class PlaybackService : MediaSessionService() {
                         "c=ANDROID_VR" in url -> AndroidYouTubeMediaService.VR_AGENT
                         else -> AndroidYouTubeMediaService.VISIONOS_AGENT
                     })
-                    return inner.open(dataSpec)
+                    val contentLength = Regex("[?&]clen=(\\d+)").find(url)?.groupValues?.get(1)?.toLongOrNull()
+                    val boundedSpec = if (contentLength != null && dataSpec.length == androidx.media3.common.C.LENGTH_UNSET.toLong()) {
+                        dataSpec.buildUpon().setLength(contentLength - dataSpec.position).build()
+                    } else dataSpec
+                    return inner.open(boundedSpec)
                 }
             }
         }
