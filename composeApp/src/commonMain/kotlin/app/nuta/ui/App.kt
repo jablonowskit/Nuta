@@ -1,5 +1,6 @@
 package app.nuta.ui
 
+import app.nuta.core.BuildInfo
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
@@ -590,7 +591,12 @@ private fun TopBar(compact: Boolean) {
         Spacer(Modifier.width(12.dp))
         if (!compact) Text(stringResource(Res.string.app_tagline), color = Color(0xFF8D9BA6), fontSize = 13.sp)
         Spacer(Modifier.weight(1f))
-        Text("NUTA", color = MaterialTheme.colors.secondary, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+        Text(
+            "v${BuildInfo.VERSION_NAME} · ${BuildInfo.GIT_SHA}",
+            color = MaterialTheme.colors.secondary,
+            fontWeight = FontWeight.Bold,
+            fontSize = 11.sp,
+        )
     }
 }
 
