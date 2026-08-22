@@ -399,7 +399,18 @@ approach this app (and yt-dlp/NewPipe generally) relies on. A PoToken
 alone cannot unlock the old-style response on a client that has fully
 moved to SABR; the classic mechanism this app depends on only survives on
 whichever client hasn't been SABR-enforced yet (`VISIONOS`, for now).
-**This closes the PO-token investigation for good** — it was never the
-right lever for either `ANDROID_VR` (ignores it) or `WEB` (bypassed
-entirely by SABR). No further PO-token work is planned.
+**Working conclusion, not yet final** — PO-token alone does not explain
+either client's failure the way it was first hypothesized: it is
+provably not the gate for `ANDROID_VR` (silently ignored) and, on the one
+`WEB` test done so far, made no observable difference either
+(`UNPLAYABLE` with or without it). But that `WEB` test was a single
+request from a script, not a real page load — the CDP network sniff
+(same session) showed genuine browser playback going through `POST
+videoplayback` with an opaque SABR/UMP binary payload, which is the more
+likely explanation for why the classic `adaptiveFormats[].url` shape
+never shows up for `WEB` regardless of PO-token. Continuing to use the
+now-running Chrome+CDP setup to capture a real page's *full* request
+sequence for a specific video (not just the homepage's autoplay preview
+requests captured so far) before writing a final conclusion — see next
+update below once that capture is done.
 again later.
