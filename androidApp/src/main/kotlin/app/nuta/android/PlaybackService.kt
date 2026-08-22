@@ -6,6 +6,8 @@ import android.os.Bundle
 import androidx.media3.common.ForwardingPlayer
 import androidx.media3.common.Player
 import androidx.media3.database.StandaloneDatabaseProvider
+import androidx.media3.datasource.DataSource
+import androidx.media3.datasource.DataSpec
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.datasource.cache.CacheDataSource
 import androidx.media3.datasource.cache.LeastRecentlyUsedCacheEvictor
@@ -30,7 +32,7 @@ class PlaybackService : MediaSessionService() {
     override fun onCreate() {
         super.onCreate()
         val settingsStore = AndroidPlaybackSettingsStore(getSharedPreferences("playback-settings", MODE_PRIVATE))
-        val upstreamFactory = DefaultHttpDataSource.Factory().setUserAgent(USER_AGENT).setAllowCrossProtocolRedirects(true)
+        val upstreamFactory = ClientAwareDataSourceFactory(DefaultHttpDataSource.Factory().setAllowCrossProtocolRedirects(true))
         val cacheSizeBytes = settingsStore.settings.value.cacheSizeMb.toLong() * 1024 * 1024
         val cache = SimpleCache(File(cacheDir, "stream-cache"), LeastRecentlyUsedCacheEvictor(cacheSizeBytes), StandaloneDatabaseProvider(this))
         streamCache = cache
@@ -103,6 +105,32 @@ class PlaybackService : MediaSessionService() {
         mediaSession?.setMediaButtonPreferences(listOf(seekBackButton, seekForwardButton))
     }
 
+    /**
+     * Google CDN odrzuca (HTTP 403) pobranie bajtów audio, jeśli User-Agent żądania danych nie
+     * zgadza się z UA klienta, dla którego URL został podpisany — a różne profile YouTube
+     * (VISIONOS/ANDROID_VR, wybierane przez ustawienie w Settings albo fallback AUTO) dają URL-e
+     * podpisane dla różnych klientów w tej samej sesji odtwarzania. Zamiast pamiętać, który profil
+     * aktualnie "wygrał" (osobny stan do synchronizowania z resolverem), UA wybieramy na podstawie
+     * parametru "c=" wpisanego w sam URL strumienia przez Google — widoczny wprost w każdym
+     * podpisanym linku (np. "&c=ANDROID_VR&" albo "&c=VISIONOS&"), więc zawsze zgodny z tym, co
+     * faktycznie podpisało dany URL, niezależnie od ustawień.
+     */
+    private class ClientAwareDataSourceFactory(private val upstream: DefaultHttpDataSource.Factory) : DataSource.Factory {
+        override fun createDataSource(): DataSource {
+            val inner = upstream.createDataSource()
+            return object : DataSource by inner {
+                override fun open(dataSpec: DataSpec): Long {
+                    val url = dataSpec.uri.toString()
+                    inner.setRequestProperty("User-Agent", when {
+                        "c=ANDROID_VR" in url -> AndroidYouTubeMediaService.VR_AGENT
+                        else -> AndroidYouTubeMediaService.VISIONOS_AGENT
+                    })
+                    return inner.open(dataSpec)
+                }
+            }
+        }
+    }
+
     private class QueueAwarePlayer(player: Player) : ForwardingPlayer(player) {
         override fun getAvailableCommands(): Player.Commands = super.getAvailableCommands().buildUpon()
             .addAll(
@@ -146,12 +174,6 @@ class PlaybackService : MediaSessionService() {
     }
 
     companion object {
-        // Musi być zgodny z UA, którym AndroidYouTubeMediaService wynegocjował URL strumienia —
-        // Google CDN odrzuca (HTTP 403) pobranie bajtów audio, jeśli UA żądania danych nie
-        // zgadza się z UA klienta, dla którego URL został podpisany. VISIONOS jest teraz próbowany
-        // pierwszy (jedyny profil, który wg NewPipeExtractor jeszcze omija wymuszenie SABR) —
-        // WEB/ANDROID dają tylko formaty SABR, więc realnie ich UA nie ma znaczenia.
-        private val USER_AGENT = AndroidYouTubeMediaService.VISIONOS_AGENT
         private const val COMMAND_SEEK_BACK_10 = "app.nuta.SEEK_BACK_10"
         private const val COMMAND_SEEK_FORWARD_10 = "app.nuta.SEEK_FORWARD_10"
 
