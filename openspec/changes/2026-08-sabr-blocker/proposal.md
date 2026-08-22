@@ -1,9 +1,13 @@
 # Change: YouTube audio source blocked by SABR rollout
 
-- Status: **RESOLVED (mitigated) — `VISIONOS` client profile confirmed
-  working on-device**, commit `cdeee89`. Not a durable fix — see
-  "Explicitly not pursued" / rotation risk below.
-- Date opened: 2026-08-22, confirmed working same day
+- Status: **RESOLVED — two independent bugs fixed.** (1) SABR rollout
+  mitigated via `VISIONOS`/`ANDROID_VR` client profiles (commit `cdeee89`,
+  not durable long-term). (2) The *actual* remaining on-device 403 (which
+  persisted even after (1) and looked like a phone/network mystery) was a
+  separate, unrelated bug: this network's local CDN node rejects open-ended
+  Range continuation requests — see the dedicated section below. Fixed in
+  commit `e521bf6`.
+- Date opened: 2026-08-22, both root causes found and fixed same day
 - Affects: `youtube-audio-source` (Android side; desktop resolver
   `NutaYouTubeMediaService` not yet re-tested against this but almost
   certainly hits the same wall, since it's the same YouTube backend)
@@ -222,4 +226,78 @@ per-profile loop in `resolveStream()`.
 An explicit `YouTubeClientProfile` setting (AUTO/VISIONOS/ANDROID_VR/ANDROID/
 WEB/IOS/TVHTML5) was added in Settings so a specific client can be forced
 (no fallback) for manual diagnosis, rather than only inferring from log
-timing which profile actually succeeded.
+timing which profile actually succeeded. (Later simplified to just
+AUTO/VISIONOS/ANDROID_VR once the other four were confirmed dead — see the
+commit removing them.)
+
+## The real remaining bug: local CDN node rejects open-ended Range continuation
+
+After the `VISIONOS` fix shipped, on-device playback still failed — every
+track resolved fine (`stream_resolved` every time, matching the client
+matrix above) but audio playback itself 403'd a constant ~3.4-6s after
+`playback_prepared`, regardless of `VISIONOS` vs `ANDROID_VR`, WiFi vs mobile
+data, or `prefetch` on/off. A `curl` re-test of `ANDROID_VR` from a desktop
+machine on the same LAN succeeded cleanly (see the section above), which
+looked like an unexplained phone-vs-desktop discrepancy — several wrong
+theories were tried and ruled out in order:
+
+1. **UA mismatch** — real bug, found and fixed (commit `bc981ae`,
+   `ClientAwareDataSourceFactory` picks UA from the URL's `c=` param), but
+   fixing it did **not** resolve the 403s. Wrong/incomplete theory.
+2. **Prefetch concurrency** (multiple parallel `stream_resolved` calls
+   hammering the same CDN edge) — disabled the `prefetchEnabled` setting
+   entirely; 403s persisted identically with strictly sequential,
+   one-track-at-a-time resolves. Ruled out.
+3. **DNS routing to a bad CDN edge** — checked whether the ISP's DNS
+   resolver was giving the phone a different, broken `googlevideo.com` IP
+   from the desktop. Compared ISP DNS, `8.8.8.8`, and `1.1.1.1` for the
+   same hostname (`rr6---sn-x2pm-f5fs.googlevideo.com`) — **identical IP
+   from all three** (`185.225.248.17`). This hostname is a specific CDN
+   edge YouTube's `/player` response already commits to server-side;
+   client-side DNS resolver choice cannot change which edge it points to.
+   Ruled out (and don't suggest changing router DNS for this — it's a dead
+   end, confirmed by direct test, not guesswork).
+
+**Actual root cause**, found by capturing the phone's real traffic at the
+network layer (SSH into the LAN router `japa55.japa`, `opkg install
+tcpdump`, capture `host <phone-ip> and port 443` to a pcap, pull it back
+via `ssh router "cat file" > local file` since the router had no
+`sftp-server` for normal `scp`, then parse the pcap's raw TCP header bytes
+directly in a small Python script — no `tshark`/`scapy` needed) and cross-
+referencing with a hand-crafted `curl` reproduction:
+
+- Traffic to real Google-owned IPs (`142.251.x.x` — API/search/base.js)
+  was completely normal: long-lived, no drops.
+- Traffic to `185.225.248.x` (the specific subnet `rr6---sn-x2pm-f5fs
+  .googlevideo.com` resolves to — **this ISP's local Google Global Cache
+  node**, not general Google infrastructure) showed dozens of TCP
+  connections opened and RST'd within ~60-100ms, repeating throughout the
+  whole session.
+- Reproduced deterministically with plain `curl` against that exact node:
+  - `Range: bytes=0-4095` (bounded) → `HTTP 206`, works.
+  - `Range: bytes=0-` (open-ended, no upper bound) → **instant `HTTP 403`**
+    (~50ms), every time.
+  - No `Range` header at all → also instant `HTTP 403`.
+  - Sequence: `Range: bytes=0-65535` (succeeds, 206) immediately followed
+    by `Range: bytes=65536-` (open-ended continuation from where the first
+    request left off) on the same URL → **the continuation gets instant
+    403**, while the exact same continuation expressed as another *bounded*
+    range (confirmed earlier the same day: three sequential bounded ranges
+    all succeeded) works fine.
+- This exactly matches ExoPlayer's own behavior: `DefaultHttpDataSource`
+  requests an initial bounded chunk, plays through it (~3.4-6s depending on
+  bitrate/buffer config), then issues an **open-ended** continuation
+  request for the rest of the file — which this specific ISP-hosted CDN
+  node rejects. Not a Google policy change (their own infrastructure never
+  showed this behavior in any test) — a quirk/misconfiguration specific to
+  this one local cache deployment.
+
+**Fix** (commit `e521bf6`): `ClientAwareDataSourceFactory` (already added
+for the UA fix) also rewrites any open-ended `DataSpec` (Media3
+`DataSpec.length == C.LENGTH_UNSET`) into a bounded one, computing the
+missing upper bound from the `clen` (content length) query parameter Google
+already embeds in every signed `videoplayback` URL. Every request this app
+makes now has an explicit end byte, so it never hits this node's rejection
+path — independent of which client profile resolved the URL, so it will
+keep working even if the SABR client-rotation situation above changes
+again later.
