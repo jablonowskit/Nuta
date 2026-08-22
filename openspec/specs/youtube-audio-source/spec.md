@@ -109,12 +109,26 @@ second connection to an already-used signed URL as suspicious.
 - THEN the second (real playback) request SHALL be at risk of HTTP 403,
   independent of client profile or User-Agent correctness
 
-## Known limitation (unresolved as of 2026-08-22)
-See `openspec/changes/2026-08-sabr-blocker/proposal.md`. As of this date, all
-four configured client profiles fail to yield a usable audio format for every
-track tested: `WEB`/`ANDROID` return SABR-shaped adaptiveFormats entries with
-neither `url` nor `signatureCipher` at all (a binary UMP/POST-based delivery
-protocol this codebase does not implement), and `IOS`/`TVHTML5` fail earlier,
-at the playability-status or connection level. **No requirement above is
-currently satisfiable end-to-end** — the spec describes the intended/previously
--working behavior, not the current runtime reality.
+### Requirement: No open-ended Range continuation requests
+The HTTP client that downloads audio bytes SHALL always send a Range request
+with an explicit upper bound, never an open-ended one (`bytes=X-` with no end).
+At least one real-world CDN edge (an ISP-hosted Google Global Cache node) is
+known to accept bounded ranges but reject an open-ended continuation request
+with HTTP 403, even against an otherwise-valid signed URL from the same
+session. The upper bound SHALL be derived from the `clen` query parameter
+already present in the signed `videoplayback` URL.
+
+#### Scenario: Player requests a continuation after exhausting its buffer
+- WHEN the player has consumed an initial bounded chunk and needs more data
+- THEN the next Range request SHALL still carry an explicit upper bound
+  (from `clen`), not an open `bytes=X-` request
+
+## Resolution history
+See `openspec/changes/2026-08-sabr-blocker/proposal.md` for the full
+debugging narrative (2026-08-22). Two independent bugs were found and fixed
+the same day: the SABR client-blocking rollout (mitigated via `VISIONOS`/
+`ANDROID_VR` client profiles — not a durable fix, expect renewed breakage
+when YouTube extends enforcement to these too) and, separately, a local ISP
+CDN node rejecting open-ended Range continuation requests (fixed durably via
+the requirement above — this fix does not depend on which client profile
+resolved the URL).
