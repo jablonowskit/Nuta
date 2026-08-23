@@ -78,11 +78,16 @@ class ListenBrainzRepository(
     /** `metadata=true` zwraca tytuł/artystę wprost w odpowiedzi (dla wpisów z recording_mbid
         i recording_msid jednakowo) — jedno zapytanie na stronę, bez osobnego batch-lookupu.
         Endpoint domyślnie zwraca tylko pierwsze 25 wyników — trzeba paginować przez offset,
-        żeby dostać wszystkie polubienia, nie tylko pierwszą stronę. */
+        żeby dostać wszystkie polubienia, nie tylko pierwszą stronę. Nie zawiera jednak długości
+        utworu — bez niej `PlayerState.durationMs` wychodzi 0, a `seekTo()` (przycięte do
+        `0..durationMs`) zawsze wraca na początek. Dlatego wpisy z `recording_mbid` dociągają
+        prawdziwą długość przez [lookupMetadata] (batch `/metadata/recording/`, ma pole
+        `length`); tylko wpisy z gołym `recording_msid` (bez MBID) zostają z durationMs=0. */
     override suspend fun getLikedTracks(): List<Track> {
         val user = username()
         if (user.isBlank()) return emptyList()
-        val tracks = mutableListOf<Track>()
+        data class Inline(val id: String, val hasMbid: Boolean, val title: String, val artist: String, val album: String, val artistMbid: String?)
+        val inline = mutableListOf<Inline>()
         var offset = 0
         while (true) {
             val page = runCatching {
@@ -96,9 +101,8 @@ class ListenBrainzRepository(
             val feedback = page["feedback"] as? JsonArray ?: break
             feedback.forEach { item ->
                 val entry = item as? JsonObject ?: return@forEach
-                val id = entry["recording_mbid"]?.jsonPrimitive?.contentOrNull
-                    ?: entry["recording_msid"]?.jsonPrimitive?.contentOrNull
-                    ?: return@forEach
+                val mbid = entry["recording_mbid"]?.jsonPrimitive?.contentOrNull
+                val id = mbid ?: entry["recording_msid"]?.jsonPrimitive?.contentOrNull ?: return@forEach
                 val metadata = entry["track_metadata"] as? JsonObject ?: return@forEach
                 val title = metadata["track_name"]?.jsonPrimitive?.contentOrNull ?: return@forEach
                 val artist = metadata["artist_name"]?.jsonPrimitive?.contentOrNull.orEmpty()
@@ -107,13 +111,23 @@ class ListenBrainzRepository(
                 // dopasowania — .jsonObject rzuca na JsonNull zamiast zwrócić null, stąd `as?`.
                 val artistMbid = (metadata["mbid_mapping"] as? JsonObject)?.get("artist_mbids")?.let { it as? JsonArray }
                     ?.firstOrNull()?.jsonPrimitive?.contentOrNull
-                tracks += Track(id = id, title = title, artists = listOfNotNull(artist.takeIf(String::isNotBlank)), album = album, durationMs = 0L, artistMbid = artistMbid)
+                inline += Inline(id, mbid != null, title, artist, album, artistMbid)
             }
-            val totalCount = page["total_count"]?.jsonPrimitive?.contentOrNull?.toIntOrNull() ?: tracks.size
+            val totalCount = page["total_count"]?.jsonPrimitive?.contentOrNull?.toIntOrNull() ?: inline.size
             offset += feedback.size
             if (feedback.isEmpty() || offset >= totalCount) break
         }
-        return tracks
+        val durationByMbid = lookupMetadata(inline.filter { it.hasMbid }.map(Inline::id)).associate { it.id to it.durationMs }
+        return inline.map {
+            Track(
+                id = it.id,
+                title = it.title,
+                artists = listOfNotNull(it.artist.takeIf(String::isNotBlank)),
+                album = it.album,
+                durationMs = durationByMbid[it.id] ?: 0L,
+                artistMbid = it.artistMbid,
+            )
+        }
     }
 
     override suspend fun isTrackLiked(trackId: String): Boolean = getLikedTracks().any { it.id == trackId }
