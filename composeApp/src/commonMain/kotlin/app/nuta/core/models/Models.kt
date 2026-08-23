@@ -7,6 +7,8 @@ data class Track(
     val album: String,
     val durationMs: Long,
     val imageUrl: String? = null,
+    /** MBID artysty (ListenBrainz/MusicBrainz) — potrzebny do budowy promptu `artist:(...)` w lb-radio. */
+    val artistMbid: String? = null,
 )
 
 data class Playlist(

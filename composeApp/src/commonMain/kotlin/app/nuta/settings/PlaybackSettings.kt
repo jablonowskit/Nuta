@@ -26,6 +26,14 @@ enum class YouTubeClientProfile { AUTO, VISIONOS, ANDROID_VR }
  */
 enum class AudioSource { AUTO, YOUTUBE, SOUNDCLOUD }
 
+/**
+ * Skąd brać wyszukiwanie, playlisty, ulubione i rekomendacje. LISTENBRAINZ całkowicie
+ * zastępuje Spotify (search przez MusicBrainz, reszta przez ListenBrainz) — żadnego
+ * mergowania, tak jakby drugi serwis nie istniał. Niezależne od AudioSource (audio zawsze
+ * leci z YouTube/SoundCloud).
+ */
+enum class DataSource { SPOTIFY, LISTENBRAINZ }
+
 data class YouTubePlaybackSettings(
     val fontScale: Float = 1f,
     val quality: StreamQuality = StreamQuality.BEST,
@@ -34,6 +42,9 @@ data class YouTubePlaybackSettings(
     val loudnessNormalization: LoudnessNormalization = LoudnessNormalization.OFF,
     val youtubeClientProfile: YouTubeClientProfile = YouTubeClientProfile.AUTO,
     val audioSource: AudioSource = AudioSource.YOUTUBE,
+    val dataSource: DataSource = DataSource.SPOTIFY,
+    val listenBrainzUsername: String = "",
+    val listenBrainzApiToken: String = "",
     /** Eksperymentalne: rozwiązuj strumień dla widocznych utworów zanim użytkownik kliknie play. */
     val prefetchEnabled: Boolean = false,
     /** Pasek playera jest zawsze widoczny; to pole trzyma tylko stan zwinięcia do wąskiego paska. */
