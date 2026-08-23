@@ -12,6 +12,7 @@ import app.nuta.youtube.YouTubeCandidate
 import app.nuta.youtube.YouTubeMatch
 import app.nuta.youtube.YouTubeMediaService
 import app.nuta.youtube.YouTubeResolution
+import app.nuta.youtube.rankCandidate
 import app.nuta.settings.PlaybackSettingsStore
 import app.nuta.settings.YouTubeClientProfile
 import java.net.HttpURLConnection
@@ -78,18 +79,7 @@ class AndroidYouTubeMediaService(
     }.getOrNull()
 
     private fun rank(track: Track, candidate: YouTubeCandidate): YouTubeMatch {
-        val expected = normalize(track.title); val actual = normalize(candidate.title)
-        val artist = normalize(track.artists.firstOrNull().orEmpty()); val haystack = normalize(candidate.title + " " + candidate.channel)
-        var score = 0; val reasons = mutableListOf<String>()
-        if (actual.contains(expected) || expected.contains(actual)) { score += 45; reasons += "title" }
-        if (artist.isNotBlank() && artist in haystack) { score += 30; reasons += "artist" }
-        candidate.durationMs?.let { val diff = kotlin.math.abs(it - track.durationMs); if (diff <= 3_000) score += 25 else if (diff <= 10_000) score += 12 else if (diff >= 45_000) score -= 25 }
-        if (candidate.isOfficial) score += 15
-        val lyric = Regex("\\blyrics?\\b").containsMatchIn(actual)
-        val officialLyric = lyric && ("official lyric" in actual || "official lyrics" in actual)
-        if (officialLyric) { score += 12; reasons += "official_lyrics" }
-        else if (lyric) { score += 5; reasons += "lyrics" }
-        listOf(" live" to 35, "cover" to 35, "remix" to 25, "karaoke" to 40, "sped up" to 35, "slowed" to 30).forEach { (word, penalty) -> if (word in " $haystack") score -= penalty }
+        val (score, reasons) = rankCandidate(track, candidate.title, candidate.channel, candidate.durationMs, candidate.isOfficial)
         return YouTubeMatch(candidate, score, reasons)
     }
 
@@ -297,7 +287,6 @@ class AndroidYouTubeMediaService(
 
     private fun text(value: JsonObject?): String? = value?.get("simpleText")?.jsonPrimitive?.contentOrNull ?: (value?.get("runs") as? JsonArray)?.joinToString("") { it.jsonObject["text"]?.jsonPrimitive?.contentOrNull.orEmpty() }
     private fun duration(value: String): Long? = value.split(':').mapNotNull(String::toLongOrNull).takeIf(List<Long>::isNotEmpty)?.fold(0L) { total, part -> total * 60 + part }?.times(1_000)
-    private fun normalize(value: String) = value.lowercase().replace(Regex("[^a-z0-9]+"), " ").trim()
     private fun extractObjects(source: String, marker: String): List<String> { val out=mutableListOf<String>(); var from=0; while(out.size<40){val m=source.indexOf(marker,from);if(m<0)break;val start=source.indexOf('{',m+marker.length);if(start<0)break;var depth=0;var quoted=false;var escaped=false;var end=-1;for(i in start until source.length){val c=source[i];if(quoted){if(escaped)escaped=false else if(c=='\\')escaped=true else if(c=='\"')quoted=false}else if(c=='\"')quoted=true else if(c=='{')depth++ else if(c=='}'&&--depth==0){end=i+1;break}};if(end<0)break;out+=source.substring(start,end);from=end};return out }
     private data class Profile(val name: String, val version: String, val id: String, val agent: String)
     companion object {
