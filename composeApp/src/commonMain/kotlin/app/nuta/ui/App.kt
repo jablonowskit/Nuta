@@ -347,7 +347,7 @@ private fun NutaAppContent(container: AppContainer) {
                 val targetLiked = !currentTrackLiked
                 scope.launch {
                     favoriteLoading = true
-                    runCatching { container.spotifyRepository.setTrackLiked(track.id, targetLiked) }
+                    runCatching { container.spotifyRepository.setTrackLiked(track, targetLiked) }
                         .onSuccess {
                             if (playerState.currentTrack?.id == track.id) currentTrackLiked = targetLiked
                             likedTracks = if (targetLiked) {
@@ -481,7 +481,7 @@ private fun NutaAppContent(container: AppContainer) {
                         scope.launch {
                             playlistActionLoading = true
                             playlistActionError = null
-                            runCatching { container.spotifyRepository.addTracksToPlaylist(playlist.id, listOf(track.id)) }
+                            runCatching { container.spotifyRepository.addTracksToPlaylist(playlist.id, listOf(track)) }
                                 .onSuccess { addToPlaylistTrack = null }
                                 .onFailure { playlistActionError = it.message ?: unknownErrorLabel }
                             playlistActionLoading = false

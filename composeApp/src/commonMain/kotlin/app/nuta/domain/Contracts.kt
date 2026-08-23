@@ -14,11 +14,11 @@ interface SpotifyRepository {
     /** Ostatnia znana lista ulubionych bez sięgania do sieci — do natychmiastowego stanu serduszka po starcie. */
     suspend fun getCachedLikedTracks(): List<Track> = emptyList()
     suspend fun isTrackLiked(trackId: String): Boolean
-    suspend fun setTrackLiked(trackId: String, liked: Boolean)
+    suspend fun setTrackLiked(track: Track, liked: Boolean)
     suspend fun search(query: String): SearchResult
     suspend fun getTrackRadio(seed: Track, limit: Int = 20): List<Track>
     suspend fun createPlaylist(name: String, description: String = ""): Playlist
-    suspend fun addTracksToPlaylist(playlistId: String, trackIds: List<String>)
+    suspend fun addTracksToPlaylist(playlistId: String, tracks: List<Track>)
 }
 
 interface AudioPlayer {
