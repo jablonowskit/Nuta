@@ -43,8 +43,8 @@ class FakeSpotifyRepository(private val logger: NutaLogger) : SpotifyRepository 
 
     override suspend fun isTrackLiked(trackId: String): Boolean = trackId in likedTrackIds
 
-    override suspend fun setTrackLiked(trackId: String, liked: Boolean) {
-        if (liked) likedTrackIds += trackId else likedTrackIds -= trackId
+    override suspend fun setTrackLiked(track: Track, liked: Boolean) {
+        if (liked) likedTrackIds += track.id else likedTrackIds -= track.id
     }
 
     override suspend fun search(query: String): SearchResult {
@@ -70,11 +70,11 @@ class FakeSpotifyRepository(private val logger: NutaLogger) : SpotifyRepository 
         return playlist
     }
 
-    override suspend fun addTracksToPlaylist(playlistId: String, trackIds: List<String>) {
+    override suspend fun addTracksToPlaylist(playlistId: String, tracks: List<Track>) {
         val index = playlists.indexOfFirst { it.id == playlistId }
         require(index >= 0) { "Nie znaleziono playlisty $playlistId" }
         val current = playlists[index]
-        val toAdd = trackIds.mapNotNull { id -> DemoLibrary.tracks.firstOrNull { it.id == id } }
+        val toAdd = tracks.mapNotNull { t -> DemoLibrary.tracks.firstOrNull { it.id == t.id } }
         playlists[index] = current.copy(tracks = current.tracks + toAdd)
         logger.info("FakeSpotifyRepository", "tracks_added", "Dodano utwory do demonstracyjnej playlisty", fields = mapOf("playlistId" to playlistId, "count" to toAdd.size.toString()))
     }

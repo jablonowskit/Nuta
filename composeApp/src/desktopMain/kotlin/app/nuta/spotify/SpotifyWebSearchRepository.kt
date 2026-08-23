@@ -132,8 +132,8 @@ class SpotifyWebSearchRepository(
         return (response as? JsonArray)?.firstOrNull()?.jsonPrimitive?.content?.toBooleanStrictOrNull() ?: false
     }
 
-    override suspend fun setTrackLiked(trackId: String, liked: Boolean) {
-        libraryRequest(if (liked) "PUT" else "DELETE", null, trackId)
+    override suspend fun setTrackLiked(track: Track, liked: Boolean) {
+        libraryRequest(if (liked) "PUT" else "DELETE", null, track.id)
     }
 
     override suspend fun search(query: String): SearchResult {
@@ -200,8 +200,9 @@ class SpotifyWebSearchRepository(
         return Playlist(id, name, description, emptyList())
     }
 
-    override suspend fun addTracksToPlaylist(playlistId: String, trackIds: List<String>) {
+    override suspend fun addTracksToPlaylist(playlistId: String, tracks: List<Track>) {
         require(playlistId.matches(Regex("[A-Za-z0-9]+"))) { "Nieprawidłowy identyfikator playlisty" }
+        val trackIds = tracks.map { it.id }
         if (trackIds.isEmpty()) return
         val token = validToken()
         val body = JsonObject(mapOf(
