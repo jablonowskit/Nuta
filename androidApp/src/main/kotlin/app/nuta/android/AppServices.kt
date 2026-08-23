@@ -42,7 +42,7 @@ object AppServices {
         playbackSettings = AndroidPlaybackSettingsStore(context.getSharedPreferences("playback-settings", Context.MODE_PRIVATE))
         val youTube = AndroidYouTubeMediaService(logger, playbackSettings, context.applicationContext)
         val soundCloud = AndroidSoundCloudMediaService(logger, playbackSettings)
-        youtubeMediaService = SourceSelectingMediaService(playbackSettings, youTube, soundCloud)
+        youtubeMediaService = SourceSelectingMediaService(playbackSettings, youTube, soundCloud, logger)
         val sessionToken = SessionToken(context, ComponentName(context, PlaybackService::class.java))
         val future = MediaController.Builder(context, sessionToken).buildAsync()
         future.addListener({

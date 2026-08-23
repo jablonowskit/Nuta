@@ -697,10 +697,11 @@ private fun SettingsScreen(container: AppContainer) {
         item {
             SettingsGroup(
                 "Źródło audio",
-                "Skąd rozwiązywać strumień audio dla utworów. SoundCloud to zabezpieczenie na wypadek, gdy YouTube zablokuje dostęp — mniejsza biblioteka, ale nie podlega tym samym ograniczeniom.",
+                "Skąd rozwiązywać strumień audio dla utworów. Automatycznie próbuje YouTube, a przy błędzie samo przełącza się na SoundCloud dla tego utworu. SoundCloud ma mniejszą bibliotekę i niższą jakość (128kbps mp3), ale nie podlega tym samym ograniczeniom co YouTube.",
             ) {
                 SettingOptions(
                     options = listOf(
+                        AudioSource.AUTO to "Automatycznie",
                         AudioSource.YOUTUBE to "YouTube",
                         AudioSource.SOUNDCLOUD to "SoundCloud",
                     ),
