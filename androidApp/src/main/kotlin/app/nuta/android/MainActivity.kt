@@ -16,6 +16,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import app.nuta.AppContainer
 import app.nuta.data.fake.FakeSpotifyRepository
+import app.nuta.domain.DataSourceSelectingRepository
 import app.nuta.core.security.SecretValue
 import app.nuta.resources.Res
 import app.nuta.resources.playback_connect_failed
@@ -59,7 +60,11 @@ class MainActivity : ComponentActivity() {
             } else {
                 val activeToken = token
                 val repository = remember(activeToken) {
-                    activeToken?.let { SpotifyAndroidRepository(it, logger, getSharedPreferences("spotify-playlists-cache", MODE_PRIVATE)) } ?: FakeSpotifyRepository(logger)
+                    DataSourceSelectingRepository(
+                        playbackSettings,
+                        activeToken?.let { SpotifyAndroidRepository(it, logger, getSharedPreferences("spotify-playlists-cache", MODE_PRIVATE)) } ?: FakeSpotifyRepository(logger),
+                        AppServices.listenBrainzRepository,
+                    )
                 }
                 val container = remember(repository) {
                     AppContainer(spotifyRepository = repository, audioPlayer = activePlayer, logger = logger, youtubeMediaService = youtubeMediaService, playbackSettings = playbackSettings)

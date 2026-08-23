@@ -73,6 +73,7 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.platform.LocalDensity
 import org.jetbrains.compose.resources.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
@@ -91,6 +92,7 @@ import app.nuta.settings.BufferSize
 import app.nuta.settings.LoudnessNormalization
 import app.nuta.settings.YouTubeClientProfile
 import app.nuta.settings.AudioSource
+import app.nuta.settings.DataSource
 import app.nuta.settings.CodecPreference
 import app.nuta.settings.StreamQuality
 import kotlinx.coroutines.Job
@@ -707,6 +709,43 @@ private fun SettingsScreen(container: AppContainer) {
                     ),
                     selected = settings.audioSource,
                 ) { container.playbackSettings.update(settings.copy(audioSource = it)) }
+            }
+        }
+        item {
+            SettingsGroup(
+                "Źródło danych",
+                "Skąd brać wyszukiwanie, playlisty, ulubione i rekomendacje. ListenBrainz całkowicie zastępuje Spotify (wyszukiwanie przez MusicBrainz, reszta przez ListenBrainz) — audio nadal leci z YouTube/SoundCloud jak dziś.",
+            ) {
+                SettingOptions(
+                    options = listOf(
+                        DataSource.SPOTIFY to "Spotify",
+                        DataSource.LISTENBRAINZ to "ListenBrainz",
+                    ),
+                    selected = settings.dataSource,
+                ) { container.playbackSettings.update(settings.copy(dataSource = it)) }
+                if (settings.dataSource == DataSource.LISTENBRAINZ) {
+                    Spacer(Modifier.height(10.dp))
+                    OutlinedTextField(
+                        value = settings.listenBrainzUsername,
+                        onValueChange = { container.playbackSettings.update(settings.copy(listenBrainzUsername = it)) },
+                        label = { Text("Nazwa użytkownika ListenBrainz") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Spacer(Modifier.height(10.dp))
+                    OutlinedTextField(
+                        value = settings.listenBrainzApiToken,
+                        onValueChange = { container.playbackSettings.update(settings.copy(listenBrainzApiToken = it)) },
+                        label = { Text("Token API ListenBrainz") },
+                        singleLine = true,
+                        visualTransformation = PasswordVisualTransformation(),
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    OutlinedButton(onClick = { openUrlInBrowser("https://listenbrainz.org/settings/") }) {
+                        Text("Wygeneruj token")
+                    }
+                }
             }
         }
         item {

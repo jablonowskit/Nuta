@@ -9,6 +9,7 @@ import app.nuta.settings.YouTubePlaybackSettings
 import app.nuta.settings.LoudnessNormalization
 import app.nuta.settings.YouTubeClientProfile
 import app.nuta.settings.AudioSource
+import app.nuta.settings.DataSource
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -26,6 +27,9 @@ class AndroidPlaybackSettingsStore(private val preferences: SharedPreferences) :
             .putString("loudnessNormalization", value.loudnessNormalization.name)
             .putString("youtubeClientProfile", value.youtubeClientProfile.name)
             .putString("audioSource", value.audioSource.name)
+            .putString("dataSource", value.dataSource.name)
+            .putString("listenBrainzUsername", value.listenBrainzUsername)
+            .putString("listenBrainzApiToken", value.listenBrainzApiToken)
             .putBoolean("prefetchEnabled", value.prefetchEnabled)
             .putBoolean("playerCollapsed", value.playerCollapsed)
             .putInt("cacheSizeMb", value.cacheSizeMb)
@@ -41,6 +45,9 @@ class AndroidPlaybackSettingsStore(private val preferences: SharedPreferences) :
         loudnessNormalization = enumValue(preferences.getString("loudnessNormalization", null), LoudnessNormalization.OFF),
         youtubeClientProfile = enumValue(preferences.getString("youtubeClientProfile", null), YouTubeClientProfile.AUTO),
         audioSource = enumValue(preferences.getString("audioSource", null), AudioSource.YOUTUBE),
+        dataSource = enumValue(preferences.getString("dataSource", null), DataSource.SPOTIFY),
+        listenBrainzUsername = preferences.getString("listenBrainzUsername", "") ?: "",
+        listenBrainzApiToken = preferences.getString("listenBrainzApiToken", "") ?: "",
         prefetchEnabled = preferences.getBoolean("prefetchEnabled", false),
         playerCollapsed = preferences.getBoolean("playerCollapsed", false),
         cacheSizeMb = preferences.getInt("cacheSizeMb", 150).coerceIn(25, 500),

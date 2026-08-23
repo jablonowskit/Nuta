@@ -7,6 +7,9 @@ import androidx.compose.ui.window.rememberWindowState
 import app.nuta.core.logging.LogLevel
 import app.nuta.core.logging.MemoryLogger
 import app.nuta.data.fake.FakeSpotifyRepository
+import app.nuta.domain.DataSourceSelectingRepository
+import app.nuta.listenbrainz.ListenBrainzRepository
+import app.nuta.musicbrainz.MusicBrainzRepository
 import app.nuta.player.MpvAudioPlayer
 import app.nuta.platform.RotatingJsonLogSink
 import app.nuta.spotify.SpotifyLoginPrototype
@@ -49,10 +52,16 @@ fun main() {
         logger,
     )
     val audioPlayer = MpvAudioPlayer(scope, youtubeMediaService, logger, playbackSettings)
+    val musicBrainzRepository = MusicBrainzRepository(logger)
+    val listenBrainzRepository = ListenBrainzRepository(playbackSettings, musicBrainzRepository, logger)
     val tokenStore = SpotifyTestTokenStore(logger)
     val restoredToken = tokenStore.load()
     val container = AppContainer(
-        spotifyRepository = restoredToken?.let { SpotifyWebSearchRepository(it, logger) } ?: FakeSpotifyRepository(logger),
+        spotifyRepository = DataSourceSelectingRepository(
+            playbackSettings,
+            restoredToken?.let { SpotifyWebSearchRepository(it, logger) } ?: FakeSpotifyRepository(logger),
+            listenBrainzRepository,
+        ),
         audioPlayer = audioPlayer,
         logger = logger,
         youtubeMediaService = youtubeMediaService,
@@ -95,7 +104,11 @@ fun main() {
                     onSessionDetected = { token ->
                         tokenStore.save(token)
                         activeContainer = AppContainer(
-                            spotifyRepository = SpotifyWebSearchRepository(token, logger),
+                            spotifyRepository = DataSourceSelectingRepository(
+                                playbackSettings,
+                                SpotifyWebSearchRepository(token, logger),
+                                listenBrainzRepository,
+                            ),
                             audioPlayer = container.audioPlayer,
                             logger = logger,
                             youtubeMediaService = container.youtubeMediaService,
