@@ -701,7 +701,7 @@ private fun SettingsScreen(container: AppContainer) {
             ) {
                 SettingOptions(
                     options = listOf(
-                        AudioSource.AUTO to "Automatycznie",
+                        AudioSource.AUTO to "AUTO",
                         AudioSource.YOUTUBE to "YouTube",
                         AudioSource.SOUNDCLOUD to "SoundCloud",
                     ),
@@ -716,7 +716,7 @@ private fun SettingsScreen(container: AppContainer) {
             ) {
                 SettingOptions(
                     options = listOf(
-                        YouTubeClientProfile.AUTO to "Automatycznie",
+                        YouTubeClientProfile.AUTO to "AUTO",
                         YouTubeClientProfile.VISIONOS to "VISIONOS",
                         YouTubeClientProfile.ANDROID_VR to "ANDROID_VR",
                     ),
