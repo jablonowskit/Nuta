@@ -5,10 +5,12 @@
     android:viewportHeight="108">
     <!-- Skala <1 i pivot na środku canvasu: oryginalna grafika sięgała niemal do krawędzi
          108x108 (zaprojektowana pod stałe, okrągłe tło), co w adaptive iconie wystaje poza
-         bezpieczną strefę i bywa przycinane przez maski squircle/rounded-square launcherów. -->
+         bezpieczną strefę i bywa przycinane przez maski squircle/rounded-square launcherów.
+         0.8 wciąż nie wystarczał — najdalszy punkt zewnętrznej fali (10,70) leżał ~37.5dp od
+         środka, poza bezpiecznym promieniem 33dp; 0.7 sprowadza go do ~32.8dp. -->
     <group
-        android:scaleX="0.8"
-        android:scaleY="0.8"
+        android:scaleX="0.7"
+        android:scaleY="0.7"
         android:pivotX="54"
         android:pivotY="54">
         <!-- główka nuty (pierścień) -->
