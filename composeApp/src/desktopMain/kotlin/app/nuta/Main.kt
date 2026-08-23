@@ -46,6 +46,7 @@ fun main() {
         playbackSettings,
         NutaYouTubeMediaService(logger, playbackSettings),
         NutaSoundCloudMediaService(logger, playbackSettings),
+        logger,
     )
     val audioPlayer = MpvAudioPlayer(scope, youtubeMediaService, logger, playbackSettings)
     val tokenStore = SpotifyTestTokenStore(logger)
