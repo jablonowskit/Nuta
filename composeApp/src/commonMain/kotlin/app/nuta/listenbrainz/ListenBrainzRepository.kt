@@ -95,15 +95,17 @@ class ListenBrainzRepository(
             } ?: break
             val feedback = page["feedback"] as? JsonArray ?: break
             feedback.forEach { item ->
-                val entry = item.jsonObject
+                val entry = item as? JsonObject ?: return@forEach
                 val id = entry["recording_mbid"]?.jsonPrimitive?.contentOrNull
                     ?: entry["recording_msid"]?.jsonPrimitive?.contentOrNull
                     ?: return@forEach
-                val metadata = entry["track_metadata"]?.jsonObject ?: return@forEach
+                val metadata = entry["track_metadata"] as? JsonObject ?: return@forEach
                 val title = metadata["track_name"]?.jsonPrimitive?.contentOrNull ?: return@forEach
                 val artist = metadata["artist_name"]?.jsonPrimitive?.contentOrNull.orEmpty()
                 val album = metadata["release_name"]?.jsonPrimitive?.contentOrNull.orEmpty()
-                val artistMbid = metadata["mbid_mapping"]?.jsonObject?.get("artist_mbids")?.let { it as? JsonArray }
+                // mbid_mapping bywa jawnym JSON null (nie brakującym polem) dla wpisów bez
+                // dopasowania — .jsonObject rzuca na JsonNull zamiast zwrócić null, stąd `as?`.
+                val artistMbid = (metadata["mbid_mapping"] as? JsonObject)?.get("artist_mbids")?.let { it as? JsonArray }
                     ?.firstOrNull()?.jsonPrimitive?.contentOrNull
                 tracks += Track(id = id, title = title, artists = listOfNotNull(artist.takeIf(String::isNotBlank)), album = album, durationMs = 0L, artistMbid = artistMbid)
             }
