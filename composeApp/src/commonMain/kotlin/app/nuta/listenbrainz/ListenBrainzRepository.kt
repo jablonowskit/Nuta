@@ -49,10 +49,11 @@ class ListenBrainzRepository(
         val recommendations = fetchRecommendations(user)
         cachedRecommendations = recommendations
         val real = fetchUserPlaylists(user)
+        val generated = fetchGeneratedPlaylists(user)
         val synthetic = if (recommendations.isNotEmpty()) {
             listOf(Playlist(id = SyntheticRecommendationsId, name = "Rekomendacje ListenBrainz", description = "", tracks = recommendations))
         } else emptyList()
-        return synthetic + real
+        return synthetic + generated + real
     }
 
     override suspend fun getSavedPlaylists(): List<Playlist> = fetchUserPlaylists(username())
@@ -201,14 +202,7 @@ class ListenBrainzRepository(
 
     private suspend fun fetchUserPlaylists(user: String): List<Playlist> {
         if (user.isBlank()) return emptyList()
-        val playlists = runCatching {
-            val response = httpGet("https://api.listenbrainz.org/1/user/$user/playlists")
-            if (response.isBlank()) return@runCatching null
-            json.parseToJsonElement(response).jsonObject["playlists"] as? JsonArray
-        }.getOrElse { error ->
-            logger.warn("ListenBrainz", "playlists_unavailable", "Nie udało się pobrać playlist ListenBrainz", fields = mapOf("user" to user, "reason" to (error.message ?: "unknown")))
-            null
-        } ?: return emptyList()
+        val playlists = fetchPlaylistsJson(user, "https://api.listenbrainz.org/1/user/$user/playlists") ?: return emptyList()
         return playlists.mapNotNull { item ->
             val playlist = item.jsonObject["playlist"]?.jsonObject ?: return@mapNotNull null
             val identifier = playlist["identifier"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
@@ -216,6 +210,35 @@ class ListenBrainzRepository(
             val title = playlist["title"]?.jsonPrimitive?.contentOrNull ?: "Playlista"
             Playlist(id = mbid, name = title, description = "", tracks = emptyList())
         }
+    }
+
+    /** Automatycznie generowane przez ListenBrainz playlisty ("troi-bot") — odpowiednik
+        Spotify Daily Mix/Discover Weekly/Year in Review. Endpoint zwraca też dziesiątki
+        historycznych wpisów (poprzednie tygodnie, roczne podsumowania) — nie ucinamy ich, tylko
+        sortujemy od najnowszych; Home ujawnia je stopniowo przy przewijaniu tym samym
+        mechanizmem, który już działa dla playlist Spotify (INITIAL_RECOMMENDATIONS_COUNT /
+        RECOMMENDATIONS_PAGE_SIZE), więc świeże playlisty są widoczne od razu, a starsze —
+        dalej na liście. */
+    private suspend fun fetchGeneratedPlaylists(user: String): List<Playlist> {
+        if (user.isBlank()) return emptyList()
+        val playlists = fetchPlaylistsJson(user, "https://api.listenbrainz.org/1/user/$user/playlists/createdfor?count=100") ?: return emptyList()
+        return playlists.mapNotNull { item ->
+            val playlist = item.jsonObject["playlist"]?.jsonObject ?: return@mapNotNull null
+            val identifier = playlist["identifier"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
+            val mbid = identifier.substringAfterLast('/')
+            val title = playlist["title"]?.jsonPrimitive?.contentOrNull ?: "Playlista"
+            val date = playlist["date"]?.jsonPrimitive?.contentOrNull ?: ""
+            date to Playlist(id = mbid, name = title, description = "", tracks = emptyList())
+        }.sortedByDescending { it.first }.map { it.second }
+    }
+
+    private suspend fun fetchPlaylistsJson(user: String, url: String): JsonArray? = runCatching {
+        val response = httpGet(url)
+        if (response.isBlank()) return@runCatching null
+        json.parseToJsonElement(response).jsonObject["playlists"] as? JsonArray
+    }.getOrElse { error ->
+        logger.warn("ListenBrainz", "playlists_unavailable", "Nie udało się pobrać playlist ListenBrainz", fields = mapOf("user" to user, "reason" to (error.message ?: "unknown")))
+        null
     }
 
     /** Batch lookup metadanych po MBID nagrania — kształt odpowiedzi ListenBrainz różni się od
