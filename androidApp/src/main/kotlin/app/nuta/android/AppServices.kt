@@ -8,6 +8,9 @@ import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import app.nuta.core.logging.LogLevel
 import app.nuta.core.logging.MemoryLogger
+import app.nuta.listenbrainz.ListenBrainzRepository
+import app.nuta.musicbrainz.MusicBrainzRepository
+import app.nuta.ui.initPlatformBrowser
 import app.nuta.youtube.SourceSelectingMediaService
 import app.nuta.youtube.YouTubeMediaService
 import kotlinx.coroutines.CoroutineScope
@@ -30,6 +33,8 @@ object AppServices {
         private set
     lateinit var youtubeMediaService: YouTubeMediaService
         private set
+    lateinit var listenBrainzRepository: ListenBrainzRepository
+        private set
 
     val audioPlayer = MutableStateFlow<Media3AudioPlayer?>(null)
     val playerConnectFailed = MutableStateFlow(false)
@@ -38,11 +43,13 @@ object AppServices {
     fun start(context: Context) {
         if (started) return
         started = true
+        initPlatformBrowser(context)
         logger = MemoryLogger(now = { Instant.now().toString() }, initialLevel = LogLevel.DEBUG, jsonSink = { line -> Log.d("NutaLog", line) })
         playbackSettings = AndroidPlaybackSettingsStore(context.getSharedPreferences("playback-settings", Context.MODE_PRIVATE))
         val youTube = AndroidYouTubeMediaService(logger, playbackSettings, context.applicationContext)
         val soundCloud = AndroidSoundCloudMediaService(logger, playbackSettings)
         youtubeMediaService = SourceSelectingMediaService(playbackSettings, youTube, soundCloud, logger)
+        listenBrainzRepository = ListenBrainzRepository(playbackSettings, MusicBrainzRepository(logger), logger)
         val sessionToken = SessionToken(context, ComponentName(context, PlaybackService::class.java))
         val future = MediaController.Builder(context, sessionToken).buildAsync()
         future.addListener({
