@@ -132,10 +132,10 @@ class SpotifyAndroidRepository(
         return lookup?.firstOrNull()?.asObject()?.get("data")?.asObject()?.get("saved")?.asText()?.toBooleanStrictOrNull() ?: false
     }
 
-    override suspend fun setTrackLiked(trackId: String, liked: Boolean) {
+    override suspend fun setTrackLiked(track: Track, liked: Boolean) {
         // ten sam hash dla add/remove — Spotify rozróżnia po operationName, nie po treści zapytania
         query(if (liked) "addToLibrary" else "removeFromLibrary", ADD_TO_LIBRARY_HASH, JsonObject(mapOf(
-            "libraryItemUris" to JsonArray(listOf(JsonPrimitive("spotify:track:$trackId"))),
+            "libraryItemUris" to JsonArray(listOf(JsonPrimitive("spotify:track:${track.id}"))),
         )))
     }
 
@@ -206,8 +206,9 @@ class SpotifyAndroidRepository(
         return Playlist(id, name, description, emptyList())
     }
 
-    override suspend fun addTracksToPlaylist(playlistId: String, trackIds: List<String>) {
+    override suspend fun addTracksToPlaylist(playlistId: String, tracks: List<Track>) {
         require(playlistId.matches(Regex("[A-Za-z0-9]+"))) { "Nieprawidłowy identyfikator playlisty" }
+        val trackIds = tracks.map { it.id }
         if (trackIds.isEmpty()) return
         val body = JsonObject(mapOf(
             "uris" to JsonArray(trackIds.map { JsonPrimitive("spotify:track:$it") }),

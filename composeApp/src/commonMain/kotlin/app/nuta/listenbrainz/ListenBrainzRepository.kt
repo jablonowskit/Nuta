@@ -86,14 +86,33 @@ class ListenBrainzRepository(
 
     override suspend fun isTrackLiked(trackId: String): Boolean = getLikedTracks().any { it.id == trackId }
 
-    override suspend fun setTrackLiked(trackId: String, liked: Boolean) {
+    override suspend fun setTrackLiked(track: Track, liked: Boolean) {
+        val mbid = resolveMbid(track)
+            ?: throw IllegalStateException("Nie znaleziono odpowiednika utworu '${track.title}' w MusicBrainz — nie można polubić")
         val token = requireToken()
         val body = JsonObject(mapOf(
-            "recording_mbid" to JsonPrimitive(trackId),
+            "recording_mbid" to JsonPrimitive(mbid),
             "score" to JsonPrimitive(if (liked) 1 else 0),
         )).toString()
         httpPost("https://api.listenbrainz.org/1/feedback/recording-feedback", headers = mapOf("Authorization" to "Token $token"), body = body)
-        logger.info("ListenBrainz", "feedback_set", "Zapisano polubienie ListenBrainz", fields = mapOf("trackId" to trackId, "liked" to liked.toString()))
+        logger.info("ListenBrainz", "feedback_set", "Zapisano polubienie ListenBrainz", fields = mapOf("trackId" to mbid, "liked" to liked.toString()))
+    }
+
+    /** Identyfikatory utworów mogą pochodzić z innego źródła danych (np. Spotify, sprzed
+        przełączenia na ListenBrainz) i wtedy nie są prawidłowymi MBID — w takim wypadku szukamy
+        odpowiednika po tytule i wykonawcy w MusicBrainz. Zwraca null, jeśli nic nie pasuje. */
+    private suspend fun resolveMbid(track: Track): String? {
+        if (MbidRegex.matches(track.id)) return track.id
+        val query = "${track.title} ${track.artists.firstOrNull().orEmpty()}".trim()
+        val found = musicBrainz.search(query).tracks.firstOrNull()?.id
+        if (found != null) {
+            logger.info(
+                "ListenBrainz", "mbid_resolved_via_search",
+                "Rozwiązano MBID przez wyszukiwanie MusicBrainz (ID z innego źródła danych)",
+                fields = mapOf("trackId" to track.id, "title" to track.title, "resolvedMbid" to found),
+            )
+        }
+        return found
     }
 
     override suspend fun search(query: String): SearchResult = musicBrainz.search(query)
@@ -133,18 +152,26 @@ class ListenBrainzRepository(
         return Playlist(id = playlistMbid, name = name, description = description, tracks = emptyList())
     }
 
-    override suspend fun addTracksToPlaylist(playlistId: String, trackIds: List<String>) {
-        if (trackIds.isEmpty()) return
+    override suspend fun addTracksToPlaylist(playlistId: String, tracks: List<Track>) {
+        if (tracks.isEmpty()) return
+        val mbids = tracks.mapNotNull { track ->
+            val mbid = resolveMbid(track)
+            if (mbid == null) {
+                logger.warn("ListenBrainz", "mbid_resolution_failed", "Pominięto utwór bez odpowiednika w MusicBrainz", fields = mapOf("trackId" to track.id, "title" to track.title))
+            }
+            mbid
+        }
+        if (mbids.isEmpty()) return
         val token = requireToken()
         val body = JsonObject(mapOf(
             "playlist" to JsonObject(mapOf(
-                "track" to JsonArray(trackIds.map { mbid ->
+                "track" to JsonArray(mbids.map { mbid ->
                     JsonObject(mapOf("identifier" to JsonArray(listOf(JsonPrimitive("https://musicbrainz.org/recording/$mbid")))))
                 }),
             )),
         )).toString()
         httpPost("https://api.listenbrainz.org/1/playlist/$playlistId/item/add", headers = mapOf("Authorization" to "Token $token"), body = body)
-        logger.info("ListenBrainz", "tracks_added", "Dodano utwory do playlisty ListenBrainz", fields = mapOf("playlistId" to playlistId, "count" to trackIds.size.toString()))
+        logger.info("ListenBrainz", "tracks_added", "Dodano utwory do playlisty ListenBrainz", fields = mapOf("playlistId" to playlistId, "count" to mbids.size.toString()))
     }
 
     private suspend fun fetchRecommendations(user: String): List<Track> {
@@ -223,5 +250,6 @@ class ListenBrainzRepository(
 
     private companion object {
         const val SyntheticRecommendationsId = "listenbrainz-recommendations"
+        val MbidRegex = Regex("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
     }
 }
