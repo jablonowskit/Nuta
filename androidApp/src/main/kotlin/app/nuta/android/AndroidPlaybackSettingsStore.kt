@@ -8,6 +8,7 @@ import app.nuta.settings.StreamQuality
 import app.nuta.settings.YouTubePlaybackSettings
 import app.nuta.settings.LoudnessNormalization
 import app.nuta.settings.YouTubeClientProfile
+import app.nuta.settings.AudioSource
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -24,6 +25,7 @@ class AndroidPlaybackSettingsStore(private val preferences: SharedPreferences) :
             .putString("youtubeBuffer", value.bufferSize.name)
             .putString("loudnessNormalization", value.loudnessNormalization.name)
             .putString("youtubeClientProfile", value.youtubeClientProfile.name)
+            .putString("audioSource", value.audioSource.name)
             .putBoolean("prefetchEnabled", value.prefetchEnabled)
             .putBoolean("playerCollapsed", value.playerCollapsed)
             .putInt("cacheSizeMb", value.cacheSizeMb)
@@ -38,6 +40,7 @@ class AndroidPlaybackSettingsStore(private val preferences: SharedPreferences) :
         bufferSize = enumValue(preferences.getString("youtubeBuffer", null), BufferSize.STANDARD),
         loudnessNormalization = enumValue(preferences.getString("loudnessNormalization", null), LoudnessNormalization.OFF),
         youtubeClientProfile = enumValue(preferences.getString("youtubeClientProfile", null), YouTubeClientProfile.AUTO),
+        audioSource = enumValue(preferences.getString("audioSource", null), AudioSource.YOUTUBE),
         prefetchEnabled = preferences.getBoolean("prefetchEnabled", false),
         playerCollapsed = preferences.getBoolean("playerCollapsed", false),
         cacheSizeMb = preferences.getInt("cacheSizeMb", 150).coerceIn(25, 500),

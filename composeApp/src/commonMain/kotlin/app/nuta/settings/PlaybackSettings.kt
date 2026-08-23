@@ -17,6 +17,14 @@ enum class LoudnessNormalization { OFF, GENTLE, NORMAL }
  */
 enum class YouTubeClientProfile { AUTO, VISIONOS, ANDROID_VR }
 
+/**
+ * Skąd rozwiązywać strumień audio dla utworu. SOUNDCLOUD to jawnie wybierany alternatywny
+ * profil (nie automatyczny fallback) — zabezpieczenie na wypadek, gdy YouTube wymusi SABR
+ * na VISIONOS tak jak zrobił to wcześniej z WEB/TVHTML5/ANDROID_VR (patrz
+ * openspec/changes/2026-08-sabr-blocker/). Mniejsza biblioteka niż YouTube, ale bez SABR/PoToken.
+ */
+enum class AudioSource { YOUTUBE, SOUNDCLOUD }
+
 data class YouTubePlaybackSettings(
     val fontScale: Float = 1f,
     val quality: StreamQuality = StreamQuality.BEST,
@@ -24,6 +32,7 @@ data class YouTubePlaybackSettings(
     val bufferSize: BufferSize = BufferSize.STANDARD,
     val loudnessNormalization: LoudnessNormalization = LoudnessNormalization.OFF,
     val youtubeClientProfile: YouTubeClientProfile = YouTubeClientProfile.AUTO,
+    val audioSource: AudioSource = AudioSource.YOUTUBE,
     /** Eksperymentalne: rozwiązuj strumień dla widocznych utworów zanim użytkownik kliknie play. */
     val prefetchEnabled: Boolean = false,
     /** Pasek playera jest zawsze widoczny; to pole trzyma tylko stan zwinięcia do wąskiego paska. */

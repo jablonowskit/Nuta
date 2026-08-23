@@ -136,10 +136,15 @@ class PlaybackService : MediaSessionService() {
                 override fun open(dataSpec: DataSpec): Long {
                     val url = dataSpec.uri.toString()
                     val itag = Regex("[?&]itag=(\\d+)").find(url)?.groupValues?.get(1)
-                    inner.setRequestProperty("User-Agent", when {
+                    // UA-spoofing dotyczy tylko YouTube (googlevideo.com wymaga zgodności UA z
+                    // klientem, dla którego URL został podpisany) — inne źródła (np. SoundCloud CDN)
+                    // dostają domyślny UA skonfigurowany na DefaultHttpDataSource.Factory.
+                    val youtubeAgent = when {
                         "c=ANDROID_VR" in url -> AndroidYouTubeMediaService.VR_AGENT
-                        else -> AndroidYouTubeMediaService.VISIONOS_AGENT
-                    })
+                        "googlevideo.com" in url -> AndroidYouTubeMediaService.VISIONOS_AGENT
+                        else -> null
+                    }
+                    youtubeAgent?.let { inner.setRequestProperty("User-Agent", it) }
                     val contentLength = Regex("[?&]clen=(\\d+)").find(url)?.groupValues?.get(1)?.toLongOrNull()
                     // Tylko prawdziwe kontynuacje (position > 0) dostają wymuszony górny limit z "clen".
                     // Pierwsze żądanie (position == 0) zostaje bez jawnego Range, tak jak wcześniej —
