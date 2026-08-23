@@ -259,7 +259,12 @@ private fun NutaAppContent(container: AppContainer) {
             }
         }
 
-        LaunchedEffect(container.spotifyRepository) {
+        LaunchedEffect(playbackSettings.dataSource) {
+            savedPlaylistsLoaded = false
+            savedPlaylists = emptyList()
+        }
+
+        LaunchedEffect(container.spotifyRepository, playbackSettings.dataSource) {
             container.logger.info("Application", "app_started", "Uruchomiono Nuta Linux GUI")
             runCatching { container.spotifyRepository.getPlaylists() }
                 .onSuccess { playlists = it }
@@ -267,7 +272,7 @@ private fun NutaAppContent(container: AppContainer) {
             loading = false
         }
 
-        LaunchedEffect(destination, container.spotifyRepository) {
+        LaunchedEffect(destination, container.spotifyRepository, playbackSettings.dataSource) {
             if (destination != Destination.PLAYLISTS || savedPlaylistsLoaded) return@LaunchedEffect
             runCatching { container.spotifyRepository.getSavedPlaylists() }
                 .onSuccess { savedPlaylists = it; savedPlaylistsLoaded = true }
@@ -309,7 +314,11 @@ private fun NutaAppContent(container: AppContainer) {
             }
         }
 
-        LaunchedEffect(destination, container.spotifyRepository) {
+        LaunchedEffect(playbackSettings.dataSource) {
+            likedLoaded = false
+            likedTracks = emptyList()
+        }
+        LaunchedEffect(destination, container.spotifyRepository, playbackSettings.dataSource) {
             if (destination != Destination.PLAYLISTS && destination != Destination.LIKED || likedLoaded || likedLoading) return@LaunchedEffect
             likedLoading = true
             likedError = null
