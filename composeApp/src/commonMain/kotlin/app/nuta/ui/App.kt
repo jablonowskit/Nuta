@@ -90,6 +90,7 @@ import app.nuta.core.models.Track
 import app.nuta.settings.BufferSize
 import app.nuta.settings.LoudnessNormalization
 import app.nuta.settings.YouTubeClientProfile
+import app.nuta.settings.AudioSource
 import app.nuta.settings.CodecPreference
 import app.nuta.settings.StreamQuality
 import kotlinx.coroutines.Job
@@ -691,6 +692,20 @@ private fun SettingsScreen(container: AppContainer) {
                     ),
                     selected = settings.loudnessNormalization,
                 ) { container.playbackSettings.update(settings.copy(loudnessNormalization = it)) }
+            }
+        }
+        item {
+            SettingsGroup(
+                "Źródło audio",
+                "Skąd rozwiązywać strumień audio dla utworów. SoundCloud to zabezpieczenie na wypadek, gdy YouTube zablokuje dostęp — mniejsza biblioteka, ale nie podlega tym samym ograniczeniom.",
+            ) {
+                SettingOptions(
+                    options = listOf(
+                        AudioSource.YOUTUBE to "YouTube",
+                        AudioSource.SOUNDCLOUD to "SoundCloud",
+                    ),
+                    selected = settings.audioSource,
+                ) { container.playbackSettings.update(settings.copy(audioSource = it)) }
             }
         }
         item {

@@ -13,7 +13,9 @@ import app.nuta.spotify.SpotifyLoginPrototype
 import app.nuta.spotify.SpotifyTestTokenStore
 import app.nuta.spotify.SpotifyWebSearchRepository
 import app.nuta.settings.InMemoryPlaybackSettingsStore
+import app.nuta.soundcloud.NutaSoundCloudMediaService
 import app.nuta.youtube.NutaYouTubeMediaService
+import app.nuta.youtube.SourceSelectingMediaService
 import app.nuta.ui.NutaApp
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.LaunchedEffect
@@ -40,7 +42,11 @@ fun main() {
     // Jedna instancja dzielona przez UI i resolver strumienia — inaczej suwaki jakości/kodeka
     // zapisywałyby się do innego obiektu niż ten, który czyta wybór formatu.
     val playbackSettings = InMemoryPlaybackSettingsStore()
-    val youtubeMediaService = NutaYouTubeMediaService(logger, playbackSettings)
+    val youtubeMediaService = SourceSelectingMediaService(
+        playbackSettings,
+        NutaYouTubeMediaService(logger, playbackSettings),
+        NutaSoundCloudMediaService(logger, playbackSettings),
+    )
     val audioPlayer = MpvAudioPlayer(scope, youtubeMediaService, logger, playbackSettings)
     val tokenStore = SpotifyTestTokenStore(logger)
     val restoredToken = tokenStore.load()

@@ -8,6 +8,8 @@ import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import app.nuta.core.logging.LogLevel
 import app.nuta.core.logging.MemoryLogger
+import app.nuta.youtube.SourceSelectingMediaService
+import app.nuta.youtube.YouTubeMediaService
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -26,7 +28,7 @@ object AppServices {
         private set
     lateinit var playbackSettings: AndroidPlaybackSettingsStore
         private set
-    lateinit var youtubeMediaService: AndroidYouTubeMediaService
+    lateinit var youtubeMediaService: YouTubeMediaService
         private set
 
     val audioPlayer = MutableStateFlow<Media3AudioPlayer?>(null)
@@ -38,7 +40,9 @@ object AppServices {
         started = true
         logger = MemoryLogger(now = { Instant.now().toString() }, initialLevel = LogLevel.DEBUG, jsonSink = { line -> Log.d("NutaLog", line) })
         playbackSettings = AndroidPlaybackSettingsStore(context.getSharedPreferences("playback-settings", Context.MODE_PRIVATE))
-        youtubeMediaService = AndroidYouTubeMediaService(logger, playbackSettings, context.applicationContext)
+        val youTube = AndroidYouTubeMediaService(logger, playbackSettings, context.applicationContext)
+        val soundCloud = AndroidSoundCloudMediaService(logger, playbackSettings)
+        youtubeMediaService = SourceSelectingMediaService(playbackSettings, youTube, soundCloud)
         val sessionToken = SessionToken(context, ComponentName(context, PlaybackService::class.java))
         val future = MediaController.Builder(context, sessionToken).buildAsync()
         future.addListener({
