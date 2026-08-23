@@ -1,9 +1,20 @@
 # Nuta
 
-Natywny, wieloplatformowy odtwarzacz muzyki. Metadane, playlisty i wyszukiwanie
-pochodzą ze Spotify, a samo audio z YouTube — odtwarzane we własnym playerze
-i własnej kolejce. Nuta nie tworzy playlist w YouTube i nie wymaga logowania do
-YouTube. **Darmowe konto Spotify wystarcza**, bo dźwięk nie pochodzi ze Spotify.
+Natywny, wieloplatformowy odtwarzacz muzyki. Metadane, playlisty, wyszukiwanie
+i rekomendacje pochodzą z jednego z dwóch **jawnie wybieranych źródeł danych**
+(`DataSource` w Ustawieniach) — **Spotify** albo **ListenBrainz** (wyszukiwanie
+przez MusicBrainz) — bez mergowania między nimi: przełączenie na ListenBrainz
+działa tak, jakby Spotify nie istniało, i odwrotnie. Samo audio jest zawsze
+niezależne od tego wyboru i pochodzi z jednego z dwóch **źródeł audio**
+(`AudioSource`) — **YouTube** albo **SoundCloud** (z opcjonalnym trybem AUTO:
+YouTube, a przy błędzie automatyczny fallback na SoundCloud dla tego samego
+utworu) — odtwarzane we własnym playerze i własnej kolejce. Nuta nie tworzy
+playlist w YouTube i nie wymaga logowania do YouTube.
+
+**Darmowe konto wystarcza dla obu źródeł danych.** Spotify nie wymaga Premium
+(dźwięk nie pochodzi ze Spotify). ListenBrainz nie wymaga żadnego logowania
+w apce — wystarczy publiczny nick i osobisty token API wygenerowany ręcznie
+na listenbrainz.org/settings, wklejony w Ustawieniach (bez OAuth/WebView).
 
 Stack: **Kotlin Multiplatform + Compose Multiplatform**, toolchain Java 25 LTS,
 Gradle Wrapper 9.6.1.
@@ -124,32 +135,50 @@ przywrócić w razie potrzeby.
 Ścieżka odtwarzania jednego utworu:
 
 ```text
-SpotifyRepository     — logowanie i prywatne endpointy web-playera Spotify
-      ↓                 (playlisty, ulubione, wyszukiwanie, radio, zapis playlist)
-YouTubeMediaService   — własne wyszukiwanie YouTube, ranking i strumień audio-only
+DataSourceSelectingRepository — wybiera Spotify albo ListenBrainz (ustawienie DataSource),
+      ↓                         deleguje KAŻDĄ metodę SpotifyRepository bez mergowania
+  SpotifyRepository            — logowanie i prywatne endpointy web-playera Spotify
+  ListenBrainzRepository       — ListenBrainz (playlisty/ulubione/rekomendacje)
+                                  + MusicBrainzRepository (wyszukiwanie)
       ↓
-AudioPlayer           — Media3 (Android) / mpv przez IPC (desktop) / Fake (testy GUI)
+SourceSelectingMediaService   — wybiera YouTube albo SoundCloud (ustawienie AudioSource,
+      ↓                         AUTO = YouTube z fallbackiem na SoundCloud po błędzie)
+  YouTubeMediaService          — własne wyszukiwanie YouTube, ranking i strumień audio-only
+  SoundCloudMediaService       — nieoficjalne publiczne API SoundCloud
+      ↓
+AudioPlayer                   — Media3 (Android) / mpv przez IPC (desktop) / Fake (testy GUI)
+      ↓
+Normalizacja głośności        — działa na samym sygnale audio, niezależnie od źródła:
+                                 mpv filtr `loudnorm` (desktop) / `LoudnessEnhancer` (Android)
 ```
 
-Oba kontrakty (`SpotifyRepository`, `AudioPlayer`) są zdefiniowane w
-`commonMain/domain/Contracts.kt` i wstrzykiwane przez `AppContainer`, więc
-warstwa UI nie zna szczegółów prywatnych protokołów. Osobnego
-`PlaybackCoordinator` opisanego w PROJECT.md jeszcze nie ma — koordynacja
-znajduje się dziś w implementacjach `AudioPlayer` i w `ui/App.kt`.
+Wszystkie kontrakty (`SpotifyRepository`, `YouTubeMediaService`, `AudioPlayer`) są
+zdefiniowane w `commonMain/domain/Contracts.kt` / `commonMain/youtube/YouTubeContracts.kt`
+i wstrzykiwane przez `AppContainer`, więc warstwa UI nie zna szczegółów prywatnych
+protokołów ani tego, które konkretne źródło jest aktywne. Osobnego `PlaybackCoordinator`
+opisanego w PROJECT.md jeszcze nie ma — koordynacja znajduje się dziś w implementacjach
+`AudioPlayer` i w `ui/App.kt`.
 
 Podział źródeł:
 
 ```text
-composeApp/src/commonMain   — modele, kontrakty, UI Compose, logging, dane demo
-composeApp/src/desktopMain  — Spotify/YouTube dla desktopu, MpvAudioPlayer
-androidApp                  — logowanie WebView, repozytorium Spotify, Media3
+composeApp/src/commonMain   — modele, kontrakty, UI Compose, logging, dane demo,
+                               DataSourceSelectingRepository, SourceSelectingMediaService,
+                               listenbrainz/, musicbrainz/, net/ (expect/actual HTTP fetch)
+composeApp/src/desktopMain  — Spotify/YouTube/SoundCloud dla desktopu, MpvAudioPlayer
+androidApp                  — logowanie WebView, repozytorium Spotify, YouTube/SoundCloud
+                               media services, Media3 + PlaybackService (LoudnessEnhancer)
 native/spotify-login        — helper logowania WebView2 dla Windows (C#)
 ```
 
 Logowanie do Spotify korzysta z prywatnego protokołu web-playera — **bez OAuth,
 bez `clientId` i `clientSecret`**. Ten mechanizm może przestać działać bez
 ostrzeżenia. Sekrety sesji (`sp_dc`, tokeny) nigdy nie trafiają do logów ani do
-repozytorium.
+repozytorium. SoundCloud (audio) i MusicBrainz (wyszukiwanie w trybie
+ListenBrainz) też opierają się na nieoficjalnych/publicznych API bez własnego
+logowania. ListenBrainz (metadane/playlisty/rekomendacje) jest jedynym
+źródłem z oficjalnym, udokumentowanym API — token wklejany ręcznie w
+Ustawieniach, bez żadnego mechanizmu OAuth/WebView w apce.
 
 ## Dokumentacja
 
