@@ -5,8 +5,8 @@ import app.nuta.core.models.PlayerState
 import app.nuta.core.models.PlayerStatus
 import app.nuta.core.models.Track
 import app.nuta.domain.AudioPlayer
+import app.nuta.settings.LoudnessNormalization
 import app.nuta.settings.PlaybackSettingsStore
-import app.nuta.youtube.LoudnessGain
 import app.nuta.youtube.YouTubeMediaService
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -47,7 +47,14 @@ class MpvAudioPlayer(
     private var processLogReader: Job? = null
     private var commandId = 0L
 
-    init { scope.coroutineContext[Job]?.invokeOnCompletion { shutdown() } }
+    init {
+        scope.coroutineContext[Job]?.invokeOnCompletion { shutdown() }
+        scope.launch {
+            settingsStore.settings.collect { settings ->
+                if (process?.isAlive == true) runCatching { sendCommand("set_property", "af", loudnormFilter(settings.loudnessNormalization)) }
+            }
+        }
+    }
 
     override suspend fun setQueue(tracks: List<Track>, startIndex: Int) {
         require(startIndex in tracks.indices || tracks.isEmpty()) { "Nieprawidłowy indeks kolejki" }
@@ -116,9 +123,7 @@ class MpvAudioPlayer(
                 ensureProcess()
                 val loadCommand = resolution.stream.url.use { url -> arrayOf("loadfile", url, "replace") }
                 sendCommand(*loadCommand)
-                // wyrównanie głośności: mpv przyjmuje procenty, nasza skala jest liniowa 0..1
-                val volume = LoudnessGain.volumeFor(resolution.stream.loudnessDb, settingsStore.settings.value.loudnessNormalization)
-                sendCommand("set_property", "volume", (volume * 100).toDouble())
+                sendCommand("set_property", "af", loudnormFilter(settingsStore.settings.value.loudnessNormalization))
                 sendCommand("set_property", "pause", false)
                 _state.value = _state.value.copy(status = PlayerStatus.PLAYING)
                 logger.info("MpvPlayer", "playback_started", "Rozpoczęto odtwarzanie audio", fields = mapOf("codec" to resolution.stream.codec, "container" to resolution.stream.container))
@@ -289,6 +294,12 @@ class MpvAudioPlayer(
     private fun JsonElement.asBooleanOrNull(): Boolean? = (this as? JsonPrimitive)?.booleanOrNull
 
     private fun sanitizeMpvOutput(line: String): String = line.replace(Regex("https?://\\S+"), "[STREAM_URL_REDACTED]").take(2_000)
+
+    private fun loudnormFilter(mode: LoudnessNormalization): String = when (mode) {
+        LoudnessNormalization.OFF -> ""
+        LoudnessNormalization.GENTLE -> "lavfi=[loudnorm=I=-20:TP=-1.5:LRA=20]"
+        LoudnessNormalization.NORMAL -> "lavfi=[loudnorm=I=-16:TP=-1.5:LRA=11]"
+    }
 
     private fun shutdown() {
         ticker?.cancel()

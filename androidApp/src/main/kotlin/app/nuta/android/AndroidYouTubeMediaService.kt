@@ -117,15 +117,12 @@ class AndroidYouTubeMediaService(
             last = root["playabilityStatus"]?.jsonObject?.get("status")?.jsonPrimitive?.contentOrNull ?: "UNKNOWN"
             if (last != "OK") continue
             val formats = root["streamingData"]?.jsonObject?.get("adaptiveFormats") as? JsonArray ?: continue
-            // loudnessDb jest wspólne dla całego wideo (siostra streamingData), nie per format
-            val loudnessDb = root["playerConfig"]?.jsonObject?.get("audioConfig")?.jsonObject
-                ?.get("loudnessDb")?.jsonPrimitive?.content?.toDoubleOrNull()
             val audioItems = formats.map(JsonElement::jsonObject).filter { it["mimeType"]?.jsonPrimitive?.contentOrNull?.startsWith("audio/") == true }
             val resolved = runCatching { resolveFormats(audioItems, watch) }.getOrElse {
                 logger.warn("AndroidYouTube", "cipher_resolve_failed", "Nie udało się rozwiązać sygnatur/n dla profilu", fields = mapOf("profile" to profile.name, "reason" to (it.message ?: "unknown")))
                 emptyList()
             }
-            selectFormat(resolved)?.let { return it.copy(loudnessDb = loudnessDb) }
+            selectFormat(resolved)?.let { return it }
         }
         error("YouTube playability: $last")
     }
@@ -162,10 +159,8 @@ class AndroidYouTubeMediaService(
         val status = root["playabilityStatus"]?.jsonObject?.get("status")?.jsonPrimitive?.contentOrNull
         if (status != "OK") { logger.warn("AndroidYouTube", "visionos_not_ok", "VISIONOS playability nie OK", fields = mapOf("status" to (status ?: "brak"))); return@runCatching null }
         val formats = root["streamingData"]?.jsonObject?.get("adaptiveFormats") as? JsonArray ?: return@runCatching null
-        val loudnessDb = root["playerConfig"]?.jsonObject?.get("audioConfig")?.jsonObject
-            ?.get("loudnessDb")?.jsonPrimitive?.content?.toDoubleOrNull()
         val audioItems = formats.map(JsonElement::jsonObject).filter { it["mimeType"]?.jsonPrimitive?.contentOrNull?.startsWith("audio/") == true }
-        selectFormat(resolveFormats(audioItems, watchHtml))?.copy(loudnessDb = loudnessDb)
+        selectFormat(resolveFormats(audioItems, watchHtml))
     }.onFailure { logger.warn("AndroidYouTube", "visionos_failed", "Profil VISIONOS nie zadziałał", fields = mapOf("reason" to (it.message ?: "unknown"))) }.getOrNull()
 
     /**
