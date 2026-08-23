@@ -12,7 +12,6 @@ import app.nuta.core.models.PlayerStatus
 import app.nuta.core.models.Track
 import app.nuta.domain.AudioPlayer
 import app.nuta.settings.PlaybackSettingsStore
-import app.nuta.youtube.LoudnessGain
 import app.nuta.youtube.YouTubeMediaService
 import app.nuta.youtube.YouTubeResolution
 import java.util.concurrent.ConcurrentHashMap
@@ -250,11 +249,7 @@ class Media3AudioPlayer(
                         streamBitrate = resolution.stream.bitrate,
                         streamCodec = resolution.stream.codec,
                     )
-                    // wyrównanie głośności: ściszamy utwory głośniejsze od poziomu odniesienia
-                    // YouTube'a, ustawiane per utwór tuż przed startem
-                    val volume = LoudnessGain.volumeFor(resolution.stream.loudnessDb, settingsStore.settings.value.loudnessNormalization)
                     withContext(Dispatchers.Main) {
-                        player.volume = volume
                         player.setMediaItem(MediaItem.Builder()
                             .setUri(url)
                             .setMediaMetadata(MediaMetadata.Builder()
@@ -271,8 +266,6 @@ class Media3AudioPlayer(
                         "codec" to resolution.stream.codec,
                         "mimeType" to resolution.stream.mimeType,
                         "bitrate" to resolution.stream.bitrate.toString(),
-                        "loudnessDb" to (resolution.stream.loudnessDb?.toString() ?: "brak"),
-                        "volume" to volume.toString(),
                     ))
                 }.onFailure { error ->
                     stateFlow.value = stateFlow.value.copy(status = PlayerStatus.ERROR, errorMessage = error.message)

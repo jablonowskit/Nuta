@@ -2,6 +2,7 @@ package app.nuta.android
 
 import android.app.PendingIntent
 import android.content.Intent
+import android.media.audiofx.LoudnessEnhancer
 import android.os.Bundle
 import androidx.media3.common.ForwardingPlayer
 import androidx.media3.common.Player
@@ -15,6 +16,7 @@ import androidx.media3.datasource.cache.LeastRecentlyUsedCacheEvictor
 import androidx.media3.datasource.cache.SimpleCache
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.analytics.AnalyticsListener
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.session.CommandButton
 import androidx.media3.session.MediaSession
@@ -22,13 +24,21 @@ import androidx.media3.session.MediaSessionService
 import androidx.media3.session.SessionCommand
 import androidx.media3.session.SessionResult
 import app.nuta.settings.BufferSize
+import app.nuta.settings.LoudnessNormalization
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
 import java.io.File
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 
 class PlaybackService : MediaSessionService() {
     private var mediaSession: MediaSession? = null
     private var streamCache: SimpleCache? = null
+    private var loudnessEnhancer: LoudnessEnhancer? = null
+    private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
     override fun onCreate() {
         super.onCreate()
@@ -55,6 +65,18 @@ class PlaybackService : MediaSessionService() {
                 PlaybackQueueBridge.buffering.value = playbackState == Player.STATE_BUFFERING
             }
         })
+        loudnessEnhancer = createLoudnessEnhancer(player.audioSessionId, settingsStore.settings.value.loudnessNormalization)
+        // Media3 1.10.1 zgłasza zmianę sesji audio przez AnalyticsListener — trzeba tam odtworzyć
+        // enhancer na nowej sesji, bo LoudnessEnhancer jest przywiązany do jednej sesji audio.
+        player.addAnalyticsListener(object : AnalyticsListener {
+            override fun onAudioSessionIdChanged(eventTime: AnalyticsListener.EventTime, audioSessionId: Int) {
+                runCatching { loudnessEnhancer?.release() }
+                loudnessEnhancer = createLoudnessEnhancer(audioSessionId, settingsStore.settings.value.loudnessNormalization)
+            }
+        })
+        scope.launch {
+            settingsStore.settings.collect { settings -> applyLoudnessSetting(settings.loudnessNormalization) }
+        }
         // ±10s jako CUSTOM SessionCommand: system Android 13+ renderuje w powiadomieniu tylko
         // standardowe prev/play/next + custom actions — player command SEEK_BACK/FORWARD ląduje
         // jako REWIND/FAST_FORWARD, których systemowe kontrolki nie pokazują wcale
@@ -208,7 +230,29 @@ class PlaybackService : MediaSessionService() {
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? = mediaSession
 
+    private fun createLoudnessEnhancer(audioSessionId: Int, mode: LoudnessNormalization): LoudnessEnhancer? =
+        runCatching { LoudnessEnhancer(audioSessionId) }
+            .onFailure { AppServices.logger.warn("PlaybackService", "loudness_enhancer_create_failed", "Nie udało się utworzyć LoudnessEnhancer", fields = mapOf("reason" to (it.message ?: "unknown"))) }
+            .getOrNull()
+            ?.also { runCatching { applyLoudnessSetting(mode) } }
+
+    private fun applyLoudnessSetting(mode: LoudnessNormalization) {
+        val enhancer = loudnessEnhancer ?: return
+        val targetMb = when (mode) {
+            LoudnessNormalization.OFF -> 0
+            LoudnessNormalization.GENTLE -> 300
+            LoudnessNormalization.NORMAL -> 700
+        }
+        runCatching {
+            enhancer.setTargetGain(targetMb)
+            enhancer.enabled = mode != LoudnessNormalization.OFF
+        }
+    }
+
     override fun onDestroy() {
+        scope.cancel()
+        runCatching { loudnessEnhancer?.release() }
+        loudnessEnhancer = null
         mediaSession?.run {
             player.release()
             release()
