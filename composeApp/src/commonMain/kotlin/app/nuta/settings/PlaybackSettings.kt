@@ -18,12 +18,13 @@ enum class LoudnessNormalization { OFF, GENTLE, NORMAL }
 enum class YouTubeClientProfile { AUTO, VISIONOS, ANDROID_VR }
 
 /**
- * Skąd rozwiązywać strumień audio dla utworu. SOUNDCLOUD to jawnie wybierany alternatywny
- * profil (nie automatyczny fallback) — zabezpieczenie na wypadek, gdy YouTube wymusi SABR
- * na VISIONOS tak jak zrobił to wcześniej z WEB/TVHTML5/ANDROID_VR (patrz
- * openspec/changes/2026-08-sabr-blocker/). Mniejsza biblioteka niż YouTube, ale bez SABR/PoToken.
+ * Skąd rozwiązywać strumień audio dla utworu. AUTO próbuje YouTube, a przy błędzie
+ * (np. YouTube wymusi SABR na VISIONOS tak jak zrobił to wcześniej z WEB/TVHTML5/ANDROID_VR —
+ * patrz openspec/changes/2026-08-sabr-blocker/) automatycznie spada na SoundCloud dla tego
+ * samego utworu. YOUTUBE/SOUNDCLOUD to jawny, wymuszony wybór jednego źródła bez fallbacku —
+ * przydatne do diagnozowania, które źródło akurat działa.
  */
-enum class AudioSource { YOUTUBE, SOUNDCLOUD }
+enum class AudioSource { AUTO, YOUTUBE, SOUNDCLOUD }
 
 data class YouTubePlaybackSettings(
     val fontScale: Float = 1f,
