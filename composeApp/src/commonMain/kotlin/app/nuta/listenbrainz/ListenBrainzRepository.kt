@@ -75,18 +75,43 @@ class ListenBrainzRepository(
         return trackList.mapNotNull(::trackFromJspf)
     }
 
+    /** `metadata=true` zwraca tytuł/artystę wprost w odpowiedzi (dla wpisów z recording_mbid
+        i recording_msid jednakowo) — jedno zapytanie na stronę, bez osobnego batch-lookupu.
+        Endpoint domyślnie zwraca tylko pierwsze 25 wyników — trzeba paginować przez offset,
+        żeby dostać wszystkie polubienia, nie tylko pierwszą stronę. */
     override suspend fun getLikedTracks(): List<Track> {
         val user = username()
-        val feedback = runCatching {
-            val response = httpGet("https://api.listenbrainz.org/1/feedback/user/$user/get-feedback?score=1")
-            if (response.isBlank()) return@runCatching null
-            json.parseToJsonElement(response).jsonObject["feedback"] as? JsonArray
-        }.getOrElse { error ->
-            logger.info("ListenBrainz", "no_feedback", "Brak polubień ListenBrainz lub nieznany użytkownik", fields = mapOf("reason" to (error.message ?: "unknown")))
-            null
-        } ?: return emptyList()
-        val mbids = feedback.mapNotNull { it.jsonObject["recording_mbid"]?.jsonPrimitive?.contentOrNull }
-        return lookupMetadata(mbids)
+        if (user.isBlank()) return emptyList()
+        val tracks = mutableListOf<Track>()
+        var offset = 0
+        while (true) {
+            val page = runCatching {
+                val response = httpGet("https://api.listenbrainz.org/1/feedback/user/$user/get-feedback?score=1&metadata=true&count=100&offset=$offset")
+                if (response.isBlank()) return@runCatching null
+                json.parseToJsonElement(response).jsonObject
+            }.getOrElse { error ->
+                logger.info("ListenBrainz", "no_feedback", "Brak polubień ListenBrainz lub nieznany użytkownik", fields = mapOf("reason" to (error.message ?: "unknown")))
+                null
+            } ?: break
+            val feedback = page["feedback"] as? JsonArray ?: break
+            feedback.forEach { item ->
+                val entry = item.jsonObject
+                val id = entry["recording_mbid"]?.jsonPrimitive?.contentOrNull
+                    ?: entry["recording_msid"]?.jsonPrimitive?.contentOrNull
+                    ?: return@forEach
+                val metadata = entry["track_metadata"]?.jsonObject ?: return@forEach
+                val title = metadata["track_name"]?.jsonPrimitive?.contentOrNull ?: return@forEach
+                val artist = metadata["artist_name"]?.jsonPrimitive?.contentOrNull.orEmpty()
+                val album = metadata["release_name"]?.jsonPrimitive?.contentOrNull.orEmpty()
+                val artistMbid = metadata["mbid_mapping"]?.jsonObject?.get("artist_mbids")?.let { it as? JsonArray }
+                    ?.firstOrNull()?.jsonPrimitive?.contentOrNull
+                tracks += Track(id = id, title = title, artists = listOfNotNull(artist.takeIf(String::isNotBlank)), album = album, durationMs = 0L, artistMbid = artistMbid)
+            }
+            val totalCount = page["total_count"]?.jsonPrimitive?.contentOrNull?.toIntOrNull() ?: tracks.size
+            offset += feedback.size
+            if (feedback.isEmpty() || offset >= totalCount) break
+        }
+        return tracks
     }
 
     override suspend fun isTrackLiked(trackId: String): Boolean = getLikedTracks().any { it.id == trackId }
