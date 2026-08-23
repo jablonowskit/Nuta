@@ -63,23 +63,27 @@ class ListenBrainzRepository(
             getPlaylists()
             return cachedRecommendations ?: emptyList()
         }
-        val response = runCatching { httpGet("https://api.listenbrainz.org/1/playlist/$playlistId") }
-            .getOrElse { error ->
-                logger.warn("ListenBrainz", "playlist_tracks_failed", "Nie udało się pobrać playlisty ListenBrainz", fields = mapOf("playlistId" to playlistId, "reason" to (error.message ?: "unknown")))
-                return emptyList()
-            }
-        val trackList = json.parseToJsonElement(response).jsonObject["playlist"]?.jsonObject?.get("track") as? JsonArray ?: return emptyList()
+        val trackList = runCatching {
+            val response = httpGet("https://api.listenbrainz.org/1/playlist/$playlistId")
+            if (response.isBlank()) return@runCatching null
+            json.parseToJsonElement(response).jsonObject["playlist"]?.jsonObject?.get("track") as? JsonArray
+        }.getOrElse { error ->
+            logger.warn("ListenBrainz", "playlist_tracks_failed", "Nie udało się pobrać playlisty ListenBrainz", fields = mapOf("playlistId" to playlistId, "reason" to (error.message ?: "unknown")))
+            null
+        } ?: return emptyList()
         return trackList.mapNotNull(::trackFromJspf)
     }
 
     override suspend fun getLikedTracks(): List<Track> {
         val user = username()
-        val response = runCatching { httpGet("https://api.listenbrainz.org/1/feedback/user/$user/get-feedback?score=1") }
-            .getOrElse { error ->
-                logger.info("ListenBrainz", "no_feedback", "Brak polubień ListenBrainz lub nieznany użytkownik", fields = mapOf("reason" to (error.message ?: "unknown")))
-                return emptyList()
-            }
-        val feedback = json.parseToJsonElement(response).jsonObject["feedback"] as? JsonArray ?: return emptyList()
+        val feedback = runCatching {
+            val response = httpGet("https://api.listenbrainz.org/1/feedback/user/$user/get-feedback?score=1")
+            if (response.isBlank()) return@runCatching null
+            json.parseToJsonElement(response).jsonObject["feedback"] as? JsonArray
+        }.getOrElse { error ->
+            logger.info("ListenBrainz", "no_feedback", "Brak polubień ListenBrainz lub nieznany użytkownik", fields = mapOf("reason" to (error.message ?: "unknown")))
+            null
+        } ?: return emptyList()
         val mbids = feedback.mapNotNull { it.jsonObject["recording_mbid"]?.jsonPrimitive?.contentOrNull }
         return lookupMetadata(mbids)
     }
@@ -125,12 +129,18 @@ class ListenBrainzRepository(
             return emptyList()
         }
         val prompt = URLEncoder.encode("artist:($artistMbid)", "UTF-8")
-        val response = httpGet(
-            "https://api.listenbrainz.org/1/explore/lb-radio?prompt=$prompt&mode=easy",
-            headers = mapOf("Authorization" to "Token $token"),
-        )
-        val trackList = json.parseToJsonElement(response).jsonObject["payload"]?.jsonObject
-            ?.get("jspf")?.jsonObject?.get("playlist")?.jsonObject?.get("track") as? JsonArray ?: return emptyList()
+        val trackList = runCatching {
+            val response = httpGet(
+                "https://api.listenbrainz.org/1/explore/lb-radio?prompt=$prompt&mode=easy",
+                headers = mapOf("Authorization" to "Token $token"),
+            )
+            if (response.isBlank()) return@runCatching null
+            json.parseToJsonElement(response).jsonObject["payload"]?.jsonObject
+                ?.get("jspf")?.jsonObject?.get("playlist")?.jsonObject?.get("track") as? JsonArray
+        }.getOrElse { error ->
+            logger.warn("ListenBrainz", "lb_radio_failed", "Nie udało się pobrać lb-radio", fields = mapOf("reason" to (error.message ?: "unknown")))
+            null
+        } ?: return emptyList()
         return trackList.mapNotNull(::trackFromJspf).take(limit)
     }
 
@@ -146,7 +156,7 @@ class ListenBrainzRepository(
             )),
         )).toString()
         val response = httpPost("https://api.listenbrainz.org/1/playlist/create", headers = mapOf("Authorization" to "Token $token"), body = body)
-        val playlistMbid = json.parseToJsonElement(response).jsonObject["playlist_mbid"]?.jsonPrimitive?.contentOrNull
+        val playlistMbid = response.takeIf(String::isNotBlank)?.let { json.parseToJsonElement(it).jsonObject["playlist_mbid"]?.jsonPrimitive?.contentOrNull }
             ?: error("ListenBrainz nie zwrócił identyfikatora nowej playlisty")
         logger.info("ListenBrainz", "playlist_created", "Utworzono playlistę ListenBrainz", fields = mapOf("playlistId" to playlistMbid))
         return Playlist(id = playlistMbid, name = name, description = description, tracks = emptyList())
@@ -176,25 +186,29 @@ class ListenBrainzRepository(
 
     private suspend fun fetchRecommendations(user: String): List<Track> {
         if (user.isBlank()) return emptyList()
-        val response = runCatching { httpGet("https://api.listenbrainz.org/1/cf/recommendation/user/$user/recording?count=60") }
-            .getOrElse { error ->
-                logger.info("ListenBrainz", "no_recommendations_model", "Brak wyliczonego modelu rekomendacji ListenBrainz", fields = mapOf("reason" to (error.message ?: "unknown")))
-                return emptyList()
-            }
-        val root = json.parseToJsonElement(response).jsonObject
-        val mbidsArray = root["payload"]?.jsonObject?.get("mbids") as? JsonArray ?: root["mbids"] as? JsonArray ?: return emptyList()
+        val mbidsArray = runCatching {
+            val response = httpGet("https://api.listenbrainz.org/1/cf/recommendation/user/$user/recording?count=60")
+            if (response.isBlank()) return@runCatching null
+            val root = json.parseToJsonElement(response).jsonObject
+            root["payload"]?.jsonObject?.get("mbids") as? JsonArray ?: root["mbids"] as? JsonArray
+        }.getOrElse { error ->
+            logger.info("ListenBrainz", "no_recommendations_model", "Brak wyliczonego modelu rekomendacji ListenBrainz", fields = mapOf("reason" to (error.message ?: "unknown")))
+            null
+        } ?: return emptyList()
         val mbids = mbidsArray.mapNotNull { it.jsonObject["recording_mbid"]?.jsonPrimitive?.contentOrNull }
         return lookupMetadata(mbids)
     }
 
     private suspend fun fetchUserPlaylists(user: String): List<Playlist> {
         if (user.isBlank()) return emptyList()
-        val response = runCatching { httpGet("https://api.listenbrainz.org/1/user/$user/playlists") }
-            .getOrElse { error ->
-                logger.warn("ListenBrainz", "playlists_unavailable", "Nie udało się pobrać playlist ListenBrainz", fields = mapOf("user" to user, "reason" to (error.message ?: "unknown")))
-                return emptyList()
-            }
-        val playlists = json.parseToJsonElement(response).jsonObject["playlists"] as? JsonArray ?: return emptyList()
+        val playlists = runCatching {
+            val response = httpGet("https://api.listenbrainz.org/1/user/$user/playlists")
+            if (response.isBlank()) return@runCatching null
+            json.parseToJsonElement(response).jsonObject["playlists"] as? JsonArray
+        }.getOrElse { error ->
+            logger.warn("ListenBrainz", "playlists_unavailable", "Nie udało się pobrać playlist ListenBrainz", fields = mapOf("user" to user, "reason" to (error.message ?: "unknown")))
+            null
+        } ?: return emptyList()
         return playlists.mapNotNull { item ->
             val playlist = item.jsonObject["playlist"]?.jsonObject ?: return@mapNotNull null
             val identifier = playlist["identifier"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
@@ -211,13 +225,14 @@ class ListenBrainzRepository(
         if (mbids.isEmpty()) return emptyList()
         val tracks = mutableListOf<Track>()
         mbids.distinct().chunked(50).forEach { chunk ->
-            val response = runCatching {
-                httpGet("https://api.listenbrainz.org/1/metadata/recording/?recording_mbids=${chunk.joinToString(",")}&inc=artist")
+            val root = runCatching {
+                val response = httpGet("https://api.listenbrainz.org/1/metadata/recording/?recording_mbids=${chunk.joinToString(",")}&inc=artist")
+                if (response.isBlank()) return@runCatching null
+                json.parseToJsonElement(response).jsonObject
             }.getOrElse { error ->
                 logger.warn("ListenBrainz", "metadata_lookup_failed", "Nie udało się dociągnąć metadanych nagrań", fields = mapOf("reason" to (error.message ?: "unknown")))
-                return@forEach
-            }
-            val root = json.parseToJsonElement(response).jsonObject
+                null
+            } ?: return@forEach
             chunk.forEach { mbid ->
                 val entry = root[mbid]?.jsonObject ?: return@forEach
                 val recording = entry["recording"]?.jsonObject
