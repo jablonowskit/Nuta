@@ -20,6 +20,7 @@ import app.nuta.domain.DataSourceSelectingRepository
 import app.nuta.core.security.SecretValue
 import app.nuta.resources.Res
 import app.nuta.resources.playback_connect_failed
+import app.nuta.settings.DataSource
 import app.nuta.spotify.SpotifyWebToken
 import app.nuta.ui.NutaApp
 import org.jetbrains.compose.resources.stringResource
@@ -47,15 +48,18 @@ class MainActivity : ComponentActivity() {
                 }
                 return@setContent
             }
+            val settings by playbackSettings.settings.collectAsState()
             var token by remember { mutableStateOf(restoredToken) }
-            var showLogin by remember { mutableStateOf(restoredToken == null) }
-            if (showLogin) {
+            // Logowanie do Spotify ma sens tylko wtedy, gdy DataSource faktycznie wskazuje na
+            // Spotify — bez tego warunku apka żądała logowania nawet w trybie ListenBrainz,
+            // gdzie SpotifyAndroidRepository i tak nigdy nie jest używane (patrz
+            // DataSourceSelectingRepository niżej).
+            if (settings.dataSource == DataSource.SPOTIFY && token == null) {
                 SpotifyAndroidLogin(logger) { session ->
                     session.value.use { value ->
                         preferences.edit().putString("accessToken", value).putLong("expiresAt", session.expiresAtMs).apply()
                     }
                     token = session
-                    showLogin = false
                 }
             } else {
                 val activeToken = token
