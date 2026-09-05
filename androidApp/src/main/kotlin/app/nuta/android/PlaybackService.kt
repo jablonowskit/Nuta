@@ -59,6 +59,10 @@ class PlaybackService : MediaSessionService() {
             .setLoadControl(loadControl(settingsStore.settings.value.bufferSize))
             .setSeekBackIncrementMs(10_000)
             .setSeekForwardIncrementMs(10_000)
+            // Bez tego odtwarzanie kontynuowało przez głośnik telefonu po utracie połączenia
+            // Bluetooth/odłączeniu słuchawek (ACTION_AUDIO_BECOMING_NOISY) zamiast pauzować —
+            // ExoPlayer sam nasłuchuje tego broadcastu, gdy ta flaga jest włączona.
+            .setHandleAudioBecomingNoisy(true)
             .build()
         player.addListener(object : Player.Listener {
             override fun onPlaybackStateChanged(playbackState: Int) {
