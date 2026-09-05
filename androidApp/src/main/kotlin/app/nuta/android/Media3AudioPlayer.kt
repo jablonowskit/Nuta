@@ -276,7 +276,14 @@ class Media3AudioPlayer(
     }
     override suspend fun pause() = withContext(Dispatchers.Main) { player.pause(); savePosition(player.currentPosition) }
     override suspend fun stop() { ticker?.cancel(); withContext(Dispatchers.Main) { player.stop() }; savePosition(0); stateFlow.value = stateFlow.value.copy(status = PlayerStatus.IDLE, positionMs = 0) }
-    override suspend fun seekTo(positionMs: Long) { withContext(Dispatchers.Main) { player.seekTo(positionMs.coerceIn(0, stateFlow.value.durationMs)) } }
+    override suspend fun seekTo(positionMs: Long) {
+        // durationMs bywa 0, gdy katalog źródła nie podał długości utworu (np. wynik
+        // MusicBrainz z length=null, utwór z lb-radio bez pola duration) — przycinanie do
+        // 0..0 zawsze wracałoby na początek, mimo że sam strumień faktycznie da się przewijać.
+        val duration = stateFlow.value.durationMs
+        val target = if (duration > 0) positionMs.coerceIn(0, duration) else positionMs.coerceAtLeast(0)
+        withContext(Dispatchers.Main) { player.seekTo(target) }
+    }
     override suspend fun next() = move(stateFlow.value.currentIndex + 1)
     override suspend fun previous() = move(stateFlow.value.currentIndex - 1)
     override suspend fun playAt(index: Int) = move(index)

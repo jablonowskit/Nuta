@@ -150,7 +150,11 @@ class MpvAudioPlayer(
     }
 
     override suspend fun seekTo(positionMs: Long) {
-        val bounded = positionMs.coerceIn(0, _state.value.durationMs)
+        // durationMs bywa 0, gdy katalog źródła nie podał długości utworu (np. wynik
+        // MusicBrainz z length=null, utwór z lb-radio bez pola duration) — przycinanie do
+        // 0..0 zawsze wracałoby na początek, mimo że sam strumień faktycznie da się przewijać.
+        val duration = _state.value.durationMs
+        val bounded = if (duration > 0) positionMs.coerceIn(0, duration) else positionMs.coerceAtLeast(0)
         sendCommand("seek", bounded / 1_000.0, "absolute", "exact")
         _state.value = _state.value.copy(positionMs = bounded)
     }
