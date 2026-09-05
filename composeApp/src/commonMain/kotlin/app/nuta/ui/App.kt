@@ -262,6 +262,9 @@ private fun NutaAppContent(container: AppContainer) {
         LaunchedEffect(playbackSettings.dataSource) {
             savedPlaylistsLoaded = false
             savedPlaylists = emptyList()
+            // Otwarta playlista mogła pochodzić z poprzedniego źródła — jej id nic nie znaczy
+            // dla nowo aktywnego backendu (np. odświeżenie wysłałoby ID Spotify do ListenBrainz).
+            selectedPlaylist = null
         }
 
         LaunchedEffect(container.spotifyRepository, playbackSettings.dataSource) {
@@ -1203,14 +1206,22 @@ private fun SearchScreen(
     val currentState by rememberUpdatedState(state)
     val searchUnknownError = stringResource(Res.string.search_unknown_error)
     val preparingStreamLabel = stringResource(Res.string.preparing_stream)
+    val settings by container.playbackSettings.settings.collectAsState()
     suspend fun playTrack(track: Track) {
         container.audioPlayer.setQueue(listOf(track), 0)
         container.audioPlayer.play()
     }
 
+    // Bez tego przełączenie DataSource zostawiało na ekranie wyniki wyszukiwania z
+    // poprzedniego backendu — kliknięcie takiego wyniku wysyłało ID z jednego źródła
+    // (np. Spotify) do drugiego (ListenBrainz), które go nie rozpoznaje.
+    LaunchedEffect(settings.dataSource) {
+        onStateChange(currentState.copy(result = SearchResult(emptyList(), emptyList())))
+    }
+
     // Filtry (searchTracks/Artists/Playlists) tylko zawężają już pobrane wyniki lokalnie
     // (patrz visibleTracks/visiblePlaylists niżej) — nie powinny wywoływać ponownego zapytania sieciowego.
-    LaunchedEffect(state.query, container.spotifyRepository) {
+    LaunchedEffect(state.query, container.spotifyRepository, settings.dataSource) {
         val submittedQuery = state.query
         if (submittedQuery.isBlank()) {
             onStateChange(currentState.copy(

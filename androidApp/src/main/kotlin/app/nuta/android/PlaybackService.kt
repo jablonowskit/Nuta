@@ -66,12 +66,18 @@ class PlaybackService : MediaSessionService() {
             }
         })
         loudnessEnhancer = createLoudnessEnhancer(player.audioSessionId, settingsStore.settings.value.loudnessNormalization)
-        // Media3 1.10.1 zgłasza zmianę sesji audio przez AnalyticsListener — trzeba tam odtworzyć
-        // enhancer na nowej sesji, bo LoudnessEnhancer jest przywiązany do jednej sesji audio.
+        // Media3 1.10.1 zgłasza zmianę sesji audio przez AnalyticsListener na wątku odtwarzania,
+        // nie na Main — a loudnessEnhancer jest czytany/nadpisywany też z coroutine ustawień
+        // (Main) i z onDestroy (Main). Bez wymuszenia tej samej kolejki dla wszystkich trzech
+        // miejsc groził wyścig: coroutine ustawień mogła wywołać setTargetGain na obiekcie,
+        // który AnalyticsListener właśnie zwolnił (zamaskowane przez runCatching, więc bez
+        // crasha, ale ustawienie po cichu się nie stosowało).
         player.addAnalyticsListener(object : AnalyticsListener {
             override fun onAudioSessionIdChanged(eventTime: AnalyticsListener.EventTime, audioSessionId: Int) {
-                runCatching { loudnessEnhancer?.release() }
-                loudnessEnhancer = createLoudnessEnhancer(audioSessionId, settingsStore.settings.value.loudnessNormalization)
+                scope.launch {
+                    runCatching { loudnessEnhancer?.release() }
+                    loudnessEnhancer = createLoudnessEnhancer(audioSessionId, settingsStore.settings.value.loudnessNormalization)
+                }
             }
         })
         scope.launch {
