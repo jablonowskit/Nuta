@@ -19,7 +19,10 @@ import java.net.http.HttpResponse
 import java.nio.charset.StandardCharsets
 import java.time.Duration
 import java.util.Base64
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -46,9 +49,28 @@ class NutaSoundCloudMediaService(
         .connectTimeout(Duration.ofSeconds(15))
         .followRedirects(HttpClient.Redirect.NORMAL)
         .build()
+    @Volatile
     private var cachedClientId: String? = null
+    /** Bez tego równoległe resolve() ściągały bundle JS SoundCloudu po kilka razy naraz. */
+    private val clientIdMutex = Mutex()
 
-    override suspend fun resolve(track: Track): YouTubeResolution {
+    override suspend fun resolve(track: Track): YouTubeResolution = try {
+        resolveOnce(track)
+    } catch (cancellation: CancellationException) {
+        throw cancellation
+    } catch (error: Throwable) {
+        // SoundCloud rotuje client_id — wygasłe dawało trwałe błędy aż do restartu
+        // aplikacji, bo raz zcache'owana wartość nigdy nie była unieważniana.
+        if (!error.isUnauthorized()) throw error
+        logger.warn("SoundCloudResolver", "client_id_expired", "SoundCloud odrzucił client_id — pobieram nowy i ponawiam")
+        invalidateClientId()
+        resolveOnce(track)
+    }
+
+    private fun Throwable.isUnauthorized(): Boolean =
+        message?.let { it.contains("HTTP 401") || it.contains("HTTP 403") } == true
+
+    private suspend fun resolveOnce(track: Track): YouTubeResolution {
         val matches = search(track)
         val selected = matches.firstOrNull() ?: error("SoundCloud nie zwrócił kandydatów")
         val stream = resolveStream(selected.candidate.videoId)
@@ -139,14 +161,23 @@ class NutaSoundCloudMediaService(
 
     private suspend fun clientId(): String {
         cachedClientId?.let { return it }
-        val home = getText("https://soundcloud.com")
-        val bundleUrls = Regex("src=\"(https://a-v2\\.sndcdn\\.com/assets/[^\"]+\\.js)\"").findAll(home).map { it.groupValues[1] }.toList()
-        for (bundleUrl in bundleUrls) {
-            val js = runCatching { getText(bundleUrl) }.getOrNull() ?: continue
-            val match = Regex("client_id\\s*:\\s*\"([a-zA-Z0-9]+)\"").find(js)?.groupValues?.get(1)
-            if (match != null) { cachedClientId = match; return match }
+        return clientIdMutex.withLock {
+            // Inna korutyna mogła pobrać client_id, czekając na tę samą blokadę.
+            cachedClientId?.let { return@withLock it }
+            val home = getText("https://soundcloud.com")
+            val bundleUrls = Regex("src=\"(https://a-v2\\.sndcdn\\.com/assets/[^\"]+\\.js)\"").findAll(home).map { it.groupValues[1] }.toList()
+            for (bundleUrl in bundleUrls) {
+                val js = runCatching { getText(bundleUrl) }.getOrNull() ?: continue
+                val match = Regex("client_id\\s*:\\s*\"([a-zA-Z0-9]+)\"").find(js)?.groupValues?.get(1)
+                if (match != null) { cachedClientId = match; return@withLock match }
+            }
+            error("SoundCloud: nie znaleziono client_id w bundlach JS")
         }
-        error("SoundCloud: nie znaleziono client_id w bundlach JS")
+    }
+
+    /** Wywoływane po odrzuceniu żądania przez SoundCloud, żeby kolejne resolve() pobrało świeże client_id. */
+    private fun invalidateClientId() {
+        cachedClientId = null
     }
 
     private suspend fun getText(url: String): String = send(

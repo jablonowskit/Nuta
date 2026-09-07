@@ -46,15 +46,19 @@ class FakeAudioPlayer(
         if (index !in state.queue.indices) return
         val newQueue = state.queue.toMutableList().apply { removeAt(index) }
         if (newQueue.isEmpty()) { clearQueue(); return }
+        val wasPlaying = state.status == PlayerStatus.PLAYING
         _state.value = when {
             index < state.currentIndex -> state.copy(queue = newQueue, currentIndex = state.currentIndex - 1)
             index == state.currentIndex -> {
                 ticker?.cancel()
-                state.copy(queue = newQueue, currentIndex = index.coerceAtMost(newQueue.lastIndex), positionMs = 0, status = PlayerStatus.PAUSED)
+                state.copy(queue = newQueue, currentIndex = index.coerceAtMost(newQueue.lastIndex), positionMs = 0, status = state.status)
             }
             else -> state.copy(queue = newQueue)
         }
         logger.info("FakeAudioPlayer", "queue_item_removed", "Usunięto utwór z kolejki")
+        // Usunięcie aktualnie granego utworu przenosi odtwarzanie na następny w kolejce —
+        // zachowujemy stan odtwarzania, tak samo jak robi to moveTo.
+        if (index == state.currentIndex && wasPlaying) startTicker()
     }
 
     override suspend fun clearQueue() {
@@ -117,7 +121,10 @@ class FakeAudioPlayer(
                 val nextPosition = _state.value.positionMs + 1_000
                 if (nextPosition >= _state.value.durationMs) {
                     if (_state.value.currentIndex < _state.value.queue.lastIndex) {
+                        // moveTo uruchamia własny ticker — bez przerwania pętli zostałyby
+                        // dwa równoległe tickery i pozycja rosłaby dwukrotnie szybciej.
                         moveTo(_state.value.currentIndex + 1, "auto_next")
+                        break
                     } else {
                         _state.value = _state.value.copy(positionMs = _state.value.durationMs, status = PlayerStatus.ENDED)
                         logger.info("FakeAudioPlayer", "queue_ended", "Zakończono kolejkę demonstracyjną")
