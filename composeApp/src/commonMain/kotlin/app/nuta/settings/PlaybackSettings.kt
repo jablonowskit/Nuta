@@ -44,6 +44,10 @@ data class YouTubePlaybackSettings(
     val audioSource: AudioSource = AudioSource.YOUTUBE,
     val dataSource: DataSource = DataSource.SPOTIFY,
     val listenBrainzUsername: String = "",
+    /**
+     * Sekret — nigdy nie loguj tego pola wprost. Domyślny toString() data class jest
+     * nadpisany niżej właśnie po to, żeby token nie trafił do logów ani do debuggera.
+     */
     val listenBrainzApiToken: String = "",
     /** Eksperymentalne: rozwiązuj strumień dla widocznych utworów zanim użytkownik kliknie play. */
     val prefetchEnabled: Boolean = false,
@@ -51,7 +55,14 @@ data class YouTubePlaybackSettings(
     val playerCollapsed: Boolean = false,
     /** Limit cache'u zbuforowanych strumieni audio (MB). Zmiana działa dopiero po restarcie aplikacji. */
     val cacheSizeMb: Int = 150,
-)
+) {
+    override fun toString(): String = "YouTubePlaybackSettings(" +
+        "fontScale=$fontScale, quality=$quality, codec=$codec, bufferSize=$bufferSize, " +
+        "loudnessNormalization=$loudnessNormalization, youtubeClientProfile=$youtubeClientProfile, " +
+        "audioSource=$audioSource, dataSource=$dataSource, listenBrainzUsername=$listenBrainzUsername, " +
+        "listenBrainzApiToken=${if (listenBrainzApiToken.isBlank()) "" else "[REDACTED]"}, " +
+        "prefetchEnabled=$prefetchEnabled, playerCollapsed=$playerCollapsed, cacheSizeMb=$cacheSizeMb)"
+}
 
 interface PlaybackSettingsStore {
     val settings: StateFlow<YouTubePlaybackSettings>

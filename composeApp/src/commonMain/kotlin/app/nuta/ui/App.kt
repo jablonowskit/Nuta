@@ -115,7 +115,6 @@ private data class SearchViewState(
     val result: SearchResult = SearchResult(emptyList(), emptyList()),
     val error: String? = null,
     val lastExecutedQuery: String = "",
-    val youtubeStatus: String? = null,
     val searchTracks: Boolean = true,
     val searchArtists: Boolean = true,
     val searchPlaylists: Boolean = true,
@@ -343,7 +342,9 @@ private fun NutaAppContent(container: AppContainer) {
             if (likedTracks.any { it.id == trackId }) { currentTrackLiked = true; return@LaunchedEffect }
             runCatching { container.spotifyRepository.isTrackLiked(trackId) }
                 .onSuccess { liked ->
-                    if (playerState.currentTrack?.id == trackId) currentTrackLiked = liked
+                    // Efekt jest anulowany przy zmianie utworu, więc dotarcie tutaj oznacza,
+                    // że wynik dotyczy nadal aktualnego trackId.
+                    currentTrackLiked = liked
                 }
                 .onFailure { error ->
                     container.logger.warn(
@@ -1205,7 +1206,6 @@ private fun SearchScreen(
     val playerState by container.audioPlayer.state.collectAsState()
     val currentState by rememberUpdatedState(state)
     val searchUnknownError = stringResource(Res.string.search_unknown_error)
-    val preparingStreamLabel = stringResource(Res.string.preparing_stream)
     val settings by container.playbackSettings.settings.collectAsState()
     suspend fun playTrack(track: Track) {
         container.audioPlayer.setQueue(listOf(track), 0)
@@ -1280,12 +1280,6 @@ private fun SearchScreen(
             }
         }
         Spacer(Modifier.height(10.dp))
-        state.youtubeStatus?.takeIf { false }?.let {
-            Card(backgroundColor = Color(0xFF202B32), modifier = Modifier.fillMaxWidth()) {
-                Text(it, color = Color(0xFF8FE9AD), modifier = Modifier.padding(14.dp))
-            }
-            Spacer(Modifier.height(14.dp))
-        }
         // "|" rozdziela grupy OR, w każdej grupie "&" albo spacja rozdziela wymagane słowa (AND).
         val queryOrGroups = state.query.split("|").map { group ->
             group.trim().split(Regex("[&\\s]+")).filter(String::isNotBlank)
@@ -1317,18 +1311,10 @@ private fun SearchScreen(
                     item { SectionLabel(stringResource(Res.string.section_tracks)) }
                     items(visibleTracks, key = { "t-${it.id}" }) { track ->
                         TrackRow(track, playerState.currentTrack?.id == track.id, loading = playerState.status == PlayerStatus.LOADING, onPlay = {
-                            scope.launch {
-                                onStateChange(state.copy(youtubeStatus = preparingStreamLabel))
-                                playTrack(track)
-                                onStateChange(state.copy(youtubeStatus = null))
-                            }
+                            scope.launch { playTrack(track) }
                         }, titleAction = {
                             TrackPlayButton {
-                                scope.launch {
-                                    onStateChange(state.copy(youtubeStatus = preparingStreamLabel))
-                                    playTrack(track)
-                                    onStateChange(state.copy(youtubeStatus = null))
-                                }
+                                scope.launch { playTrack(track) }
                             }
                             }, subtitleAction = {
                             TrackQueueButton { scope.launch { container.audioPlayer.appendToQueue(listOf(track)) } }
@@ -1777,8 +1763,19 @@ private fun QueueScreen(state: PlayerState, container: AppContainer) {
         if (state.queue.isEmpty()) {
             EmptyState(stringResource(Res.string.queue_empty))
         } else {
+            // Klucz bez indeksu, żeby zmiana kolejności (shuffle, usunięcie utworu) nie
+            // unieważniała wszystkich kolejnych wierszy. Ten sam utwór może wystąpić w
+            // kolejce wielokrotnie, więc numerujemy powtórzenia.
+            val queueKeys = remember(state.queue) {
+                val seen = mutableMapOf<String, Int>()
+                state.queue.map { track ->
+                    val occurrence = seen.getOrElse(track.id) { 0 }
+                    seen[track.id] = occurrence + 1
+                    "queue-${track.id}-$occurrence"
+                }
+            }
             ScrollableLazyColumn(Modifier.fillMaxSize(), scrollToIndex = state.currentIndex) {
-                    items(state.queue.indices.toList(), key = { index -> "queue-$index-${state.queue[index].id}" }) { index ->
+                    items(state.queue.indices.toList(), key = { index -> queueKeys[index] }) { index ->
                         val item = state.queue[index]
                         val active = index == state.currentIndex
                         Row(

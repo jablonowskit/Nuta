@@ -11,11 +11,30 @@ class SecretValue private constructor(private val value: String) {
 
     override fun toString(): String = "[REDACTED]"
 
-    override fun equals(other: Any?): Boolean = other is SecretValue && value == other.value
+    /**
+     * Porównanie stałoczasowe — zwykłe `==` na stringach przerywa na pierwszej różnicy,
+     * co przy porównywaniu sekretów daje wymierny kanał czasowy.
+     */
+    override fun equals(other: Any?): Boolean {
+        if (other !is SecretValue) return false
+        val a = value
+        val b = other.value
+        if (a.length != b.length) return false
+        var diff = 0
+        for (index in a.indices) diff = diff or (a[index].code xor b[index].code)
+        return diff == 0
+    }
 
-    override fun hashCode(): Int = value.hashCode()
+    /**
+     * Stała — hashCode wyliczany z sekretu wyciekałby jego wartość do logów kolekcji
+     * i pozwalał na porównywanie sekretów po hashu. Kolizje są tu bez znaczenia,
+     * bo SecretValue nie służy jako klucz w mapach o dużej liczności.
+     */
+    override fun hashCode(): Int = SECRET_HASH_CODE
 
     companion object {
+        private const val SECRET_HASH_CODE = 0x5EC8E7
+
         fun of(value: String): SecretValue {
             require(value.isNotBlank()) { "Secret value cannot be blank" }
             return SecretValue(value)

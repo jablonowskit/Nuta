@@ -89,7 +89,10 @@ class ListenBrainzRepository(
         data class Inline(val id: String, val hasMbid: Boolean, val title: String, val artist: String, val album: String, val artistMbid: String?)
         val inline = mutableListOf<Inline>()
         var offset = 0
-        while (true) {
+        var pageIndex = 0
+        // Twardy limit stron — niespójny total_count z API (albo strona, która stale wraca
+        // niepusta) zapętliłby pobieranie na zawsze.
+        while (pageIndex++ < MAX_FEEDBACK_PAGES) {
             val page = runCatching {
                 val response = httpGet("https://api.listenbrainz.org/1/feedback/user/$user/get-feedback?score=1&metadata=true&count=100&offset=$offset")
                 if (response.isBlank()) return@runCatching null
@@ -329,6 +332,8 @@ class ListenBrainzRepository(
 
     private companion object {
         const val SyntheticRecommendationsId = "listenbrainz-recommendations"
+        /** 100 wpisów na stronę — 200 stron to 20 000 polubień, znacznie powyżej realnych bibliotek. */
+        const val MAX_FEEDBACK_PAGES = 200
         val MbidRegex = Regex("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
     }
 }

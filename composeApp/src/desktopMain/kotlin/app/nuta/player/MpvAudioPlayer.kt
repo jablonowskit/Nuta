@@ -46,6 +46,10 @@ class MpvAudioPlayer(
     private var ticker: Job? = null
     private var processLogReader: Job? = null
     private var commandId = 0L
+    // Rośnie przy każdej zmianie utworu/zatrzymaniu. Automatyczne przejście na koniec
+    // utworu porównuje swój znacznik po zdobyciu loadMutex, żeby nie nadpisać wyboru
+    // użytkownika, który w tym samym momencie kliknął next/stop.
+    private var playbackGeneration = 0L
 
     init {
         scope.coroutineContext[Job]?.invokeOnCompletion { shutdown() }
@@ -58,8 +62,10 @@ class MpvAudioPlayer(
 
     override suspend fun setQueue(tracks: List<Track>, startIndex: Int) {
         require(startIndex in tracks.indices || tracks.isEmpty()) { "Nieprawidłowy indeks kolejki" }
-        ticker?.cancel()
-        _state.value = PlayerState(queue = tracks, currentIndex = if (tracks.isEmpty()) -1 else startIndex)
+        loadMutex.withLock {
+            stopPlaybackLocked()
+            _state.value = PlayerState(queue = tracks, currentIndex = if (tracks.isEmpty()) -1 else startIndex)
+        }
         logger.info("MpvPlayer", "queue_set", "Ustawiono kolejkę playera", fields = mapOf("count" to tracks.size.toString()))
     }
 
@@ -76,21 +82,20 @@ class MpvAudioPlayer(
         logger.info("MpvAudioPlayer", "queue_shuffled", "Przetasowano pozostałe utwory kolejki")
     }
 
-    override suspend fun removeFromQueue(index: Int) {
+    override suspend fun removeFromQueue(index: Int): Unit = loadMutex.withLock {
         val state = _state.value
-        if (index !in state.queue.indices) return
+        if (index !in state.queue.indices) return@withLock
         val newQueue = state.queue.toMutableList().apply { removeAt(index) }
-        if (newQueue.isEmpty()) { clearQueue(); return }
+        if (newQueue.isEmpty()) { clearQueueLocked(); return@withLock }
         when {
             index < state.currentIndex -> {
                 _state.value = state.copy(queue = newQueue, currentIndex = state.currentIndex - 1)
             }
             index == state.currentIndex -> {
                 val wasPlaying = state.status == PlayerStatus.PLAYING || state.status == PlayerStatus.LOADING
-                ticker?.cancel()
-                if (process?.isAlive == true) sendCommand("stop")
+                stopPlaybackLocked()
                 _state.value = _state.value.copy(queue = newQueue, currentIndex = index.coerceAtMost(newQueue.lastIndex), positionMs = 0, status = PlayerStatus.IDLE, errorMessage = null)
-                if (wasPlaying) play()
+                if (wasPlaying) loadCurrentLocked()
             }
             else -> {
                 _state.value = state.copy(queue = newQueue)
@@ -99,54 +104,75 @@ class MpvAudioPlayer(
         logger.info("MpvPlayer", "queue_item_removed", "Usunięto utwór z kolejki")
     }
 
-    override suspend fun clearQueue() {
-        ticker?.cancel()
-        if (process?.isAlive == true) sendCommand("stop")
-        _state.value = PlayerState()
-        logger.info("MpvPlayer", "queue_cleared", "Wyczyszczono kolejkę")
-    }
+    override suspend fun clearQueue(): Unit = loadMutex.withLock { clearQueueLocked() }
 
     override suspend fun play() {
-        val current = _state.value.currentTrack ?: return
         if (_state.value.status == PlayerStatus.PAUSED) {
-            sendCommand("set_property", "pause", false)
-            _state.value = _state.value.copy(status = PlayerStatus.PLAYING)
-            startTicker()
-            return
-        }
-        loadMutex.withLock {
-            _state.value = _state.value.copy(status = PlayerStatus.LOADING, positionMs = 0, errorMessage = null)
-            logger.info("MpvPlayer", "track_resolving", "Rozpoczęto przygotowanie źródła audio")
-            try {
-                val resolution = youtube.resolve(current)
-                youtube.validate(resolution.stream)
-                ensureProcess()
-                val loadCommand = resolution.stream.url.use { url -> arrayOf("loadfile", url, "replace") }
-                sendCommand(*loadCommand)
-                sendCommand("set_property", "af", loudnormFilter(settingsStore.settings.value.loudnessNormalization))
+            loadMutex.withLock {
+                // Ponowne sprawdzenie pod blokadą — inna operacja mogła w tym czasie
+                // zmienić utwór albo zatrzymać odtwarzanie.
+                if (_state.value.status != PlayerStatus.PAUSED) return@withLock
                 sendCommand("set_property", "pause", false)
                 _state.value = _state.value.copy(status = PlayerStatus.PLAYING)
-                logger.info("MpvPlayer", "playback_started", "Rozpoczęto odtwarzanie audio", fields = mapOf("codec" to resolution.stream.codec, "container" to resolution.stream.container))
                 startTicker()
-            } catch (error: Throwable) {
-                _state.value = _state.value.copy(status = PlayerStatus.ERROR, errorMessage = error.message)
-                logger.error("MpvPlayer", "playback_failed", "Nie udało się uruchomić odtwarzania", throwable = error)
             }
+            return
         }
+        loadMutex.withLock { loadCurrentLocked() }
     }
 
-    override suspend fun pause() {
-        if (_state.value.status != PlayerStatus.PLAYING) return
+    override suspend fun pause(): Unit = loadMutex.withLock {
+        if (_state.value.status != PlayerStatus.PLAYING) return@withLock
         sendCommand("set_property", "pause", true)
         ticker?.cancel()
         _state.value = _state.value.copy(status = PlayerStatus.PAUSED)
     }
 
-    override suspend fun stop() {
-        ticker?.cancel()
-        if (process?.isAlive == true) sendCommand("stop")
+    override suspend fun stop(): Unit = loadMutex.withLock {
+        stopPlaybackLocked()
         _state.value = _state.value.copy(status = PlayerStatus.IDLE, positionMs = 0, errorMessage = null)
         logger.info("MpvPlayer", "playback_stopped", "Zatrzymano odtwarzanie audio")
+    }
+
+    /** Wymaga trzymania [loadMutex]. */
+    private suspend fun loadCurrentLocked() {
+        val current = _state.value.currentTrack ?: return
+        playbackGeneration++
+        _state.value = _state.value.copy(status = PlayerStatus.LOADING, positionMs = 0, errorMessage = null)
+        logger.info("MpvPlayer", "track_resolving", "Rozpoczęto przygotowanie źródła audio")
+        try {
+            val resolution = youtube.resolve(current)
+            youtube.validate(resolution.stream)
+            ensureProcess()
+            val loadCommand = resolution.stream.url.use { url -> arrayOf("loadfile", url, "replace") }
+            sendCommand(*loadCommand)
+            sendCommand("set_property", "af", loudnormFilter(settingsStore.settings.value.loudnessNormalization))
+            sendCommand("set_property", "pause", false)
+            _state.value = _state.value.copy(status = PlayerStatus.PLAYING)
+            logger.info("MpvPlayer", "playback_started", "Rozpoczęto odtwarzanie audio", fields = mapOf("codec" to resolution.stream.codec, "container" to resolution.stream.container))
+            startTicker()
+        } catch (error: Throwable) {
+            if (error is CancellationException) throw error
+            // Nieudany start zostawiłby proces mpv w niespójnym stanie — sprzątamy,
+            // żeby kolejne play() nie uznało półmartwego procesu za gotowy.
+            shutdownLocked()
+            _state.value = _state.value.copy(status = PlayerStatus.ERROR, errorMessage = error.message)
+            logger.error("MpvPlayer", "playback_failed", "Nie udało się uruchomić odtwarzania", throwable = error)
+        }
+    }
+
+    /** Wymaga trzymania [loadMutex]. */
+    private suspend fun stopPlaybackLocked() {
+        playbackGeneration++
+        ticker?.cancel()
+        if (process?.isAlive == true) runCatching { sendCommand("stop") }
+    }
+
+    /** Wymaga trzymania [loadMutex]. */
+    private suspend fun clearQueueLocked() {
+        stopPlaybackLocked()
+        _state.value = PlayerState()
+        logger.info("MpvPlayer", "queue_cleared", "Wyczyszczono kolejkę")
     }
 
     override suspend fun seekTo(positionMs: Long) {
@@ -164,15 +190,16 @@ class MpvAudioPlayer(
     override suspend fun playAt(index: Int) = moveTo(index)
     override suspend fun simulateError() { ticker?.cancel(); _state.value = _state.value.copy(status = PlayerStatus.ERROR, errorMessage = "Symulowany błąd playera") }
 
-    private suspend fun moveTo(index: Int) {
-        if (index !in _state.value.queue.indices) return
+    private suspend fun moveTo(index: Int): Unit = loadMutex.withLock {
+        if (index !in _state.value.queue.indices) return@withLock
+        stopPlaybackLocked()
         _state.value = _state.value.copy(currentIndex = index, status = PlayerStatus.IDLE, positionMs = 0, errorMessage = null)
-        play()
+        loadCurrentLocked()
     }
 
     private suspend fun ensureProcess() {
         if (process?.isAlive == true && Files.exists(socketPath)) return
-        shutdown()
+        shutdownLocked()
         val output = System.getenv("NUTA_MPV_AUDIO_OUTPUT")?.takeIf(String::isNotBlank) ?: "auto"
         logger.debug("MpvPlayer", "process_starting", "Uruchamianie procesu mpv", fields = mapOf("audioOutput" to output))
         process = ProcessBuilder(
@@ -197,7 +224,13 @@ class MpvAudioPlayer(
         error("Nie powstał socket IPC mpv")
     }
 
-    private suspend fun sendCommand(vararg values: Any): JsonObject = withContext(Dispatchers.IO) {
+    // Blokujący odczyt z socketu mpv potrafi nigdy nie wrócić, gdy proces zawiesi się
+    // (np. po awarii urządzenia audio) — bez limitu czasu zablokowałby cały ticker.
+    private suspend fun sendCommand(vararg values: Any): JsonObject = withTimeout(IPC_TIMEOUT_MS) {
+        sendCommandInternal(*values)
+    }
+
+    private suspend fun sendCommandInternal(vararg values: Any): JsonObject = withContext(Dispatchers.IO) {
         val requestId = synchronized(this@MpvAudioPlayer) { ++commandId }
         val command = JsonArray(values.map { if (it is Boolean) JsonPrimitive(it) else if (it is Number) JsonPrimitive(it) else JsonPrimitive(it.toString()) })
         val commandName = values.firstOrNull()?.toString() ?: "unknown"
@@ -238,6 +271,7 @@ class MpvAudioPlayer(
 
     private fun startTicker() {
         ticker?.cancel()
+        val generation = playbackGeneration
         ticker = scope.launch {
             while (isActive && _state.value.status == PlayerStatus.PLAYING) {
                 delay(1_000)
@@ -256,28 +290,50 @@ class MpvAudioPlayer(
                         ),
                     )
                     if (position != null) _state.value = _state.value.copy(positionMs = position.coerceAtLeast(0))
+                    // Odpowiednik ACTION_AUDIO_BECOMING_NOISY z Androida: gdy zniknie
+                    // urządzenie wyjściowe (Bluetooth/słuchawki), mpv zwalnia AO i dalej
+                    // "odtwarza" w ciszę. Pauzujemy, zamiast gubić pozycję w utworze.
+                    if (!eof && !idle && audioOutputLost()) {
+                        logger.info("MpvPlayer", "audio_output_lost", "Utracono urządzenie audio — pauzuję odtwarzanie")
+                        scope.launch {
+                            loadMutex.withLock {
+                                if (generation != playbackGeneration) return@withLock
+                                if (_state.value.status != PlayerStatus.PLAYING) return@withLock
+                                runCatching { sendCommand("set_property", "pause", true) }
+                                _state.value = _state.value.copy(status = PlayerStatus.PAUSED)
+                            }
+                        }
+                        break
+                    }
                     if (eof || idle) {
-                        val nextIndex = _state.value.currentIndex + 1
-                        if (nextIndex in _state.value.queue.indices) {
-                            _state.value = _state.value.copy(
-                                currentIndex = nextIndex,
-                                status = PlayerStatus.IDLE,
-                                positionMs = 0,
-                                errorMessage = null,
-                            )
-                            logger.info(
-                                "MpvPlayer",
-                                "queue_auto_advance",
-                                "Automatyczne przejście do następnego utworu",
-                                fields = mapOf(
-                                    "nextIndex" to nextIndex.toString(),
-                                    "queueSize" to _state.value.queue.size.toString(),
-                                ),
-                            )
-                            scope.launch { play() }
-                        } else {
-                            _state.value = _state.value.copy(status = PlayerStatus.ENDED)
-                            logger.info("MpvPlayer", "playback_ended", "MPV zakończył ostatni utwór kolejki")
+                        scope.launch {
+                            loadMutex.withLock {
+                                // Użytkownik mógł w tym czasie przełączyć utwór lub zatrzymać
+                                // odtwarzanie — wtedy to auto-przejście jest już nieaktualne.
+                                if (generation != playbackGeneration) return@withLock
+                                val nextIndex = _state.value.currentIndex + 1
+                                if (nextIndex in _state.value.queue.indices) {
+                                    _state.value = _state.value.copy(
+                                        currentIndex = nextIndex,
+                                        status = PlayerStatus.IDLE,
+                                        positionMs = 0,
+                                        errorMessage = null,
+                                    )
+                                    logger.info(
+                                        "MpvPlayer",
+                                        "queue_auto_advance",
+                                        "Automatyczne przejście do następnego utworu",
+                                        fields = mapOf(
+                                            "nextIndex" to nextIndex.toString(),
+                                            "queueSize" to _state.value.queue.size.toString(),
+                                        ),
+                                    )
+                                    loadCurrentLocked()
+                                } else {
+                                    _state.value = _state.value.copy(status = PlayerStatus.ENDED)
+                                    logger.info("MpvPlayer", "playback_ended", "MPV zakończył ostatni utwór kolejki")
+                                }
+                            }
                         }
                         break
                     }
@@ -293,11 +349,35 @@ class MpvAudioPlayer(
 
     private suspend fun property(name: String): JsonElement = sendCommand("get_property", name)["data"] ?: JsonNull
 
+    /**
+     * Wykrywa zniknięcie wyjścia audio. Przy aktywnym odtwarzaniu mpv zawsze ma
+     * zainicjowane AO — jego brak oznacza, że urządzenie zostało odłączone.
+     */
+    private suspend fun audioOutputLost(): Boolean {
+        val response = try {
+            sendCommand("get_property", "current-ao")
+        } catch (cancellation: CancellationException) {
+            throw cancellation
+        } catch (_: Throwable) {
+            // Nie potrafimy odczytać właściwości — nie zgadujemy utraty urządzenia,
+            // bo błąd IPC obsługuje już nadrzędny catch tickera.
+            return false
+        }
+        // Brak pola "data" to odpowiedź "property unavailable" (mpv nie zdążył jeszcze
+        // zainicjować AO po loadfile) — to nie to samo co zniknięcie urządzenia.
+        val data = response["data"] ?: return false
+        return data is JsonNull || (data as? JsonPrimitive)?.content.isNullOrBlank()
+    }
+
     private fun JsonElement.asNumberOrNull(): Double? = (this as? JsonPrimitive)?.doubleOrNull
 
     private fun JsonElement.asBooleanOrNull(): Boolean? = (this as? JsonPrimitive)?.booleanOrNull
 
     private fun sanitizeMpvOutput(line: String): String = line.replace(Regex("https?://\\S+"), "[STREAM_URL_REDACTED]").take(2_000)
+
+    private companion object {
+        const val IPC_TIMEOUT_MS = 5_000L
+    }
 
     private fun loudnormFilter(mode: LoudnessNormalization): String = when (mode) {
         LoudnessNormalization.OFF -> ""
@@ -305,9 +385,19 @@ class MpvAudioPlayer(
         LoudnessNormalization.NORMAL -> "lavfi=[loudnorm=I=-16:TP=-1.5:LRA=11]"
     }
 
-    private fun shutdown() {
+    /**
+     * Wywoływane z [invokeOnCompletion] na dowolnym wątku, gdy scope aplikacji już nie żyje —
+     * nie da się tu zaczekać na [loadMutex], więc sprzątamy bez blokady. To bezpieczne,
+     * bo po anulowaniu scope żadne nowe play() nie wystartuje.
+     */
+    private fun shutdown() = shutdownLocked()
+
+    /** Wymaga trzymania [loadMutex] (albo martwego scope — patrz [shutdown]). */
+    private fun shutdownLocked() {
         ticker?.cancel()
         processLogReader?.cancel()
+        // Cancel korutyny nie przerywa blokującego readLine() — zamknięcie strumienia tak.
+        runCatching { process?.inputStream?.close() }
         runCatching { process?.destroyForcibly() }
         process = null
         runCatching { Files.deleteIfExists(socketPath) }
