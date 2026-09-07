@@ -14,7 +14,6 @@ import app.nuta.domain.AudioPlayer
 import app.nuta.settings.PlaybackSettingsStore
 import app.nuta.youtube.YouTubeMediaService
 import app.nuta.youtube.YouTubeResolution
-import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
@@ -53,7 +52,14 @@ class Media3AudioPlayer(
         zdążył na moment "zagrać", zerując flagę PRZED wystąpieniem błędu — retry nigdy się nie
         wysycał i player w kółko odtwarzał ten sam zepsuty utwór (resolve → play → 403 → resolve...). */
     private var stabilityJob: Job? = null
-    private val prefetchCache = ConcurrentHashMap<String, Deferred<YouTubeResolution>>()
+    /**
+     * Wpisy trzymają żywe [Deferred], więc mapa nie może rosnąć bez końca — utwory, których
+     * użytkownik nigdy nie odtworzy, zostawały w niej na cały czas życia procesu. Kolejność
+     * wstawiania z LinkedHashMap pozwala eksmitować najstarsze zamiast blokować nowe prefetche.
+     * Dostęp zawsze pod [prefetchLock].
+     */
+    private val prefetchCache = LinkedHashMap<String, Deferred<YouTubeResolution>>()
+    private val prefetchLock = Any()
 
     init {
         player.addListener(object : Player.Listener {
@@ -178,14 +184,14 @@ class Media3AudioPlayer(
     }
 
     override suspend fun prefetch(tracks: List<Track>) {
-        if (prefetchCache.size > 40) return
         val state = stateFlow.value
         tracks.take(PREFETCH_LIMIT).forEach { track ->
             if (track.id == state.currentTrack?.id) return@forEach
-            prefetchCache.computeIfAbsent(track.id) {
+            synchronized(prefetchLock) {
+                if (prefetchCache.containsKey(track.id)) return@synchronized
                 val startedAtMs = System.currentTimeMillis()
                 logger.info("Media3Player", "prefetch_started", "Rozpoczęto prefetch strumienia", fields = mapOf("track" to track.title))
-                scope.async {
+                prefetchCache[track.id] = scope.async {
                     youtube.resolve(track).also {
                         logger.info("Media3Player", "prefetch_ready", "Prefetch gotowy", fields = mapOf(
                             "track" to track.title,
@@ -193,7 +199,19 @@ class Media3AudioPlayer(
                         ))
                     }
                 }
+                evictOldestPrefetchesLocked()
             }
+        }
+    }
+
+    /** Wymaga trzymania [prefetchLock]. */
+    private fun evictOldestPrefetchesLocked() {
+        while (prefetchCache.size > PREFETCH_CACHE_LIMIT) {
+            val oldest = prefetchCache.entries.firstOrNull() ?: return
+            prefetchCache.remove(oldest.key)
+            // Anulowanie zwalnia korutynę i połączenie sieciowe wiszące za nieużytym prefetchem.
+            oldest.value.cancel()
+            logger.debug("Media3Player", "prefetch_evicted", "Usunięto najstarszy wpis prefetchu", fields = mapOf("trackId" to oldest.key))
         }
     }
 
@@ -211,7 +229,7 @@ class Media3AudioPlayer(
 
     /** Zużywa wpis z cache prefetchu, jeśli jest świeży; w przeciwnym razie rozwiązuje strumień normalnie. */
     private suspend fun resolveForPlayback(track: Track): YouTubeResolution {
-        val cached = prefetchCache.remove(track.id)
+        val cached = synchronized(prefetchLock) { prefetchCache.remove(track.id) }
         if (cached != null) {
             if (!cached.isCompleted) {
                 logger.info("Media3Player", "prefetch_miss_pending", "Prefetch jeszcze się nie zakończył — czekam na niego zamiast startować od nowa", fields = mapOf("track" to track.title))
@@ -327,6 +345,7 @@ class Media3AudioPlayer(
 
     private companion object {
         const val PREFETCH_LIMIT = 5
+        const val PREFETCH_CACHE_LIMIT = 40
         const val PREFETCH_EXPIRY_MARGIN_MS = 30_000L
         const val STABLE_PLAYBACK_MS = 8_000L
         val TERMINAL_STATUSES = setOf(PlayerStatus.IDLE, PlayerStatus.ENDED, PlayerStatus.ERROR)

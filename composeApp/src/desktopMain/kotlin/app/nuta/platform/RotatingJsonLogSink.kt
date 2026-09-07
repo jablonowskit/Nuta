@@ -18,7 +18,12 @@ class RotatingJsonLogSink(
             if (logFile.exists() && logFile.length() >= maxBytes) {
                 val rotated = File(logFile.parentFile, "nuta.1.jsonl")
                 if (rotated.exists()) rotated.delete()
-                logFile.renameTo(rotated)
+                // Na Windows renameTo zawodzi, gdy plik trzyma inny proces — bez fallbacku
+                // log rósłby wtedy bez ograniczeń, bo rotacja cicho nic nie robiła.
+                if (!logFile.renameTo(rotated)) {
+                    logFile.copyTo(rotated, overwrite = true)
+                    logFile.writeText("")
+                }
             }
             logFile.appendText(line + System.lineSeparator())
         }

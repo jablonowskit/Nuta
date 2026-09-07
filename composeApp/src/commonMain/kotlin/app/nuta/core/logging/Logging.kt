@@ -3,6 +3,7 @@ package app.nuta.core.logging
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 
 enum class LogLevel(val priority: Int) {
     TRACE(0), DEBUG(1), INFO(2), WARN(3), ERROR(4)
@@ -98,7 +99,9 @@ class MemoryLogger(
             fields = redactor.redact(fields),
             throwable = throwable?.stackTraceToString()?.let(redactor::redactText),
         )
-        _events.value = (_events.value + item).takeLast(maxEvents)
+        // update{} zamiast read-modify-write na .value — logi lecą z wielu wątków
+        // i zwykłe przypisanie gubiło wpisy przy równoległych emitach.
+        _events.update { current -> (current + item).takeLast(maxEvents) }
         runCatching { jsonSink(item.toJsonLine()) }
     }
 }

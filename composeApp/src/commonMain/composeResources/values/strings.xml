@@ -56,7 +56,6 @@
     <string name="section_tracks">TRACKS</string>
     <string name="search_no_results">No results for “%1$s”</string>
     <string name="search_unknown_error">Unknown search error</string>
-    <string name="preparing_stream">Player: preparing the YouTube stream…</string>
 
     <!-- Settings -->
     <string name="settings_title">Playback settings</string>

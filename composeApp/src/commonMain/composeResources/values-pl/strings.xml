@@ -58,7 +58,6 @@
     <string name="section_tracks">UTWORY</string>
     <string name="search_no_results">Brak wyników dla „%1$s”</string>
     <string name="search_unknown_error">Nieznany błąd wyszukiwania</string>
-    <string name="preparing_stream">Player: przygotowywanie strumienia YouTube…</string>
 
     <!-- Ustawienia -->
     <string name="settings_title">Ustawienia odtwarzania</string>
