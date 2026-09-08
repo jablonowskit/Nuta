@@ -9,6 +9,7 @@ import androidx.media3.session.SessionToken
 import app.nuta.core.logging.LogLevel
 import app.nuta.core.logging.MemoryLogger
 import app.nuta.listenbrainz.ListenBrainzRepository
+import app.nuta.listenbrainz.ListenBrainzScrobbler
 import app.nuta.musicbrainz.MusicBrainzRepository
 import app.nuta.ui.initPlatformBrowser
 import app.nuta.youtube.SourceSelectingMediaService
@@ -55,7 +56,11 @@ object AppServices {
         future.addListener({
             runCatching { future.get() }
                 .onSuccess { controller ->
-                    audioPlayer.value = Media3AudioPlayer(controller, scope, youtubeMediaService, logger, context.getSharedPreferences("playback-queue", Context.MODE_PRIVATE), playbackSettings)
+                    val player = Media3AudioPlayer(controller, scope, youtubeMediaService, logger, context.getSharedPreferences("playback-queue", Context.MODE_PRIVATE), playbackSettings)
+                    audioPlayer.value = player
+                    // Scrobbler sam sprawdza dataSource przy każdym utworze, więc podłączamy go
+                    // raz, do skope'u procesu — niezależnie od aktualnie wybranego źródła danych.
+                    ListenBrainzScrobbler(playbackSettings, logger).attach(player, scope)
                 }
                 .onFailure { error ->
                     playerConnectFailed.value = true
