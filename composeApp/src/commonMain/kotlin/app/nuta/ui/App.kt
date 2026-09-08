@@ -23,12 +23,9 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.AlertDialog
 import androidx.compose.material.Button
-import androidx.compose.material.Card
-import androidx.compose.material.Checkbox
 import androidx.compose.material.CircularProgressIndicator
 import androidx.compose.material.Divider
 import androidx.compose.material.MaterialTheme
@@ -48,29 +45,28 @@ import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.snapshotFlow
-import androidx.compose.runtime.rememberUpdatedState
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalDensity
-import org.jetbrains.compose.resources.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
 import app.nuta.resources.*
 import app.nuta.AppContainer
 import app.nuta.ui.screens.DiagnosticsScreen
+import app.nuta.ui.screens.HomeScreen
+import app.nuta.ui.screens.LikedScreen
+import app.nuta.ui.screens.PlaylistDetails
+import app.nuta.ui.screens.PlaylistsScreen
+import app.nuta.ui.screens.QueueScreen
+import app.nuta.ui.screens.SearchScreen
 import app.nuta.ui.screens.SettingsScreen
 import app.nuta.core.models.Destination
-import app.nuta.core.models.Artist
-import app.nuta.core.models.PlayerState
-import app.nuta.core.models.PlayerStatus
 import app.nuta.core.models.Playlist
 import app.nuta.core.models.SearchResult
 import app.nuta.core.models.Track
@@ -665,434 +661,12 @@ private fun destinationLabel(destination: Destination): String = stringResource(
     },
 )
 
-@Composable
-private fun HomeScreen(
-    playlists: List<Playlist>,
-    playerState: PlayerState,
-    onSelectPlaylist: (Playlist) -> Unit,
-) {
-    // Zamiast stałej liczby z ustawień: pokazuj stopniowo więcej rekomendacji w miarę
-    // przewijania listy w dół, dociągając kolejne partie z już pobranej puli.
-    var revealedCount by remember { mutableStateOf(INITIAL_RECOMMENDATIONS_COUNT) }
-    val recommendations = playlists.take(revealedCount)
-    val onVisibleRangeChanged: (IntRange) -> Unit = { range ->
-        // +1 bo pozycja 0 to nagłówek (Heading/statystyki), utwory zaczynają się od indeksu 1
-        if (range.last >= revealedCount && revealedCount < playlists.size) {
-            revealedCount = (revealedCount + RECOMMENDATIONS_PAGE_SIZE).coerceAtMost(playlists.size)
-        }
-    }
-    ScrollableLazyColumn(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(12.dp), onVisibleRangeChanged = onVisibleRangeChanged) {
-        item {
-        Heading(stringResource(Res.string.home_title), stringResource(Res.string.home_subtitle))
-        Spacer(Modifier.height(24.dp))
-        BoxWithConstraints(Modifier.fillMaxWidth()) {
-            if (maxWidth < 520.dp) {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    StatCard(stringResource(Res.string.stat_suggestions), recommendations.size.toString(), Modifier.weight(1f), compact = true)
-                    StatCard(stringResource(Res.string.stat_tracks), recommendations.flatMap { it.tracks }.distinctBy { it.id }.size.toString(), Modifier.weight(1f), compact = true)
-                }
-            } else Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                StatCard(stringResource(Res.string.stat_suggestions), recommendations.size.toString(), Modifier.weight(1f))
-                StatCard(stringResource(Res.string.stat_tracks), recommendations.flatMap { it.tracks }.distinctBy { it.id }.size.toString(), Modifier.weight(1f))
-                StatCard(stringResource(Res.string.stat_player), playerState.status.name.lowercase(), Modifier.weight(1f))
-            }
-        }
-        Spacer(Modifier.height(24.dp))
-        }
-        if (recommendations.isEmpty()) item { EmptyState(stringResource(Res.string.home_no_recommendations)) }
-        items(recommendations, key = { "home-${it.id}" }) { playlist ->
-            PlaylistCard(playlist) { onSelectPlaylist(playlist) }
-        }
-    }
-}
+// HomeScreen: patrz screens/HomeScreen.kt
 
-private const val INITIAL_RECOMMENDATIONS_COUNT = 10
-private const val RECOMMENDATIONS_PAGE_SIZE = 10
+// PlaylistsScreen i PlaylistDetails: patrz screens/PlaylistsScreen.kt
 
-@Composable
-private fun StatCard(label: String, value: String, modifier: Modifier, compact: Boolean = false) {
-    Card(modifier, backgroundColor = MaterialTheme.colors.surface, shape = RoundedCornerShape(12.dp)) {
-        Column(Modifier.padding(if (compact) 12.dp else 20.dp)) {
-            Text(label, color = Color(0xFF8D9BA6), fontSize = 13.sp)
-            Spacer(Modifier.height(8.dp))
-            Text(value, fontSize = if (compact) 20.sp else 25.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        }
-    }
-}
+// LikedScreen: patrz screens/LikedScreen.kt
 
-@Composable
-private fun PlaylistsScreen(playlists: List<Playlist>, onSelect: (Playlist) -> Unit, onCreatePlaylist: () -> Unit) {
-    Column(Modifier.fillMaxSize()) {
-        Heading(stringResource(Res.string.library_title), stringResource(Res.string.library_subtitle))
-        Spacer(Modifier.height(12.dp))
-        Button(onClick = onCreatePlaylist) { Text(stringResource(Res.string.create_playlist_title), maxLines = 1, softWrap = false) }
-        Spacer(Modifier.height(12.dp))
-        if (playlists.isEmpty()) EmptyState(stringResource(Res.string.no_playlists)) else ScrollableLazyColumn(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            items(playlists, key = { it.id }) { playlist -> PlaylistCard(playlist) { onSelect(playlist) } }
-        }
-    }
-}
+// SearchScreen i SearchScopeCheckbox: patrz screens/SearchScreen.kt
 
-@Composable
-private fun PlaylistCard(playlist: Playlist, onClick: () -> Unit) {
-    BoxWithConstraints(Modifier.fillMaxWidth()) {
-    val compact = maxWidth < 520.dp
-    Card(
-        Modifier.fillMaxWidth().clickable(onClick = onClick),
-        backgroundColor = MaterialTheme.colors.surface,
-        shape = RoundedCornerShape(10.dp),
-    ) {
-        Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-            Cover(playlist.name, playlist.imageUrl)
-            Spacer(Modifier.width(14.dp))
-            Column(Modifier.weight(1f)) {
-                Text(playlist.name, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                Text(playlist.description, color = Color(0xFF94A2AD), fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            }
-            if (!compact) Text(pluralStringResource(Res.plurals.track_count, playlist.tracks.size, playlist.tracks.size), color = Color(0xFF7F8E99), fontSize = 12.sp)
-        }
-    }
-    }
-}
-
-@Composable
-private fun ArtistSearchCard(artist: Artist, onPlay: () -> Unit) {
-    Card(
-        backgroundColor = MaterialTheme.colors.surface,
-        shape = RoundedCornerShape(10.dp),
-        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).clickable(onClick = onPlay),
-    ) {
-        Row(Modifier.fillMaxWidth().padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
-            TrackPlayButton(onPlay)
-            Spacer(Modifier.width(10.dp))
-            Text(artist.name, fontWeight = FontWeight.Bold)
-        }
-    }
-}
-
-@Composable
-private fun PlaylistDetails(playlist: Playlist, playerState: PlayerState, container: AppContainer, onAddToPlaylist: (Track) -> Unit) {
-    val scope = rememberCoroutineScope()
-    Column(Modifier.fillMaxSize()) {
-        Heading(playlist.name, playlist.description)
-        Spacer(Modifier.height(16.dp))
-        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(onClick = { scope.launch { container.audioPlayer.setQueue(playlist.tracks); container.audioPlayer.play() } }) { Text(stringResource(Res.string.play_all), maxLines = 1, softWrap = false) }
-            OutlinedButton(onClick = { scope.launch { container.audioPlayer.appendToQueue(playlist.tracks) } }) { Text(stringResource(Res.string.add_all_to_queue), maxLines = 1, softWrap = false) }
-        }
-        Spacer(Modifier.height(16.dp))
-        val onVisibleRangeChanged = rememberPrefetchHandler(playlist.tracks, container)
-        ScrollableLazyColumn(Modifier.fillMaxSize(), onVisibleRangeChanged = onVisibleRangeChanged) {
-            items(playlist.tracks, key = { it.id }) { track ->
-                TrackRow(track, playerState.currentTrack?.id == track.id, loading = playerState.status == PlayerStatus.LOADING, onPlay = {
-                    scope.launch {
-                        container.audioPlayer.setQueue(listOf(track), 0)
-                        container.audioPlayer.play()
-                    }
-                }, titleAction = {
-                    TrackPlayButton { scope.launch {
-                        container.audioPlayer.setQueue(listOf(track), 0)
-                        container.audioPlayer.play()
-                    } }
-                }, subtitleAction = {
-                    TrackQueueButton { scope.launch { container.audioPlayer.appendToQueue(listOf(track)) } }
-                }, onLongPress = { onAddToPlaylist(track) })
-            }
-        }
-    }
-}
-
-@Composable
-private fun LikedScreen(
-    tracks: List<Track>,
-    loading: Boolean,
-    error: String?,
-    playerState: PlayerState,
-    container: AppContainer,
-    onAddToPlaylist: (Track) -> Unit,
-) {
-    val scope = rememberCoroutineScope()
-    Column(Modifier.fillMaxSize()) {
-        Heading(stringResource(Res.string.liked_title))
-        Spacer(Modifier.height(16.dp))
-        when {
-            loading -> CircularProgressIndicator(Modifier.align(Alignment.CenterHorizontally))
-            error != null -> ErrorState(error)
-            tracks.isEmpty() -> EmptyState(stringResource(Res.string.liked_empty))
-            else -> {
-                Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(onClick = {
-                        scope.launch {
-                            container.audioPlayer.setQueue(tracks)
-                            container.audioPlayer.play()
-                        }
-                    }) { Text(stringResource(Res.string.liked_play_all, tracks.size), maxLines = 1, softWrap = false) }
-                    OutlinedButton(onClick = { scope.launch { container.audioPlayer.appendToQueue(tracks) } }) { Text(stringResource(Res.string.add_all_to_queue), maxLines = 1, softWrap = false) }
-                }
-                Spacer(Modifier.height(14.dp))
-                val onVisibleRangeChanged = rememberPrefetchHandler(tracks, container)
-                ScrollableLazyColumn(Modifier.fillMaxSize(), scrollToIndex = tracks.indexOfFirst { it.id == playerState.currentTrack?.id }.takeIf { it >= 0 }, onVisibleRangeChanged = onVisibleRangeChanged) {
-                    items(tracks, key = { "liked-${it.id}" }) { track ->
-                        TrackRow(track, playerState.currentTrack?.id == track.id, loading = playerState.status == PlayerStatus.LOADING, onPlay = {
-                            scope.launch {
-                                container.audioPlayer.setQueue(listOf(track), 0)
-                                container.audioPlayer.play()
-                            }
-                        }, titleAction = {
-                            TrackPlayButton { scope.launch {
-                                container.audioPlayer.setQueue(listOf(track), 0)
-                                container.audioPlayer.play()
-                            } }
-                        }, subtitleAction = {
-                            TrackQueueButton { scope.launch { container.audioPlayer.appendToQueue(listOf(track)) } }
-                        }, onLongPress = { onAddToPlaylist(track) })
-                    }
-                }
-            }
-        }
-    }
-}
-
-// TrackRow, TrackActionButton/PlayButton/QueueButton i BufferingIndicator:
-// patrz TrackComponents.kt
-
-@Composable
-private fun SearchScreen(
-    container: AppContainer,
-    state: SearchViewState,
-    onStateChange: (SearchViewState) -> Unit,
-    onPlaylist: (Playlist) -> Unit,
-    onAddToPlaylist: (Track) -> Unit,
-) {
-    val scope = rememberCoroutineScope()
-    val playerState by container.audioPlayer.state.collectAsState()
-    val currentState by rememberUpdatedState(state)
-    val searchUnknownError = stringResource(Res.string.search_unknown_error)
-    val settings by container.playbackSettings.settings.collectAsState()
-    suspend fun playTrack(track: Track) {
-        container.audioPlayer.setQueue(listOf(track), 0)
-        container.audioPlayer.play()
-    }
-
-    // Bez tego przełączenie DataSource zostawiało na ekranie wyniki wyszukiwania z
-    // poprzedniego backendu — kliknięcie takiego wyniku wysyłało ID z jednego źródła
-    // (np. Spotify) do drugiego (ListenBrainz), które go nie rozpoznaje.
-    LaunchedEffect(settings.dataSource) {
-        onStateChange(currentState.copy(result = SearchResult(emptyList(), emptyList())))
-    }
-
-    // Filtry (searchTracks/Artists/Playlists) tylko zawężają już pobrane wyniki lokalnie
-    // (patrz visibleTracks/visiblePlaylists niżej) — nie powinny wywoływać ponownego zapytania sieciowego.
-    LaunchedEffect(state.query, container.spotifyRepository, settings.dataSource) {
-        val submittedQuery = state.query
-        if (submittedQuery.isBlank()) {
-            onStateChange(currentState.copy(
-                result = SearchResult(emptyList(), emptyList()),
-                error = null,
-                lastExecutedQuery = submittedQuery,
-            ))
-            return@LaunchedEffect
-        }
-        delay(400)
-        // Spotify nie zna składni "|"/"&" — do zapytania serwerowego wysyłamy same słowa,
-        // dokładne dopasowanie OR/AND liczymy potem lokalnie (visibleTracks niżej).
-        val serverSearchTerm = submittedQuery.split(Regex("[|&\\s]+")).filter(String::isNotBlank).distinct().joinToString(" ")
-        runCatching { container.spotifyRepository.search(serverSearchTerm) }
-            .onSuccess {
-                if (currentState.query == submittedQuery) {
-                    onStateChange(currentState.copy(result = it, error = null, lastExecutedQuery = submittedQuery))
-                }
-            }
-            .onFailure {
-                if (currentState.query == submittedQuery) {
-                    onStateChange(currentState.copy(error = it.message ?: searchUnknownError, lastExecutedQuery = submittedQuery))
-                }
-            }
-    }
-
-    Column(Modifier.fillMaxSize()) {
-        
-        OutlinedTextField(
-            value = state.query,
-            onValueChange = { onStateChange(state.copy(query = it)) },
-            label = { Text(stringResource(Res.string.search_placeholder)) },
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true,
-        )
-        BoxWithConstraints(Modifier.fillMaxWidth()) {
-            if (maxWidth < 380.dp) {
-                Row(
-                    modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    SearchScopeCheckbox(stringResource(Res.string.filter_tracks), state.searchTracks) { onStateChange(state.copy(searchTracks = it)) }
-                    SearchScopeCheckbox(stringResource(Res.string.filter_artists), state.searchArtists) { onStateChange(state.copy(searchArtists = it)) }
-                    SearchScopeCheckbox(stringResource(Res.string.filter_playlists), state.searchPlaylists) { onStateChange(state.copy(searchPlaylists = it)) }
-                }
-            } else {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    SearchScopeCheckbox(stringResource(Res.string.filter_tracks), state.searchTracks) { onStateChange(state.copy(searchTracks = it)) }
-                    SearchScopeCheckbox(stringResource(Res.string.filter_artists), state.searchArtists) { onStateChange(state.copy(searchArtists = it)) }
-                    SearchScopeCheckbox(stringResource(Res.string.filter_playlists), state.searchPlaylists) { onStateChange(state.copy(searchPlaylists = it)) }
-                }
-            }
-        }
-        Spacer(Modifier.height(10.dp))
-        // "|" rozdziela grupy OR, w każdej grupie "&" albo spacja rozdziela wymagane słowa (AND).
-        val queryOrGroups = state.query.split("|").map { group ->
-            group.trim().split(Regex("[&\\s]+")).filter(String::isNotBlank)
-        }.filter(List<String>::isNotEmpty)
-        val visibleTracks = state.result.tracks.filter { track ->
-            queryOrGroups.isEmpty() || queryOrGroups.any { andWords ->
-                andWords.all { word ->
-                    val titleMatches = state.searchTracks && track.title.contains(word, ignoreCase = true)
-                    val artistMatches = state.searchArtists && track.artists.any { it.contains(word, ignoreCase = true) }
-                    titleMatches || artistMatches
-                }
-            }
-        }
-        val visiblePlaylists = if (state.searchPlaylists) state.result.playlists else emptyList()
-        val searchPlaybackSettings by container.playbackSettings.settings.collectAsState()
-        LaunchedEffect(visibleTracks, searchPlaybackSettings.prefetchEnabled) {
-            if (searchPlaybackSettings.prefetchEnabled) container.audioPlayer.prefetch(visibleTracks)
-        }
-        if (state.error != null) ErrorState(state.error) else if (state.query.isNotBlank() && visibleTracks.isEmpty() && visiblePlaylists.isEmpty()) {
-            EmptyState(stringResource(Res.string.search_no_results, state.query))
-        } else {
-            ScrollableLazyColumn(Modifier.fillMaxSize()) {
-                if (visiblePlaylists.isNotEmpty()) {
-                    item { SectionLabel(stringResource(Res.string.section_playlists)) }
-                    items(visiblePlaylists, key = { "p-${it.id}" }) { PlaylistCard(it) { onPlaylist(it) } }
-                    item { Spacer(Modifier.height(18.dp)) }
-                }
-                if (visibleTracks.isNotEmpty()) {
-                    item { SectionLabel(stringResource(Res.string.section_tracks)) }
-                    items(visibleTracks, key = { "t-${it.id}" }) { track ->
-                        TrackRow(track, playerState.currentTrack?.id == track.id, loading = playerState.status == PlayerStatus.LOADING, onPlay = {
-                            scope.launch { playTrack(track) }
-                        }, titleAction = {
-                            TrackPlayButton {
-                                scope.launch { playTrack(track) }
-                            }
-                            }, subtitleAction = {
-                            TrackQueueButton { scope.launch { container.audioPlayer.appendToQueue(listOf(track)) } }
-                        }, onLongPress = { onAddToPlaylist(track) })
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun SearchScopeCheckbox(label: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier.clickable { onCheckedChange(!checked) },
-    ) {
-        Checkbox(checked = checked, onCheckedChange = onCheckedChange)
-        Text(label, fontSize = 12.sp, color = Color(0xFFD5DCE1))
-    }
-}
-
-// DiagnosticsScreen i LogRow: patrz screens/DiagnosticsScreen.kt
-
-/** Komplet przycisków sterowania — ten sam w pasku rozwiniętym i zwiniętym. */
-// CompactTransportRow, CompactPlayerBar, PlayerBar i helpery opisu strumienia:
-// patrz PlayerBar.kt
-
-@Composable
-private fun QueueScreen(state: PlayerState, container: AppContainer) {
-    val scope = rememberCoroutineScope()
-    Column(Modifier.fillMaxSize()) {
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.weight(1f)) { Heading(stringResource(Res.string.nav_queue)) }
-            if (state.queue.isNotEmpty()) {
-                OutlinedButton(onClick = { scope.launch { container.audioPlayer.clearQueue() } }) {
-                    Text(stringResource(Res.string.clear_queue))
-                }
-            }
-        }
-        Spacer(Modifier.height(14.dp))
-        if (state.queue.isEmpty()) {
-            EmptyState(stringResource(Res.string.queue_empty))
-        } else {
-            // Klucz bez indeksu, żeby zmiana kolejności (shuffle, usunięcie utworu) nie
-            // unieważniała wszystkich kolejnych wierszy. Ten sam utwór może wystąpić w
-            // kolejce wielokrotnie, więc numerujemy powtórzenia.
-            val queueKeys = remember(state.queue) {
-                val seen = mutableMapOf<String, Int>()
-                state.queue.map { track ->
-                    val occurrence = seen.getOrElse(track.id) { 0 }
-                    seen[track.id] = occurrence + 1
-                    "queue-${track.id}-$occurrence"
-                }
-            }
-            ScrollableLazyColumn(Modifier.fillMaxSize(), scrollToIndex = state.currentIndex) {
-                    items(state.queue.indices.toList(), key = { index -> queueKeys[index] }) { index ->
-                        val item = state.queue[index]
-                        val active = index == state.currentIndex
-                        Row(
-                            Modifier.fillMaxWidth()
-                                .background(if (active) Color(0xFF203129) else Color.Transparent, RoundedCornerShape(8.dp))
-                                .clickable {
-                                    scope.launch { container.audioPlayer.playAt(index) }
-                                }
-                                .padding(horizontal = 12.dp, vertical = 10.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Text(
-                                when {
-                                    !active -> "${index + 1}."
-                                    state.status == PlayerStatus.LOADING -> "⏳︎"
-                                    state.status == PlayerStatus.ERROR -> "⚠︎"
-                                    else -> "▶"
-                                },
-                                color = when {
-                                    !active -> Color(0xFF7D8B95)
-                                    state.status == PlayerStatus.ERROR -> Color(0xFFFF7B7B)
-                                    else -> MaterialTheme.colors.primary
-                                },
-                                modifier = Modifier.width(38.dp),
-                            )
-                            Column(Modifier.weight(1f)) {
-                                Text(item.title, fontWeight = if (active) FontWeight.Bold else FontWeight.Normal, maxLines = 3, overflow = TextOverflow.Clip, softWrap = true, modifier = Modifier.fillMaxWidth())
-                                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                                    Text(
-                                        buildString {
-                                            append(item.artists.joinToString())
-                                            // Utwory rozwiązywane z YouTube często nie mają prawdziwego albumu —
-                                            // pole album bywa wtedy wypełnione tytułem utworu, co dawało widoczne powtórzenie.
-                                            if (item.album.isNotBlank() && !item.album.equals(item.title, ignoreCase = true)) {
-                                                append(" • ${item.album}")
-                                            }
-                                        },
-                                        color = Color(0xFF8F9CA6),
-                                        fontSize = 12.sp,
-                                        maxLines = 2,
-                                        overflow = TextOverflow.Ellipsis,
-                                        modifier = Modifier.weight(1f),
-                                    )
-                                    Spacer(Modifier.width(8.dp))
-                                    Text(formatTime(item.durationMs), color = Color(0xFF8F9CA6), fontSize = 12.sp)
-                                }
-                            }
-                            Text(
-                                "✕",
-                                color = Color(0xFF7D8B95),
-                                modifier = Modifier.size(32.dp).clickable { scope.launch { container.audioPlayer.removeFromQueue(index) } },
-                                textAlign = TextAlign.Center,
-                            )
-                        }
-                    }
-            }
-        }
-    }
-}
-
-// Cover/Heading/SectionLabel/EmptyState/ErrorState oraz formatery czasu i rozmiaru:
-// patrz CommonComponents.kt
+// QueueScreen: patrz screens/QueueScreen.kt
