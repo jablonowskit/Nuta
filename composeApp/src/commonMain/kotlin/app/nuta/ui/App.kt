@@ -333,7 +333,7 @@ private fun NutaAppContent(container: AppContainer) {
             likedLoading = false
         }
 
-        LaunchedEffect(playerState.currentTrack?.id, container.spotifyRepository) {
+        LaunchedEffect(playerState.currentTrack?.id, container.spotifyRepository, playbackSettings.dataSource) {
             val trackId = playerState.currentTrack?.id
             currentTrackLiked = false
             if (trackId == null) return@LaunchedEffect
