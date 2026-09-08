@@ -16,6 +16,13 @@ playlist w YouTube i nie wymaga logowania do YouTube.
 w apce — wystarczy publiczny nick i osobisty token API wygenerowany ręcznie
 na listenbrainz.org/settings, wklejony w Ustawieniach (bez OAuth/WebView).
 
+W trybie ListenBrainz Nuta **zgłasza odsłuchania** (scrobbling) z powrotem do
+serwisu — utwór zaliczany jest po przesłuchaniu połowy długości albo po
+4 minutach (reguła ListenBrainz), a w trakcie odtwarzania profil pokazuje
+„słucham teraz". To warunek działania rekomendacji: ListenBrainz generuje
+`cf/recommendation` oraz playlisty Daily/Weekly Jams wyłącznie z historii
+odsłuchań. W trybie Spotify nie wysyłamy niczego.
+
 Stack: **Kotlin Multiplatform + Compose Multiplatform**, toolchain Java 25 LTS,
 Gradle Wrapper 9.6.1.
 
@@ -151,6 +158,11 @@ AudioPlayer                   — Media3 (Android) / mpv przez IPC (desktop) / F
 Normalizacja głośności        — działa na samym sygnale audio, niezależnie od źródła:
                                  mpv filtr `loudnorm` (desktop) / `LoudnessEnhancer` (Android)
 ```
+
+Obok tej ścieżki działa `ListenBrainzScrobbler` — obserwuje `AudioPlayer.state`
+w `commonMain` (więc jedna implementacja dla Androida i desktopu) i zgłasza
+odsłuchania do ListenBrainz, gdy aktywnym `DataSource` jest ListenBrainz.
+Nie ingeruje w odtwarzanie: błędy sieci są tylko logowane.
 
 Wszystkie kontrakty (`SpotifyRepository`, `YouTubeMediaService`, `AudioPlayer`) są
 zdefiniowane w `commonMain/domain/Contracts.kt` / `commonMain/youtube/YouTubeContracts.kt`

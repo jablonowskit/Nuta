@@ -9,6 +9,7 @@ import app.nuta.core.logging.MemoryLogger
 import app.nuta.data.fake.FakeSpotifyRepository
 import app.nuta.domain.DataSourceSelectingRepository
 import app.nuta.listenbrainz.ListenBrainzRepository
+import app.nuta.listenbrainz.ListenBrainzScrobbler
 import app.nuta.musicbrainz.MusicBrainzRepository
 import app.nuta.player.MpvAudioPlayer
 import app.nuta.platform.RotatingJsonLogSink
@@ -54,6 +55,9 @@ fun main() {
     val audioPlayer = MpvAudioPlayer(scope, youtubeMediaService, logger, playbackSettings)
     val musicBrainzRepository = MusicBrainzRepository(logger)
     val listenBrainzRepository = ListenBrainzRepository(playbackSettings, musicBrainzRepository, logger)
+    // Scrobblowanie sam sprawdza dataSource przy każdym utworze, więc podłączamy je raz na
+    // starcie niezależnie od aktualnie wybranego źródła danych.
+    ListenBrainzScrobbler(playbackSettings, logger).attach(audioPlayer, scope)
     val tokenStore = SpotifyTestTokenStore(logger)
     val restoredToken = tokenStore.load()
     val container = AppContainer(
