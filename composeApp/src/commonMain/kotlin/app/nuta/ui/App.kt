@@ -137,7 +137,7 @@ internal fun ScrollableLazyColumn(
 
 /** Eksperymentalny prefetch: śledzi widoczny zakres listy (debounced) i rozwiązuje strumień dla tych utworów z wyprzedzeniem. */
 @Composable
-private fun rememberPrefetchHandler(tracks: List<Track>, container: AppContainer): (IntRange) -> Unit {
+internal fun rememberPrefetchHandler(tracks: List<Track>, container: AppContainer): (IntRange) -> Unit {
     val settings by container.playbackSettings.settings.collectAsState()
     var visibleRange by remember { mutableStateOf(0..2) }
     LaunchedEffect(visibleRange, tracks, settings.prefetchEnabled) {
