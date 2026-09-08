@@ -89,7 +89,8 @@ class FakeAudioPlayer(
 
     override suspend fun seekTo(positionMs: Long) {
         val duration = _state.value.durationMs
-        _state.value = _state.value.copy(positionMs = positionMs.coerceIn(0L, duration))
+        val target = if (duration > 0) positionMs.coerceIn(0L, duration) else positionMs.coerceAtLeast(0L)
+        _state.value = _state.value.copy(positionMs = target)
         logger.debug("FakeAudioPlayer", "seek", "Zmieniono pozycję", fields = currentFields() + ("positionMs" to _state.value.positionMs.toString()))
     }
 

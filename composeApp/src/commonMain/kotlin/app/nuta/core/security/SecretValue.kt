@@ -12,16 +12,21 @@ class SecretValue private constructor(private val value: String) {
     override fun toString(): String = "[REDACTED]"
 
     /**
-     * Porównanie stałoczasowe — zwykłe `==` na stringach przerywa na pierwszej różnicy,
-     * co przy porównywaniu sekretów daje wymierny kanał czasowy.
+     * Porównanie stałoczasowe — zwykłe `==` na stringach przerywa na pierwszej różnicy, a
+     * wcześniejsza wersja tej metody przerywała wcześnie przy różnej długości — oba warianty
+     * dają wymierny kanał czasowy. Pętla zawsze przechodzi przez dłuższy z dwóch ciągów, a
+     * niezgodność długości jest wliczona w wynik zamiast powodować wcześniejszy powrót.
      */
     override fun equals(other: Any?): Boolean {
         if (other !is SecretValue) return false
         val a = value
         val b = other.value
-        if (a.length != b.length) return false
-        var diff = 0
-        for (index in a.indices) diff = diff or (a[index].code xor b[index].code)
+        var diff = a.length xor b.length
+        for (index in 0 until maxOf(a.length, b.length)) {
+            val ca = if (index < a.length) a[index].code else 0
+            val cb = if (index < b.length) b[index].code else 0
+            diff = diff or (ca xor cb)
+        }
         return diff == 0
     }
 
