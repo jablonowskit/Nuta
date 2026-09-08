@@ -73,14 +73,13 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.platform.LocalDensity
 import org.jetbrains.compose.resources.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
 import app.nuta.resources.*
 import app.nuta.AppContainer
-import app.nuta.core.logging.LogEvent
-import app.nuta.core.logging.LogLevel
+import app.nuta.ui.screens.DiagnosticsScreen
+import app.nuta.ui.screens.SettingsScreen
 import app.nuta.core.models.Destination
 import app.nuta.core.models.Artist
 import app.nuta.core.models.PlayerState
@@ -88,13 +87,6 @@ import app.nuta.core.models.PlayerStatus
 import app.nuta.core.models.Playlist
 import app.nuta.core.models.SearchResult
 import app.nuta.core.models.Track
-import app.nuta.settings.BufferSize
-import app.nuta.settings.LoudnessNormalization
-import app.nuta.settings.YouTubeClientProfile
-import app.nuta.settings.AudioSource
-import app.nuta.settings.DataSource
-import app.nuta.settings.CodecPreference
-import app.nuta.settings.StreamQuality
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
@@ -110,7 +102,7 @@ private val NutaColors = darkColors(
     onSurface = Color(0xFFE8EDF2),
 )
 
-private data class SearchViewState(
+internal data class SearchViewState(
     val query: String = "",
     val result: SearchResult = SearchResult(emptyList(), emptyList()),
     val error: String? = null,
@@ -121,7 +113,7 @@ private data class SearchViewState(
 )
 
 @Composable
-private fun ScrollableLazyColumn(
+internal fun ScrollableLazyColumn(
     modifier: Modifier = Modifier,
     reverseLayout: Boolean = false,
     verticalArrangement: Arrangement.Vertical = Arrangement.Top,
@@ -649,224 +641,7 @@ private fun BottomNavigation(selected: Destination, onSelect: (Destination) -> U
     }
 }
 
-@Composable
-private fun SettingsScreen(container: AppContainer) {
-    val settings by container.playbackSettings.settings.collectAsState()
-    ScrollableLazyColumn(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        item { Heading(stringResource(Res.string.settings_title), stringResource(Res.string.settings_subtitle)) }
-        item {
-            SettingsGroup(stringResource(Res.string.font_size_title), stringResource(Res.string.font_size_desc)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("${(settings.fontScale * 100).toInt()}%", modifier = Modifier.width(48.dp))
-                    Slider(
-                        value = settings.fontScale,
-                        onValueChange = { container.playbackSettings.update(settings.copy(fontScale = it.coerceIn(0.5f, 1f))) },
-                        valueRange = 0.5f..1f,
-                        steps = 4,
-                        modifier = Modifier.weight(1f),
-                    )
-                }
-            }
-        }
-        item {
-            SettingsGroup(stringResource(Res.string.quality_title), stringResource(Res.string.quality_desc)) {
-                SettingOptions(
-                    options = listOf(
-                        StreamQuality.AUTO to stringResource(Res.string.option_auto),
-                        StreamQuality.DATA_SAVER to stringResource(Res.string.quality_data_saver),
-                        StreamQuality.STANDARD to stringResource(Res.string.option_standard),
-                        StreamQuality.BEST to stringResource(Res.string.quality_best),
-                    ),
-                    selected = settings.quality,
-                ) { container.playbackSettings.update(settings.copy(quality = it)) }
-            }
-        }
-        item {
-            SettingsGroup(stringResource(Res.string.codec_title), stringResource(Res.string.codec_desc)) {
-                SettingOptions(
-                    options = listOf(CodecPreference.AUTO to stringResource(Res.string.option_auto), CodecPreference.AAC to "AAC", CodecPreference.OPUS to "Opus"),
-                    selected = settings.codec,
-                ) { container.playbackSettings.update(settings.copy(codec = it)) }
-            }
-        }
-        item {
-            SettingsGroup(stringResource(Res.string.buffer_title), stringResource(Res.string.buffer_desc)) {
-                SettingOptions(
-                    options = listOf(BufferSize.SMALL to stringResource(Res.string.buffer_small), BufferSize.STANDARD to stringResource(Res.string.option_standard), BufferSize.LARGE to stringResource(Res.string.buffer_large)),
-                    selected = settings.bufferSize,
-                ) { container.playbackSettings.update(settings.copy(bufferSize = it)) }
-            }
-        }
-        item {
-            SettingsGroup(stringResource(Res.string.loudness_title), stringResource(Res.string.loudness_desc)) {
-                SettingOptions(
-                    options = listOf(
-                        LoudnessNormalization.OFF to stringResource(Res.string.loudness_off),
-                        LoudnessNormalization.GENTLE to stringResource(Res.string.loudness_gentle),
-                        LoudnessNormalization.NORMAL to stringResource(Res.string.loudness_normal),
-                    ),
-                    selected = settings.loudnessNormalization,
-                ) { container.playbackSettings.update(settings.copy(loudnessNormalization = it)) }
-            }
-        }
-        item {
-            SettingsGroup(
-                "Źródło audio",
-                "Skąd rozwiązywać strumień audio dla utworów. Automatycznie próbuje YouTube, a przy błędzie samo przełącza się na SoundCloud dla tego utworu. SoundCloud ma mniejszą bibliotekę i niższą jakość (128kbps mp3), ale nie podlega tym samym ograniczeniom co YouTube.",
-            ) {
-                SettingOptions(
-                    options = listOf(
-                        AudioSource.AUTO to "AUTO",
-                        AudioSource.YOUTUBE to "YouTube",
-                        AudioSource.SOUNDCLOUD to "SoundCloud",
-                    ),
-                    selected = settings.audioSource,
-                ) { container.playbackSettings.update(settings.copy(audioSource = it)) }
-            }
-        }
-        item {
-            SettingsGroup(
-                "Źródło danych",
-                "Skąd brać wyszukiwanie, playlisty, ulubione i rekomendacje. ListenBrainz całkowicie zastępuje Spotify (wyszukiwanie przez MusicBrainz, reszta przez ListenBrainz) — audio nadal leci z YouTube/SoundCloud jak dziś.",
-            ) {
-                SettingOptions(
-                    options = listOf(
-                        DataSource.SPOTIFY to "Spotify",
-                        DataSource.LISTENBRAINZ to "ListenBrainz",
-                    ),
-                    selected = settings.dataSource,
-                ) { container.playbackSettings.update(settings.copy(dataSource = it)) }
-                if (settings.dataSource == DataSource.LISTENBRAINZ) {
-                    Spacer(Modifier.height(10.dp))
-                    OutlinedTextField(
-                        value = settings.listenBrainzUsername,
-                        onValueChange = { container.playbackSettings.update(settings.copy(listenBrainzUsername = it)) },
-                        label = { Text("Nazwa użytkownika ListenBrainz") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                    Spacer(Modifier.height(10.dp))
-                    OutlinedTextField(
-                        value = settings.listenBrainzApiToken,
-                        onValueChange = { container.playbackSettings.update(settings.copy(listenBrainzApiToken = it)) },
-                        label = { Text("Token API ListenBrainz") },
-                        singleLine = true,
-                        visualTransformation = PasswordVisualTransformation(),
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                    Spacer(Modifier.height(6.dp))
-                    OutlinedButton(onClick = { openUrlInBrowser("https://listenbrainz.org/settings/") }) {
-                        Text("Wygeneruj token")
-                    }
-                }
-            }
-        }
-        item {
-            SettingsGroup(
-                "Profil klienta YouTube",
-                "Który klient próbujemy przy rozwiązywaniu strumienia audio. YouTube regularnie blokuje różne profile w różnym tempie — AUTO próbuje ich po kolei, wybór konkretnego wymusza tylko ten jeden (przydatne do diagnozowania).",
-            ) {
-                SettingOptions(
-                    options = listOf(
-                        YouTubeClientProfile.AUTO to "AUTO",
-                        YouTubeClientProfile.VISIONOS to "VISIONOS",
-                        YouTubeClientProfile.ANDROID_VR to "ANDROID_VR",
-                    ),
-                    selected = settings.youtubeClientProfile,
-                ) { container.playbackSettings.update(settings.copy(youtubeClientProfile = it)) }
-            }
-        }
-        item {
-            SettingsGroup(stringResource(Res.string.prefetch_title), stringResource(Res.string.prefetch_desc)) {
-                SettingOptions(
-                    options = listOf(false to stringResource(Res.string.loudness_off), true to stringResource(Res.string.option_enabled)),
-                    selected = settings.prefetchEnabled,
-                ) { container.playbackSettings.update(settings.copy(prefetchEnabled = it)) }
-            }
-        }
-        item {
-            var cacheBytes by remember { mutableStateOf<Long?>(null) }
-            var clearedJustNow by remember { mutableStateOf(false) }
-            var refreshTrigger by remember { mutableStateOf(0) }
-            val scope = rememberCoroutineScope()
-            val cacheSizeUnknownLabel = stringResource(Res.string.cache_size_unknown)
-            LaunchedEffect(refreshTrigger) {
-                cacheBytes = null
-                cacheBytes = container.audioPlayer.cacheSizeBytes()
-            }
-            SettingsGroup(stringResource(Res.string.cache_title), stringResource(Res.string.cache_desc)) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text(
-                        cacheBytes?.let(::formatBytes) ?: cacheSizeUnknownLabel,
-                        color = Color(0xFF8D9BA6),
-                        modifier = Modifier.weight(1f),
-                    )
-                    OutlinedButton(onClick = {
-                        scope.launch {
-                            container.audioPlayer.clearCache()
-                            clearedJustNow = true
-                            refreshTrigger += 1
-                        }
-                    }) { Text(stringResource(Res.string.cache_clear_button)) }
-                }
-                if (clearedJustNow) {
-                    Spacer(Modifier.height(6.dp))
-                    Text(stringResource(Res.string.cache_cleared), color = Color(0xFF8FE9AD), fontSize = 12.sp)
-                }
-                Spacer(Modifier.height(10.dp))
-                Text(stringResource(Res.string.cache_limit_label), fontSize = 12.sp)
-                SettingOptions(
-                    options = listOf(50 to "50 MB", 100 to "100 MB", 150 to "150 MB", 300 to "300 MB"),
-                    selected = settings.cacheSizeMb,
-                ) { container.playbackSettings.update(settings.copy(cacheSizeMb = it)) }
-                Text(stringResource(Res.string.cache_limit_restart_note), color = Color(0xFF8D9BA6), fontSize = 11.sp)
-            }
-        }
-        item {
-            Text(
-                stringResource(Res.string.settings_footer),
-                color = Color(0xFF8D9BA6),
-                fontSize = 12.sp,
-                modifier = Modifier.padding(vertical = 8.dp),
-            )
-            Text(
-                "Nuta • by jablonowskit",
-                color = Color(0xFF66737D),
-                fontSize = 11.sp,
-            )
-        }
-    }
-}
-
-@Composable
-private fun SettingsGroup(title: String, description: String, content: @Composable () -> Unit) {
-    Card(backgroundColor = Color(0xFF182027), shape = RoundedCornerShape(10.dp), modifier = Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(14.dp)) {
-            Text(title, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-            Text(description, color = Color(0xFF8D9BA6), fontSize = 12.sp)
-            Spacer(Modifier.height(10.dp))
-            content()
-        }
-    }
-}
-
-@Composable
-private fun <T> SettingOptions(options: List<Pair<T, String>>, selected: T, onSelect: (T) -> Unit) {
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        options.forEach { (value, label) ->
-            val active = value == selected
-            OutlinedButton(
-                onClick = { onSelect(value) },
-                modifier = Modifier.weight(1f),
-                colors = ButtonDefaults.outlinedButtonColors(
-                    backgroundColor = if (active) Color(0xFF2F6B45) else Color.Transparent,
-                    contentColor = if (active) Color.White else Color(0xFFB8C2C9),
-                ),
-                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 4.dp, vertical = 8.dp),
-            ) { Text(label, fontSize = 11.sp, maxLines = 1) }
-        }
-    }
-}
+// SettingsScreen, SettingsGroup i SettingOptions: patrz screens/SettingsScreen.kt
 
 @Composable
 private fun Sidebar(selected: Destination, onSelect: (Destination) -> Unit) {
@@ -1337,54 +1112,7 @@ private fun SearchScopeCheckbox(label: String, checked: Boolean, onCheckedChange
     }
 }
 
-@Composable
-private fun DiagnosticsScreen(container: AppContainer) {
-    val events by container.logger.events.collectAsState()
-    val level by container.logger.minimumLevel.collectAsState()
-    val scope = rememberCoroutineScope()
-    Column(Modifier.fillMaxSize()) {
-        Heading(stringResource(Res.string.diagnostics_title), stringResource(Res.string.diagnostics_subtitle))
-        Spacer(Modifier.height(14.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(stringResource(Res.string.log_level), color = Color(0xFF9AA7B0))
-            listOf(LogLevel.INFO, LogLevel.DEBUG, LogLevel.TRACE).forEach { item ->
-                OutlinedButton(
-                    onClick = { container.logger.setMinimumLevel(item) },
-                    colors = ButtonDefaults.outlinedButtonColors(backgroundColor = if (level == item) Color(0xFF263A30) else Color.Transparent),
-                ) { Text(item.name) }
-            }
-            Spacer(Modifier.weight(1f))
-            OutlinedButton(onClick = { scope.launch { container.audioPlayer.simulateError() } }) { Text(stringResource(Res.string.simulate_error)) }
-            OutlinedButton(onClick = container.logger::clear) { Text(stringResource(Res.string.clear)) }
-        }
-        Spacer(Modifier.height(14.dp))
-        Card(Modifier.fillMaxWidth().weight(1f), backgroundColor = Color(0xFF0C1013), shape = RoundedCornerShape(10.dp)) {
-            if (events.isEmpty()) EmptyState(stringResource(Res.string.no_events)) else ScrollableLazyColumn(Modifier.padding(10.dp).fillMaxSize(), reverseLayout = true) {
-                items(events.reversed()) { LogRow(it) }
-            }
-        }
-    }
-}
-
-@Composable
-private fun LogRow(item: LogEvent) {
-    val color = when (item.level) {
-        LogLevel.ERROR -> Color(0xFFFF7B7B)
-        LogLevel.WARN -> Color(0xFFFFD37B)
-        LogLevel.INFO -> Color(0xFF8BE9A8)
-        LogLevel.DEBUG -> Color(0xFF9BA8FF)
-        LogLevel.TRACE -> Color(0xFF88949D)
-    }
-    Column(Modifier.fillMaxWidth().padding(vertical = 5.dp)) {
-        Row {
-            Text(item.level.name.padEnd(5), color = color, fontSize = 11.sp, fontWeight = FontWeight.Bold, modifier = Modifier.width(55.dp))
-            Text(item.module, color = Color(0xFFC4CED5), fontSize = 11.sp, modifier = Modifier.width(150.dp))
-            Text(item.event, color = Color(0xFF93A1AB), fontSize = 11.sp)
-        }
-        Text(item.message, color = Color(0xFFD5DCE1), fontSize = 12.sp)
-        if (item.fields.isNotEmpty()) Text(item.fields.entries.joinToString("  ") { "${it.key}=${it.value}" }, color = Color(0xFF6F7F89), fontSize = 10.sp)
-    }
-}
+// DiagnosticsScreen i LogRow: patrz screens/DiagnosticsScreen.kt
 
 /** Komplet przycisków sterowania — ten sam w pasku rozwiniętym i zwiniętym. */
 @Composable
@@ -1836,62 +1564,5 @@ private fun QueueScreen(state: PlayerState, container: AppContainer) {
     }
 }
 
-@Composable
-private fun Cover(seed: String, imageUrl: String? = null, modifier: Modifier = Modifier.size(54.dp)) {
-    val colors = listOf(Color(0xFF375B4A), Color(0xFF404A75), Color(0xFF704858), Color(0xFF685C38))
-    val color = colors[(seed.hashCode() and Int.MAX_VALUE) % colors.size]
-    Box(modifier.background(color, RoundedCornerShape(8.dp)), contentAlignment = Alignment.Center) {
-        Text(seed.take(1).uppercase(), fontWeight = FontWeight.Bold, fontSize = 20.sp)
-        imageUrl?.let { PlatformRemoteImage(it, seed, Modifier.fillMaxSize()) }
-    }
-}
-
-@Composable
-private fun Heading(title: String, subtitle: String? = null) {
-    Column {
-        Text(title, fontSize = 28.sp, fontWeight = FontWeight.Bold)
-        subtitle?.takeIf(String::isNotBlank)?.let {
-            Spacer(Modifier.height(4.dp))
-            Text(it, color = Color(0xFF8D9BA6))
-        }
-    }
-}
-
-@Composable
-private fun SectionLabel(text: String) {
-    Text(text, color = Color(0xFF7E8D97), fontSize = 11.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(vertical = 8.dp))
-}
-
-@Composable
-private fun EmptyState(message: String) {
-    Box(Modifier.fillMaxSize().padding(28.dp), contentAlignment = Alignment.Center) { Text(message, color = Color(0xFF81909A)) }
-}
-
-@Composable
-private fun ErrorState(message: String) {
-    Card(backgroundColor = Color(0xFF3A2225), modifier = Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(20.dp)) {
-            Text(stringResource(Res.string.error_title), color = Color(0xFFFFA3A3), fontWeight = FontWeight.Bold)
-            Text(message, color = Color(0xFFE6B9B9))
-        }
-    }
-}
-
-private fun formatTime(ms: Long): String {
-    val totalSeconds = (ms / 1_000).coerceAtLeast(0)
-    return "${totalSeconds / 60}:${(totalSeconds % 60).toString().padStart(2, '0')}"
-}
-
-// Integer arithmetic zamiast String.format: to (JVM-only) rozszerzenie stdlib nie istnieje
-// we wspólnym kodzie KMP — commonMain kompiluje się też pod cele nie-JVM.
-private fun formatBytes(bytes: Long): String = when {
-    bytes >= 1_073_741_824L -> "${scaledOneDecimal(bytes, 1_073_741_824L)} GB"
-    bytes >= 1_048_576L -> "${scaledOneDecimal(bytes, 1_048_576L)} MB"
-    bytes >= 1_024L -> "${bytes / 1_024L} KB"
-    else -> "$bytes B"
-}
-
-private fun scaledOneDecimal(value: Long, unit: Long): String {
-    val tenths = value * 10 / unit
-    return "${tenths / 10}.${tenths % 10}"
-}
+// Cover/Heading/SectionLabel/EmptyState/ErrorState oraz formatery czasu i rozmiaru:
+// patrz CommonComponents.kt
