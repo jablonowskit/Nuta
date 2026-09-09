@@ -117,6 +117,18 @@ aktualizowalnego WebView) jest opisana w
 Testy uruchamiają się automatycznie w ramach `scripts\build.ps1` podczas
 budowania obrazu.
 
+Do szybkiego sprawdzenia przed pushem służy `scripts\check-desktop.ps1` — kompiluje
+kod wspólny i desktopowy oraz uruchamia testy jednostkowe lokalnie w ~5–25 s, zamiast
+czekać ~7 minut na CI:
+
+```powershell
+.\scripts\check-desktop.ps1            # kompilacja + testy
+.\scripts\check-desktop.ps1 -SkipTests # tylko kompilacja
+```
+
+Wymaga JDK 25+ na hoście. Nie obejmuje `:androidApp` (brak lokalnego Android SDK) i nie
+zastępuje budowania w Dockerze ani CI.
+
 Skrypty przyjmują dodatkowe parametry — opis wyświetla PowerShell:
 
 ```powershell

@@ -5,6 +5,11 @@
 - Nie uruchamiaj Gradle, kompilatora, testów ani aplikacji bezpośrednio na hoście.
 - Nie używaj na hoście `gradlew`, `gradlew.bat`, lokalnej Javy ani lokalnego SDK.
 - Budowanie i testy wykonuj zawsze wewnątrz obrazu Docker za pomocą `scripts/build.ps1`.
+- **Wyjątek: wstępne sprawdzenie kompilacji** — `scripts\check-desktop.ps1` kompiluje
+  kod wspólny i desktopowy plus uruchamia testy jednostkowe lokalnie w ~5–25 s, żeby
+  literówka nie kosztowała pełnego cyklu CI (~7 min). Nie buduje artefaktów wydania ani
+  `:androidApp` (brak lokalnego SDK) i nie zastępuje Dockera ani CI — jest wyłącznie
+  szybkim filtrem przed pushem. Wymaga JDK 25+ (desktop celuje w `JVM_25`).
 - Aplikację uruchamiaj za pomocą `scripts/run.ps1`.
 - Host służy wyłącznie do edycji plików oraz sterowania Dockerem.
 - Nie instaluj na hoście zależności projektu ani narzędzi potrzebnych do kompilacji.
@@ -51,9 +56,13 @@ Kolejność ma znaczenie — od najtańszego do najdroższego:
 2. **Testy jednostkowe na prawdziwych odpowiedziach API** — parsery JSON, progi, DSP.
    To jedyna dokumentacja, która psuje build, gdy przestaje być prawdą, więc ma
    pierwszeństwo przed opisem w pliku `.md`.
-3. **CI + telefon** — brak lokalnego Android SDK, więc pliki androidowe kompiluje
+3. **Lokalne sprawdzenie przed pushem** — `scripts\check-desktop.ps1` (~5–25 s):
+   kompilacja kodu wspólnego i desktopowego plus testy. Łapie literówki, brakujące
+   importy i błędy typów w commonMain, czyli w większości kodu — także tego, który
+   działa na Androidzie. Uruchamiaj **przed** pchnięciem na CI.
+4. **CI + telefon** — brak lokalnego Android SDK, więc pliki androidowe kompiluje
    dopiero CI. Całą procedurę wraz z pułapkami opisuje skill `wgraj-na-telefon`.
-4. Etykieta w prawym górnym rogu apki pokazuje `v<wersja> · <git-sha>`, więc da się
+5. Etykieta w prawym górnym rogu apki pokazuje `v<wersja> · <git-sha>`, więc da się
    potwierdzić, z którego commitu pochodzi zainstalowany build.
 
 Procedury powtarzalne siedzą w `.claude/skills/` (`wgraj-na-telefon`,
