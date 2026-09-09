@@ -10,6 +10,15 @@ bywa niedostępny, więc CI jest w praktyce jedyną kompilacją Androida.
 
 ## Kroki
 
+0. **Sprawdź kompilację lokalnie, ZANIM wypchniesz:**
+   ```
+   powershell -File scripts/check-desktop.ps1
+   ```
+   ~5–25 s. Kompiluje kod wspólny i desktopowy plus uruchamia testy jednostkowe.
+   Łapie literówki, brakujące importy i błędy typów w commonMain — czyli w większości
+   kodu, także tego działającego na Androidzie. Tanie w porównaniu z ~7 min cyklu CI.
+   Nie obejmuje `:androidApp` (brak lokalnego SDK), więc nie zwalnia z kroku 3.
+
 1. **Sprawdź, że zmiany są wypchnięte.** CI buduje z `origin/main`, nie z katalogu roboczego.
    ```
    git status --short && git log --oneline -1
