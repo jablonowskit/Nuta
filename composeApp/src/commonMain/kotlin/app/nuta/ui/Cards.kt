@@ -21,15 +21,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import app.nuta.core.models.Artist
 import app.nuta.core.models.Playlist
 import app.nuta.resources.*
 import org.jetbrains.compose.resources.pluralStringResource
 
 /**
  * Karty używane przez więcej niż jeden ekran: [PlaylistCard] przez Start, Bibliotekę i Szukaj,
- * [ArtistSearchCard] przez Bibliotekę i Szukaj, [StatCard] przez Start. Trzymane wspólnie, żeby
- * żaden ekran nie musiał importować wnętrza innego.
+ * [StatCard] przez Start. Trzymane wspólnie, żeby żaden ekran nie musiał importować wnętrza innego.
  */
 @Composable
 internal fun StatCard(label: String, value: String, modifier: Modifier, compact: Boolean = false) {
@@ -61,26 +59,5 @@ internal fun PlaylistCard(playlist: Playlist, onClick: () -> Unit) {
             if (!compact) Text(pluralStringResource(Res.plurals.track_count, playlist.tracks.size, playlist.tracks.size), color = Color(0xFF7F8E99), fontSize = 12.sp)
         }
     }
-    }
-}
-
-/**
- * UWAGA: obecnie **nieużywany** — brak wywołań w całym repo (stan na 08.09.2026). Ekran Szukaj
- * pokazuje dopasowania po wykonawcy jako zwykłe wiersze utworów, nie osobne karty artystów.
- * Było tak już przed rozbiciem App.kt, gdzie `private` bez użycia dawało tylko ostrzeżenie.
- * Do usunięcia, jeśli nie zostanie podłączony — patrz analogiczny [BufferingIndicator].
- */
-@Composable
-internal fun ArtistSearchCard(artist: Artist, onPlay: () -> Unit) {
-    Card(
-        backgroundColor = MaterialTheme.colors.surface,
-        shape = RoundedCornerShape(10.dp),
-        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).clickable(onClick = onPlay),
-    ) {
-        Row(Modifier.fillMaxWidth().padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
-            TrackPlayButton(onPlay)
-            Spacer(Modifier.width(10.dp))
-            Text(artist.name, fontWeight = FontWeight.Bold)
-        }
     }
 }

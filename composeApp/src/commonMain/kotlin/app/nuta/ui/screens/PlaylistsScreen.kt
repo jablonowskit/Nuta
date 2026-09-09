@@ -47,7 +47,6 @@ internal fun PlaylistsScreen(playlists: List<Playlist>, onSelect: (Playlist) -> 
     }
 }
 
-// StatCard, PlaylistCard i ArtistSearchCard: patrz Cards.kt
 
 @Composable
 internal fun PlaylistDetails(playlist: Playlist, playerState: PlayerState, container: AppContainer, onAddToPlaylist: (Track) -> Unit) {
