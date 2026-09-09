@@ -40,6 +40,13 @@ object ListenThreshold {
      */
     fun isReached(positionMs: Long, durationMs: Long): Boolean {
         if (durationMs in 1 until MinimumTrackLengthMs) return false
+        // Pozycja większa niż długość utworu nie może pochodzić z tego utworu — to pozostałość
+        // po poprzednim (patrz błąd tickera w Media3AudioPlayer.startTicker, potwierdzony na
+        // danych z konta 09.09.2026: 215-sekundowy utwór zgłoszony z pozycją 241 s natychmiast
+        // po starcie). Sam ticker jest naprawiony, ale próg też nie może takiej pozycji
+        // zaakceptować: to jedyne miejsce, które w ogóle zna długość utworu, a wynikiem jest
+        // trwały, błędny wpis w historii — nie da się go „odzobaczyć" po fakcie.
+        if (durationMs > 0L && positionMs > durationMs) return false
         return positionMs >= requiredMs(durationMs)
     }
 }

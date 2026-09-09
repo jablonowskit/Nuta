@@ -289,6 +289,12 @@ class MpvAudioPlayer(
                             "eof" to eof.toString(), "idle" to idle.toString(),
                         ),
                     )
+                    // Strażnik generacji jak niżej przy utracie audio: odczyt `time-pos` idzie
+                    // przez IPC, więc po powrocie utwór mógł już się zmienić (auto-przejście
+                    // kolejki zeruje positionMs). Bez tego stara pozycja nadpisywała nową i
+                    // scrobbler widział pozycję z POPRZEDNIEGO utworu — ten sam błąd, który na
+                    // Androidzie dał błędny wpis w ListenBrainz (patrz Media3AudioPlayer.startTicker).
+                    if (generation != playbackGeneration) return@launch
                     if (position != null) _state.value = _state.value.copy(positionMs = position.coerceAtLeast(0))
                     // Odpowiednik ACTION_AUDIO_BECOMING_NOISY z Androida: gdy zniknie
                     // urządzenie wyjściowe (Bluetooth/słuchawki), mpv zwalnia AO i dalej
