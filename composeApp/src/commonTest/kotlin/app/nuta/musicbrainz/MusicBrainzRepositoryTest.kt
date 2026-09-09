@@ -99,4 +99,43 @@ class MusicBrainzRepositoryTest {
             assertNull(it.artistMbid)
         }
     }
+
+    @Test
+    fun buildsFieldedQueryRequiringEveryWord() {
+        // Surowy tekst w `query=` dawał katastrofalne wyniki: dla "Haddaway What Is Love"
+        // 2,2 mln trafień, na czele covery, a oryginał poza top 25. Każde słowo musi trafić
+        // w tytuł ALBO w wykonawcę — bez zgadywania, które słowo jest czym.
+        val built = MusicBrainzRepository.buildLuceneQuery("Haddaway What Is Love")
+        assertEquals(
+            """(recording:"Haddaway" OR artistname:"Haddaway") AND """ +
+                """(recording:"What" OR artistname:"What") AND """ +
+                """(recording:"Is" OR artistname:"Is") AND """ +
+                """(recording:"Love" OR artistname:"Love")""",
+            built,
+        )
+    }
+
+    @Test
+    fun quotingNeutralizesLuceneMetacharacters() {
+        // "AC/DC" musi przejść w całości: wcześniejsza próba wycinania znaków specjalnych
+        // rozbijała je na osobne słowa i psuła składnię zapytania.
+        val built = MusicBrainzRepository.buildLuceneQuery("AC/DC Thunderstruck")
+        requireNotNull(built)
+        assertTrue(built.contains("""recording:"AC/DC""""), built)
+        // Cudzysłów i backslash muszą zniknąć — inaczej zamknęłyby frazę w środku.
+        val messy = MusicBrainzRepository.buildLuceneQuery("a\"b c\\d")
+        requireNotNull(messy)
+        assertTrue(!messy.contains('\\'), messy)
+        assertTrue(!messy.contains("\"b\""), messy)
+        // Dwa słowa na wejściu ("a\"b" i "c\\d") dają dwie klauzule.
+        assertEquals(2, Regex("recording:").findAll(messy).count(), messy)
+    }
+
+    @Test
+    fun blankQueryBuildsNothing() {
+        assertNull(MusicBrainzRepository.buildLuceneQuery(""))
+        assertNull(MusicBrainzRepository.buildLuceneQuery("   "))
+        // Same znaki, które usuwamy — nie zostaje żadne słowo do wyszukania.
+        assertNull(MusicBrainzRepository.buildLuceneQuery(" \" \\ "))
+    }
 }
