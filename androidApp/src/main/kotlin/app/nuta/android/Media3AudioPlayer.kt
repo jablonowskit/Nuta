@@ -45,6 +45,8 @@ class Media3AudioPlayer(
     override val state: StateFlow<PlayerState> = stateFlow.asStateFlow()
     private val loadMutex = Mutex()
     private var ticker: Job? = null
+    /** Rośnie przy każdym [startTicker]; pozwala starej korutynie rozpoznać, że jest już nieaktualna. */
+    private var tickerGeneration = 0
     private var retryingAfterError = false
     /** Reset retryingAfterError czeka na STABLE_PLAYBACK_MS realnie lecącego dźwięku, nie na samo
         chwilowe player.isPlaying == true zaraz po udanym rozwiązaniu URL-a. Bez tego utwór, który
@@ -70,7 +72,9 @@ class Media3AudioPlayer(
                 }
             }
             override fun onIsPlayingChanged(isPlaying: Boolean) {
-                if (isPlaying) startTicker()
+                // Zatrzymanie tickera na pauzie/stopie: wcześniej biegał dalej i co pół sekundy
+                // przepisywał pozycję oraz zapisywał ją do preferencji, mimo że nic nie grało.
+                if (isPlaying) startTicker() else stopTicker()
                 refreshPlayingState()
             }
             override fun onPlayerError(error: PlaybackException) {
@@ -293,7 +297,7 @@ class Media3AudioPlayer(
         }
     }
     override suspend fun pause() = withContext(Dispatchers.Main) { player.pause(); savePosition(player.currentPosition) }
-    override suspend fun stop() { ticker?.cancel(); withContext(Dispatchers.Main) { player.stop() }; savePosition(0); stateFlow.value = stateFlow.value.copy(status = PlayerStatus.IDLE, positionMs = 0) }
+    override suspend fun stop() { stopTicker(); withContext(Dispatchers.Main) { player.stop() }; savePosition(0); stateFlow.value = stateFlow.value.copy(status = PlayerStatus.IDLE, positionMs = 0) }
     override suspend fun seekTo(positionMs: Long) {
         // durationMs bywa 0, gdy katalog źródła nie podał długości utworu (np. wynik
         // MusicBrainz z length=null, utwór z lb-radio bez pola duration) — przycinanie do
@@ -341,7 +345,39 @@ class Media3AudioPlayer(
         )
     }
     private suspend fun advanceAfterEnd() { val next = stateFlow.value.currentIndex + 1; if (next in stateFlow.value.queue.indices) move(next) else stateFlow.value = stateFlow.value.copy(status = PlayerStatus.ENDED) }
-    private fun startTicker() { ticker?.cancel(); ticker = scope.launch { while (isActive) { delay(500); val position = withContext(Dispatchers.Main) { player.currentPosition }; stateFlow.value = stateFlow.value.copy(positionMs = position.coerceAtLeast(0)); val now = System.currentTimeMillis(); if (now - lastPositionSaveMs > 5_000) { lastPositionSaveMs = now; savePosition(position) } } } }
+    /** Kończy ticker i unieważnia go, żeby korutyna w locie nie dokonała już zapisu. */
+    private fun stopTicker() {
+        ticker?.cancel()
+        ticker = null
+        tickerGeneration++
+    }
+
+    /**
+     * Ticker pozycji. Każdy start dostaje własny numer generacji, bo `ticker?.cancel()` **nie
+     * czeka** na zakończenie poprzedniej korutyny: stara mogła już wisieć w
+     * `withContext(Dispatchers.Main) { player.currentPosition }` i po powrocie nadpisywała
+     * `positionMs` pozycją POPRZEDNIEGO utworu, wyzerowaną chwilę wcześniej przez [move].
+     *
+     * Skutek w praktyce (potwierdzony na prawdziwych danych z ListenBrainz 09.09.2026): utwór
+     * „Chandelier" (215 s) dostał pozycję 241 s odziedziczoną po „United" (240 s), więc próg
+     * scrobblowania (107 s) był spełniony natychmiast po starcie — odsłuchanie zgłoszono po
+     * 0 sekundach faktycznego słuchania, z błędnym `listened_at` sprzed czterech minut.
+     */
+    private fun startTicker() {
+        ticker?.cancel()
+        val generation = ++tickerGeneration
+        ticker = scope.launch {
+            while (isActive) {
+                delay(500)
+                val position = withContext(Dispatchers.Main) { player.currentPosition }
+                // Zapis tylko jeśli w trakcie oczekiwania nie wystartował nowszy ticker.
+                if (generation != tickerGeneration) return@launch
+                stateFlow.value = stateFlow.value.copy(positionMs = position.coerceAtLeast(0))
+                val now = System.currentTimeMillis()
+                if (now - lastPositionSaveMs > 5_000) { lastPositionSaveMs = now; savePosition(position) }
+            }
+        }
+    }
 
     private companion object {
         const val PREFETCH_LIMIT = 5

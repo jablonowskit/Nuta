@@ -33,6 +33,19 @@ class ListenThresholdTest {
     }
 
     @Test
+    fun rejectsPositionBeyondTrackLength() {
+        // Regresja z prawdziwych danych (konto piotrowskit, 09.09.2026): „Chandelier" (215 280 ms)
+        // dostał pozycję 241 000 ms odziedziczoną po poprzednim utworze „United" (240 000 ms).
+        // Próg 107 640 ms był wtedy spełniony natychmiast, więc odsłuchanie zgłoszono po zerowym
+        // czasie słuchania i z `listened_at` sprzed czterech minut.
+        assertFalse(ListenThreshold.isReached(positionMs = 241_000, durationMs = 215_280))
+        // Ta sama pozycja jest w porządku dla utworu, który faktycznie tyle trwa.
+        assertTrue(ListenThreshold.isReached(positionMs = 241_000, durationMs = 240_000 + 1_000))
+        // Nieznana długość (0) nie daje podstawy do odrzucenia — zostaje próg czasowy.
+        assertTrue(ListenThreshold.isReached(positionMs = 999_000, durationMs = 0))
+    }
+
+    @Test
     fun rejectsTracksShorterThanClientMinimum() {
         // 20-sekundowy jingiel: nawet odsłuchany do końca nie kwalifikuje się do zgłoszenia.
         // To nasza decyzja, nie ograniczenie API — serwis takie wpisy przyjmuje.
