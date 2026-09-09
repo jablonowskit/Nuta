@@ -31,7 +31,7 @@ import kotlinx.serialization.json.longOrNull
  * Alternatywny resolver audio przez nieoficjalne, publiczne API SoundCloud (api-v2.soundcloud.com).
  * Jawnie wybierany w Ustawieniach (AudioSource.SOUNDCLOUD) — nie automatyczny fallback po błędzie
  * YouTube. Zabezpieczenie na wypadek, gdy YouTube wymusi SABR na VISIONOS tak jak zrobił to
- * wcześniej z WEB/TVHTML5/ANDROID_VR — patrz openspec/changes/2026-08-sabr-blocker/.
+ * wcześniej z WEB/TVHTML5/ANDROID_VR — patrz docs/sabr-blocker/.
  *
  * Cały flow (client_id → search/tracks → transcoding → podpisany CDN URL → GET z Range)
  * zweryfikowany ręcznie curlem 22.08.2026 przed napisaniem tego kodu.
