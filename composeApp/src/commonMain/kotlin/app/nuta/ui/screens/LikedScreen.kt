@@ -86,5 +86,3 @@ internal fun LikedScreen(
     }
 }
 
-// TrackRow, TrackActionButton/PlayButton/QueueButton i BufferingIndicator:
-// patrz TrackComponents.kt
