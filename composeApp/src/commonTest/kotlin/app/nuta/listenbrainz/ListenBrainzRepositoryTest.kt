@@ -200,4 +200,44 @@ class ListenBrainzRepositoryTest {
         assertEquals(0L, tracks[0].durationMs)
         assertNull(tracks[0].artistMbid)
     }
+
+    @Test
+    fun parsesRealPlaylistSearchResponse() {
+        // Prawdziwa odpowiedź playlist/search — utwory przychodzą puste, dociąga je
+        // getPlaylistTracks przy otwarciu playlisty (tak samo jak dla Spotify).
+        val body = """
+            {"playlist_count":695,"playlists":[
+              {"playlist":{"identifier":"https://listenbrainz.org/playlist/9aaa0aa5-997d-483e-b86d-68d316120189",
+                           "title":"Dance","creator":"Zutalor","track":[]}},
+              {"playlist":{"identifier":"https://listenbrainz.org/playlist/ae6c6738-c740-499f-b875-e59536eedafa",
+                           "title":"dance","creator":"unrealapex","track":[]}}
+            ]}
+        """.trimIndent()
+        val playlists = ListenBrainzRepository.parsePlaylistSearch(body)
+        assertEquals(2, playlists.size)
+        // mbid wyciągany z końca URI, nie z osobnego pola.
+        assertEquals("9aaa0aa5-997d-483e-b86d-68d316120189", playlists[0].id)
+        assertEquals("Dance", playlists[0].name)
+        assertEquals("Zutalor", playlists[0].description)
+        assertTrue(playlists[0].tracks.isEmpty())
+    }
+
+    @Test
+    fun playlistSearchToleratesMissingFieldsAndBadBodies() {
+        val body = """
+            {"playlists":[
+              {"playlist":{"title":"Bez identyfikatora"}},
+              {"playlist":{"identifier":"https://listenbrainz.org/playlist/abc"}},
+              {"nieplaylista":true},
+              {"playlist":{"identifier":"https://listenbrainz.org/playlist/def","title":"Dobra"}}
+            ]}
+        """.trimIndent()
+        val playlists = ListenBrainzRepository.parsePlaylistSearch(body)
+        assertEquals(1, playlists.size)
+        assertEquals("def", playlists[0].id)
+        // Brak `creator` daje pusty opis, nie null ani wyjątek.
+        assertEquals("", playlists[0].description)
+        assertTrue(ListenBrainzRepository.parsePlaylistSearch("").isEmpty())
+        assertTrue(ListenBrainzRepository.parsePlaylistSearch("<html>502</html>").isEmpty())
+    }
 }

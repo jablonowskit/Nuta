@@ -1,6 +1,7 @@
 package app.nuta.musicbrainz
 
 import app.nuta.core.logging.NutaLogger
+import app.nuta.core.models.Artist
 import app.nuta.core.models.SearchResult
 import app.nuta.core.models.Track
 import app.nuta.net.httpGet
@@ -26,8 +27,49 @@ class MusicBrainzRepository(private val logger: NutaLogger) {
             headers = mapOf("User-Agent" to UserAgent),
         )
         val tracks = parseRecordings(body)
-        logger.info("MusicBrainz", "search_completed", "Zakończono wyszukiwanie MusicBrainz", fields = mapOf("results" to tracks.size.toString()))
-        return SearchResult(tracks = tracks, playlists = emptyList(), artists = emptyList())
+        val artists = searchArtists(query)
+        logger.info("MusicBrainz", "search_completed", "Zakończono wyszukiwanie MusicBrainz", fields = mapOf("results" to tracks.size.toString(), "artists" to artists.size.toString()))
+        return SearchResult(tracks = tracks, playlists = emptyList(), artists = artists)
+    }
+
+    /**
+     * Wykonawcy pasujący do zapytania (`ws/2/artist/`). Osobne żądanie, bo endpoint nagrań
+     * zwraca tylko wykonawców przypisanych do konkretnych utworów — sam wpisany „Haddaway"
+     * ma dać wykonawcę nawet wtedy, gdy żaden jego utwór nie trafi w top wyników.
+     * Błąd tego żądania nie może wywalić całego wyszukiwania, dlatego runCatching.
+     */
+    private suspend fun searchArtists(query: String): List<Artist> {
+        val lucene = buildArtistQuery(query) ?: return emptyList()
+        return runCatching {
+            val encoded = java.net.URLEncoder.encode(lucene, "UTF-8")
+            parseArtists(
+                httpGet(
+                    "https://musicbrainz.org/ws/2/artist/?query=$encoded&fmt=json&limit=10",
+                    headers = mapOf("User-Agent" to UserAgent),
+                ),
+            )
+        }.getOrElse { error ->
+            logger.warn("MusicBrainz", "artist_search_failed", "Nie udało się wyszukać wykonawców", fields = mapOf("reason" to (error.message ?: "unknown")))
+            emptyList()
+        }
+    }
+
+    /**
+     * Utwory wykonawcy po jego MBID (`arid:` w indeksie nagrań) — zweryfikowane 09.09.2026:
+     * dla Haddawaya 829 nagrań z czasami trwania. [Artist.id] w trybie ListenBrainz jest MBID-em
+     * (tak buduje je [parseArtists]), więc nie trzeba go najpierw rozwiązywać.
+     */
+    suspend fun artistTracks(artist: Artist, limit: Int): List<Track> {
+        if (!MbidRegex.matches(artist.id)) {
+            logger.warn("MusicBrainz", "artist_id_not_mbid", "Identyfikator wykonawcy nie jest MBID — pomijam", fields = mapOf("artistId" to artist.id))
+            return emptyList()
+        }
+        val encoded = java.net.URLEncoder.encode("arid:${artist.id}", "UTF-8")
+        val body = httpGet(
+            "https://musicbrainz.org/ws/2/recording/?query=$encoded&fmt=json&limit=$limit",
+            headers = mapOf("User-Agent" to UserAgent),
+        )
+        return parseRecordings(body)
     }
 
     internal companion object {
@@ -50,16 +92,46 @@ class MusicBrainzRepository(private val logger: NutaLogger) {
          * Zwraca null dla pustego zapytania (nie ma czego szukać).
          */
         fun buildLuceneQuery(query: String): String? {
-            val words = query.split(WhitespaceRegex)
-                // Cudzysłów i backslash to jedyne znaki, których cytowanie nie neutralizuje —
-                // zostawione, zamknęłyby frazę w środku i zepsuły składnię.
-                .map { it.replace("\"", "").replace("\\", "").trim() }
-                .filter(String::isNotBlank)
+            val words = sanitizeWords(query)
             if (words.isEmpty()) return null
             return words.joinToString(" AND ") { """(recording:"$it" OR artistname:"$it")""" }
         }
 
+        /**
+         * Zapytanie o wykonawców: każde słowo musi trafić w nazwę albo alias (`artist`
+         * obejmuje nazwę, `alias` łapie warianty pisowni). Ten sam zabieg z cytowaniem co
+         * w [buildLuceneQuery] neutralizuje znaki specjalne Lucene.
+         */
+        fun buildArtistQuery(query: String): String? {
+            val words = sanitizeWords(query)
+            if (words.isEmpty()) return null
+            return words.joinToString(" AND ") { """(artist:"$it" OR alias:"$it")""" }
+        }
+
+        /** Parser `ws/2/artist/`; pomija wpisy bez id lub nazwy zamiast rzucać wyjątkiem. */
+        fun parseArtists(body: String): List<Artist> {
+            if (body.isBlank()) return emptyList()
+            val root = runCatching { json.parseToJsonElement(body) as? JsonObject }.getOrNull() ?: return emptyList()
+            val artists = (root["artists"] as? JsonArray).orEmpty()
+            return artists.mapNotNull { element ->
+                val obj = element as? JsonObject ?: return@mapNotNull null
+                val id = obj["id"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
+                val name = obj["name"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
+                // MusicBrainz nie udostępnia okładek/zdjęć w tym endpoincie — imageUrl zostaje
+                // null, a UI rysuje zastępczą kafelkę z pierwszą literą (patrz Cover).
+                Artist(id = id, name = name)
+            }
+        }
+
+        /** Usuwa znaki, których cytowanie nie neutralizuje, i rozbija zapytanie na słowa. */
+        private fun sanitizeWords(query: String): List<String> = query.split(WhitespaceRegex)
+            // Cudzysłów i backslash to jedyne znaki, których cytowanie nie neutralizuje —
+            // zostawione, zamknęłyby frazę w środku i zepsuły składnię.
+            .map { it.replace("\"", "").replace("\\", "").trim() }
+            .filter(String::isNotBlank)
+
         private val WhitespaceRegex = Regex("\\s+")
+        private val MbidRegex = Regex("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
 
         private val json = Json { ignoreUnknownKeys = true }
 

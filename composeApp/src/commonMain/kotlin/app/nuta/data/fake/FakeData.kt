@@ -1,6 +1,7 @@
 package app.nuta.data.fake
 
 import app.nuta.core.logging.NutaLogger
+import app.nuta.core.models.Artist
 import app.nuta.core.models.Playlist
 import app.nuta.core.models.SearchResult
 import app.nuta.core.models.Track
@@ -54,9 +55,20 @@ class FakeSpotifyRepository(private val logger: NutaLogger) : SpotifyRepository 
             it.title.lowercase().contains(normalized) || it.artists.any { artist -> artist.lowercase().contains(normalized) }
         }
         val playlists = if (normalized.isBlank()) emptyList() else DemoLibrary.playlists.filter { it.name.lowercase().contains(normalized) }
+        // Wykonawcy zbierani z pasujących utworów — dzięki temu sekcja WYKONAWCY na ekranie
+        // Szukaj ma co pokazać także w trybie demo (testy GUI, brak logowania).
+        val artists = tracks.flatMap(Track::artists)
+            .filter { it.lowercase().contains(normalized) }
+            .distinct()
+            .map { Artist(id = it.hashCode().toString(), name = it) }
         logger.debug("FakeSpotifyRepository", "search_completed", "Zakończono lokalne wyszukiwanie", fields = mapOf("queryLength" to query.length.toString(), "results" to (tracks.size + playlists.size).toString()))
-        return SearchResult(tracks, playlists)
+        return SearchResult(tracks, playlists, artists)
     }
+
+    override suspend fun getArtistTracks(artist: Artist, limit: Int): List<Track> =
+        DemoLibrary.tracks.filter { track -> track.artists.any { it.equals(artist.name, ignoreCase = true) } }
+            .take(limit)
+            .also { logger.info("FakeSpotifyRepository", "artist_tracks_completed", "Zwrócono demonstracyjne utwory wykonawcy", fields = mapOf("count" to it.size.toString())) }
 
     override suspend fun getTrackRadio(seed: Track, limit: Int): List<Track> =
         DemoLibrary.tracks.filterNot { it.id == seed.id }.take(limit).also {

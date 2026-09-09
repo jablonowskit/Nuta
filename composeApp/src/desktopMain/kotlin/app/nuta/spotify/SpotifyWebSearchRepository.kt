@@ -156,6 +156,26 @@ class SpotifyWebSearchRepository(
         }
     }
 
+    /**
+     * Utwory wykonawcy przez zwykłe wyszukiwanie po jego nazwie, zawężone do trafień, w których
+     * ten wykonawca faktycznie występuje. Prywatny protokół web-playera nie ma sprawdzonego
+     * endpointu „utwory wykonawcy", a wyszukiwanie jest już zweryfikowane i wystarcza do
+     * zbudowania kolejki — jeśli kiedyś dojdzie właściwy endpoint, zmiana zostanie tutaj.
+     */
+    override suspend fun getArtistTracks(artist: Artist, limit: Int): List<Track> {
+        require(limit in 1..50) { "Limit utworów wykonawcy musi mieścić się w zakresie 1..50" }
+        if (artist.name.isBlank()) return emptyList()
+        val token = validToken()
+        val found = runCatching { searchTracks(artist.name, token) }.getOrElse { error ->
+            logger.warn("SpotifySearch", "artist_tracks_failed", "Nie udało się pobrać utworów wykonawcy", fields = mapOf("reason" to (error.message ?: "unknown")))
+            emptyList()
+        }
+        val byArtist = found.filter { track -> track.artists.any { it.equals(artist.name, ignoreCase = true) } }
+        // Gdy dokładne dopasowanie nazwy nic nie zostawi (inna pisownia, „feat."), lepiej pokazać
+        // same wyniki wyszukiwania niż pusty ekran.
+        return (byArtist.ifEmpty(found::toList)).distinctBy(Track::id).take(limit)
+    }
+
     override suspend fun getTrackRadio(seed: Track, limit: Int): List<Track> {
         require(limit in 1..50) { "Limit radia musi mieścić się w zakresie 1..50" }
         require(seed.id.matches(Regex("[A-Za-z0-9]+"))) { "Nieprawidłowy identyfikator utworu" }

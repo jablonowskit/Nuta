@@ -147,7 +147,32 @@ class ListenBrainzRepository(
         return found
     }
 
-    override suspend fun search(query: String): SearchResult = musicBrainz.search(query)
+    /**
+     * Utwory i wykonawcy z MusicBrainz (ListenBrainz nie ma własnego wyszukiwania katalogu),
+     * playlisty z ListenBrainz (`playlist/search` — zweryfikowane 09.09.2026, 695 trafień dla
+     * „dance"). Playlisty w wynikach przychodzą bez utworów; dociąga je [getPlaylistTracks]
+     * przy otwarciu, tak samo jak dla Spotify.
+     */
+    override suspend fun search(query: String): SearchResult {
+        val catalog = musicBrainz.search(query)
+        return catalog.copy(playlists = searchPlaylists(query))
+    }
+
+    private suspend fun searchPlaylists(query: String): List<Playlist> {
+        if (query.isBlank()) return emptyList()
+        val encoded = URLEncoder.encode(query, "UTF-8")
+        return runCatching {
+            val response = httpGet("https://api.listenbrainz.org/1/playlist/search?query=$encoded&count=20")
+            if (response.isBlank()) return@runCatching emptyList()
+            parsePlaylistSearch(response)
+        }.getOrElse { error ->
+            logger.warn("ListenBrainz", "playlist_search_failed", "Nie udało się wyszukać playlist ListenBrainz", fields = mapOf("reason" to (error.message ?: "unknown")))
+            emptyList()
+        }
+    }
+
+    override suspend fun getArtistTracks(artist: Artist, limit: Int): List<Track> =
+        musicBrainz.artistTracks(artist, limit)
 
     override suspend fun getTrackRadio(seed: Track, limit: Int): List<Track> {
         val token = requireToken()
@@ -328,6 +353,30 @@ class ListenBrainzRepository(
         val MbidRegex = Regex("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
 
         private val parserJson = Json { ignoreUnknownKeys = true }
+
+        /**
+         * Parser `playlist/search`. Kształt jest ten sam co w `user/{u}/playlists`
+         * (`playlists[].playlist` z `identifier`/`title`), więc mbid wyciągamy z końca URI.
+         * Utwory (`track`) w wynikach wyszukiwania przychodzą puste — playlista dociąga je
+         * przy otwarciu.
+         */
+        fun parsePlaylistSearch(body: String): List<Playlist> {
+            if (body.isBlank()) return emptyList()
+            val root = runCatching { parserJson.parseToJsonElement(body) as? JsonObject }.getOrNull() ?: return emptyList()
+            val playlists = (root["playlists"] as? JsonArray).orEmpty()
+            return playlists.mapNotNull { item ->
+                val playlist = (item as? JsonObject)?.get("playlist") as? JsonObject ?: return@mapNotNull null
+                val identifier = playlist["identifier"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
+                val title = playlist["title"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
+                val creator = playlist["creator"]?.jsonPrimitive?.contentOrNull.orEmpty()
+                Playlist(
+                    id = identifier.substringAfterLast('/'),
+                    name = title,
+                    description = creator,
+                    tracks = emptyList(),
+                )
+            }
+        }
 
         /**
          * Parsuje jedną stronę `feedback/user/{u}/get-feedback?metadata=true`.
