@@ -168,7 +168,7 @@ Wszystkie kontrakty (`SpotifyRepository`, `YouTubeMediaService`, `AudioPlayer`) 
 zdefiniowane w `commonMain/domain/Contracts.kt` / `commonMain/youtube/YouTubeContracts.kt`
 i wstrzykiwane przez `AppContainer`, więc warstwa UI nie zna szczegółów prywatnych
 protokołów ani tego, które konkretne źródło jest aktywne. Osobnego `PlaybackCoordinator`
-opisanego w PROJECT.md jeszcze nie ma — koordynacja znajduje się dziś w implementacjach
+opisanego w pierwotnych ustaleniach (patrz archiwum) nigdy nie powstał — koordynacja jest w implementacjach
 `AudioPlayer` i w `ui/App.kt`.
 
 Podział źródeł:
@@ -194,7 +194,9 @@ Ustawieniach, bez żadnego mechanizmu OAuth/WebView w apce.
 
 ## Dokumentacja
 
-- [PROJECT.md](PROJECT.md) — ustalenia projektowe i wymagania,
+- [AGENTS.md](AGENTS.md) — opis projektu, moduły i zasady pracy,
+- [PROJECT.md](PROJECT.md) — decyzje i ograniczenia, które nadal obowiązują,
+- [docs/PROJECT_HISTORIA_2026-07.md](docs/PROJECT_HISTORIA_2026-07.md) — archiwum ustaleń z lipca 2026 (w dużej części nieaktualne),
 - [docs/ANDROID_PLAN.md](docs/ANDROID_PLAN.md) — aktualny priorytet i plan Androida,
 - [docs/PHASE_1_LINUX_GUI.md](docs/PHASE_1_LINUX_GUI.md),
   [docs/PHASE_2_SPOTIFY_WEB_SESSION.md](docs/PHASE_2_SPOTIFY_WEB_SESSION.md),
