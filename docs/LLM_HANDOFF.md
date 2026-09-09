@@ -2,7 +2,7 @@
 
 ## Cel dokumentu
 
-Ten dokument zawiera bieżący stan projektu, ustalenia z diagnozy Windows/Spotify, porównanie z pluginem Spotube oraz zalecane następne kroki. Przed zmianami należy przeczytać również `PROJECT.md` i `AGENTS.md`.
+Ten dokument zawiera bieżący stan projektu, ustalenia z diagnozy Windows/Spotify, porównanie z pluginem Spotube oraz zalecane następne kroki. Przed zmianami należy przeczytać również `AGENTS.md` (opis projektu i zasady) oraz `PROJECT.md` (obowiązujące decyzje).
 
 ## Zasady repozytorium
 
