@@ -27,6 +27,7 @@ import app.nuta.core.models.Playlist
 import app.nuta.core.models.SearchResult
 import app.nuta.core.models.Track
 import app.nuta.resources.*
+import app.nuta.search.matchesLoosely
 import app.nuta.ui.EmptyState
 import app.nuta.ui.ErrorState
 import app.nuta.ui.PlaylistCard
@@ -138,8 +139,8 @@ internal fun SearchScreen(
         val visibleTracks = state.result.tracks.filter { track ->
             queryOrGroups.isEmpty() || queryOrGroups.any { andWords ->
                 andWords.all { word ->
-                    val titleMatches = state.searchTracks && track.title.contains(word, ignoreCase = true)
-                    val artistMatches = state.searchArtists && track.artists.any { it.contains(word, ignoreCase = true) }
+                    val titleMatches = state.searchTracks && track.title.matchesLoosely(word)
+                    val artistMatches = state.searchArtists && track.artists.any { it.matchesLoosely(word) }
                     titleMatches || artistMatches
                 }
             }
@@ -187,9 +188,3 @@ private fun SearchScopeCheckbox(label: String, checked: Boolean, onCheckedChange
         Text(label, fontSize = 12.sp, color = Color(0xFFD5DCE1))
     }
 }
-
-// DiagnosticsScreen i LogRow: patrz screens/DiagnosticsScreen.kt
-
-/** Komplet przycisków sterowania — ten sam w pasku rozwiniętym i zwiniętym. */
-// CompactTransportRow, CompactPlayerBar, PlayerBar i helpery opisu strumienia:
-// patrz PlayerBar.kt
