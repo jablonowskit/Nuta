@@ -1,9 +1,5 @@
 package app.nuta.ui
 
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.keyframes
-import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
@@ -27,7 +23,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -124,30 +119,3 @@ internal fun TrackPlayButton(onClick: () -> Unit) = TrackActionButton("▶", "�
 
 @Composable
 internal fun TrackQueueButton(onClick: () -> Unit) = TrackActionButton("+", "✓", 12.sp, onClick)
-
-/**
- * UWAGA: obecnie **nieużywany** — w całym repo nie ma ani jednego wywołania (stan na 08.09.2026,
- * sprawdzone przed wydzieleniem tego pliku; było tak już wcześniej, w monolitycznym App.kt, gdzie
- * `private` bez użycia dawało tylko ostrzeżenie kompilatora). Zostawiony celowo, bo buforowanie
- * jest dziś sygnalizowane znakiem "⏳︎" w [TrackRow], a ten wskaźnik jest gotową alternatywą.
- * Do usunięcia, jeśli nie zostanie podłączony.
- */
-@Composable
-internal fun BufferingIndicator(color: Color = MaterialTheme.colors.primary) {
-    val transition = rememberInfiniteTransition()
-    val alpha by transition.animateFloat(
-        initialValue = 0.25f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            keyframes {
-                durationMillis = 900
-                0.25f at 0
-                1f at 300
-                0.25f at 900
-            },
-        ),
-    )
-    Row(Modifier.size(32.dp), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
-        repeat(3) { Text("●", color = color, fontSize = 7.sp, modifier = Modifier.alpha(alpha)) }
-    }
-}
