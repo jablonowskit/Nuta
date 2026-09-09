@@ -138,4 +138,45 @@ class MusicBrainzRepositoryTest {
         // Same znaki, które usuwamy — nie zostaje żadne słowo do wyszukania.
         assertNull(MusicBrainzRepository.buildLuceneQuery(" \" \\ "))
     }
+
+    @Test
+    fun parsesRealArtistSearchResponse() {
+        // Prawdziwa odpowiedź ws/2/artist dla zapytania o Haddawaya.
+        val body = """
+            {"count":1,"artists":[
+              {"id":"6508cf1d-4da2-4d71-81ec-0e072338991f","name":"Haddaway","score":100}
+            ]}
+        """.trimIndent()
+        val artists = MusicBrainzRepository.parseArtists(body)
+        assertEquals(1, artists.size)
+        assertEquals("6508cf1d-4da2-4d71-81ec-0e072338991f", artists[0].id)
+        assertEquals("Haddaway", artists[0].name)
+        // MusicBrainz nie daje zdjęć w tym endpoincie — UI rysuje kafelkę z literą.
+        assertNull(artists[0].imageUrl)
+    }
+
+    @Test
+    fun artistParserSkipsIncompleteEntriesAndBadBodies() {
+        val body = """
+            {"artists":[
+              {"name":"Bez id"},
+              {"id":"6508cf1d-4da2-4d71-81ec-0e072338991f"},
+              {"id":"11111111-1111-1111-1111-111111111111","name":"Dobry"}
+            ]}
+        """.trimIndent()
+        assertEquals(listOf("Dobry"), MusicBrainzRepository.parseArtists(body).map { it.name })
+        assertTrue(MusicBrainzRepository.parseArtists("").isEmpty())
+        assertTrue(MusicBrainzRepository.parseArtists("nie json").isEmpty())
+        assertTrue(MusicBrainzRepository.parseArtists("""{"error":"rate limited"}""").isEmpty())
+    }
+
+    @Test
+    fun buildsArtistQueryOverNameAndAlias() {
+        // Alias łapie warianty pisowni, np. gdy katalog trzyma inną formę nazwy.
+        assertEquals(
+            """(artist:"Sigur" OR alias:"Sigur") AND (artist:"Ros" OR alias:"Ros")""",
+            MusicBrainzRepository.buildArtistQuery("Sigur Ros"),
+        )
+        assertNull(MusicBrainzRepository.buildArtistQuery("   "))
+    }
 }

@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -21,13 +22,15 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import app.nuta.core.models.Artist
 import app.nuta.core.models.Playlist
 import app.nuta.resources.*
 import org.jetbrains.compose.resources.pluralStringResource
 
 /**
  * Karty używane przez więcej niż jeden ekran: [PlaylistCard] przez Start, Bibliotekę i Szukaj,
- * [StatCard] przez Start. Trzymane wspólnie, żeby żaden ekran nie musiał importować wnętrza innego.
+ * [ArtistSearchCard] przez Szukaj, [StatCard] przez Start. Trzymane wspólnie, żeby żaden ekran
+ * nie musiał importować wnętrza innego.
  */
 @Composable
 internal fun StatCard(label: String, value: String, modifier: Modifier, compact: Boolean = false) {
@@ -59,5 +62,25 @@ internal fun PlaylistCard(playlist: Playlist, onClick: () -> Unit) {
             if (!compact) Text(pluralStringResource(Res.plurals.track_count, playlist.tracks.size, playlist.tracks.size), color = Color(0xFF7F8E99), fontSize = 12.sp)
         }
     }
+    }
+}
+
+/**
+ * Wykonawca w wynikach wyszukiwania. Kliknięcie wchodzi w wykonawcę (utwory dociągane
+ * z serwisu), dlatego karta nie ma osobnego przycisku odtwarzania — całość jest klikalna.
+ * MusicBrainz nie daje zdjęć wykonawców, więc [Cover] rysuje kafelkę z pierwszą literą.
+ */
+@Composable
+internal fun ArtistSearchCard(artist: Artist, onClick: () -> Unit) {
+    Card(
+        backgroundColor = MaterialTheme.colors.surface,
+        shape = RoundedCornerShape(10.dp),
+        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).clickable(onClick = onClick),
+    ) {
+        Row(Modifier.fillMaxWidth().padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
+            Cover(artist.name, artist.imageUrl, Modifier.size(40.dp))
+            Spacer(Modifier.width(12.dp))
+            Text(artist.name, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
     }
 }
