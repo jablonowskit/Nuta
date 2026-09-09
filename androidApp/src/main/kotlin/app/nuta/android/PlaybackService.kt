@@ -1,8 +1,8 @@
 package app.nuta.android
 
 import android.app.PendingIntent
+import android.content.Context
 import android.content.Intent
-import android.media.audiofx.LoudnessEnhancer
 import android.os.Bundle
 import androidx.media3.common.ForwardingPlayer
 import androidx.media3.common.Player
@@ -15,8 +15,10 @@ import androidx.media3.datasource.cache.CacheDataSource
 import androidx.media3.datasource.cache.LeastRecentlyUsedCacheEvictor
 import androidx.media3.datasource.cache.SimpleCache
 import androidx.media3.exoplayer.DefaultLoadControl
+import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
-import androidx.media3.exoplayer.analytics.AnalyticsListener
+import androidx.media3.exoplayer.audio.AudioSink
+import androidx.media3.exoplayer.audio.DefaultAudioSink
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.session.CommandButton
 import androidx.media3.session.MediaSession
@@ -24,21 +26,13 @@ import androidx.media3.session.MediaSessionService
 import androidx.media3.session.SessionCommand
 import androidx.media3.session.SessionResult
 import app.nuta.settings.BufferSize
-import app.nuta.settings.LoudnessNormalization
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
 import java.io.File
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
-import kotlinx.coroutines.launch
 
 class PlaybackService : MediaSessionService() {
     private var mediaSession: MediaSession? = null
     private var streamCache: SimpleCache? = null
-    private var loudnessEnhancer: LoudnessEnhancer? = null
-    private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
     override fun onCreate() {
         super.onCreate()
@@ -57,6 +51,7 @@ class PlaybackService : MediaSessionService() {
         val player = ExoPlayer.Builder(this)
             .setMediaSourceFactory(DefaultMediaSourceFactory(cacheFactory))
             .setLoadControl(loadControl(settingsStore.settings.value.bufferSize))
+            .setRenderersFactory(loudnessAwareRenderersFactory(settingsStore))
             .setSeekBackIncrementMs(10_000)
             .setSeekForwardIncrementMs(10_000)
             // Bez tego odtwarzanie kontynuowało przez głośnik telefonu po utracie połączenia
@@ -69,24 +64,10 @@ class PlaybackService : MediaSessionService() {
                 PlaybackQueueBridge.buffering.value = playbackState == Player.STATE_BUFFERING
             }
         })
-        loudnessEnhancer = createLoudnessEnhancer(player.audioSessionId, settingsStore.settings.value.loudnessNormalization)
-        // Media3 1.10.1 zgłasza zmianę sesji audio przez AnalyticsListener na wątku odtwarzania,
-        // nie na Main — a loudnessEnhancer jest czytany/nadpisywany też z coroutine ustawień
-        // (Main) i z onDestroy (Main). Bez wymuszenia tej samej kolejki dla wszystkich trzech
-        // miejsc groził wyścig: coroutine ustawień mogła wywołać setTargetGain na obiekcie,
-        // który AnalyticsListener właśnie zwolnił (zamaskowane przez runCatching, więc bez
-        // crasha, ale ustawienie po cichu się nie stosowało).
-        player.addAnalyticsListener(object : AnalyticsListener {
-            override fun onAudioSessionIdChanged(eventTime: AnalyticsListener.EventTime, audioSessionId: Int) {
-                scope.launch {
-                    runCatching { loudnessEnhancer?.release() }
-                    loudnessEnhancer = createLoudnessEnhancer(audioSessionId, settingsStore.settings.value.loudnessNormalization)
-                }
-            }
-        })
-        scope.launch {
-            settingsStore.settings.collect { settings -> applyLoudnessSetting(settings.loudnessNormalization) }
-        }
+        // Normalizacja głośności siedzi teraz w łańcuchu audio (LoudnessAudioProcessor wpięty
+        // przez loudnessAwareRenderersFactory), a nie w systemowym efekcie audio — procesor sam
+        // czyta aktualny tryb z ustawień przy każdym buforze, więc nie ma tu czego subskrybować
+        // ani zwalniać przy zmianie sesji audio.
         // ±10s jako CUSTOM SessionCommand: system Android 13+ renderuje w powiadomieniu tylko
         // standardowe prev/play/next + custom actions — player command SEEK_BACK/FORWARD ląduje
         // jako REWIND/FAST_FORWARD, których systemowe kontrolki nie pokazują wcale
@@ -240,29 +221,32 @@ class PlaybackService : MediaSessionService() {
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? = mediaSession
 
-    private fun createLoudnessEnhancer(audioSessionId: Int, mode: LoudnessNormalization): LoudnessEnhancer? =
-        runCatching { LoudnessEnhancer(audioSessionId) }
-            .onFailure { AppServices.logger.warn("PlaybackService", "loudness_enhancer_create_failed", "Nie udało się utworzyć LoudnessEnhancer", fields = mapOf("reason" to (it.message ?: "unknown"))) }
-            .getOrNull()
-            ?.also { runCatching { applyLoudnessSetting(mode) } }
-
-    private fun applyLoudnessSetting(mode: LoudnessNormalization) {
-        val enhancer = loudnessEnhancer ?: return
-        val targetMb = when (mode) {
-            LoudnessNormalization.OFF -> 0
-            LoudnessNormalization.GENTLE -> 300
-            LoudnessNormalization.NORMAL -> 700
+    /**
+     * Wpina [LoudnessAudioProcessor] w łańcuch audio ExoPlayera.
+     *
+     * Zastępuje wcześniejszy `android.media.audiofx.LoudnessEnhancer`, który miał dwa problemy:
+     * potrafił tylko wzmacniać (nigdy nie ściszał głośnych utworów, więc nie wyrównywał
+     * głośności między nimi — a o to w tej funkcji chodzi), i zależał od sprzętowego efektu,
+     * którego część urządzeń nie ma (Galaxy A55: `Cannot initialize effect engine ... Error: -3`).
+     * Procesor liczy wszystko softwarowo, więc działa na każdym urządzeniu.
+     *
+     * Lista procesorów jest ustalana raz, przy budowie sinka — dlatego procesor jest zawsze
+     * wpięty, a tryb (w tym OFF) rozstrzyga sam, czytając ustawienia przy każdym buforze.
+     */
+    private fun loudnessAwareRenderersFactory(settingsStore: AndroidPlaybackSettingsStore) =
+        object : DefaultRenderersFactory(this) {
+            override fun buildAudioSink(
+                context: Context,
+                enableFloatOutput: Boolean,
+                enableAudioOutputPlaybackParams: Boolean,
+            ): AudioSink = DefaultAudioSink.Builder(context)
+                .setEnableFloatOutput(enableFloatOutput)
+                .setEnableAudioOutputPlaybackParameters(enableAudioOutputPlaybackParams)
+                .setAudioProcessors(arrayOf(LoudnessAudioProcessor(settingsStore)))
+                .build()
         }
-        runCatching {
-            enhancer.setTargetGain(targetMb)
-            enhancer.enabled = mode != LoudnessNormalization.OFF
-        }
-    }
 
     override fun onDestroy() {
-        scope.cancel()
-        runCatching { loudnessEnhancer?.release() }
-        loudnessEnhancer = null
         mediaSession?.run {
             player.release()
             release()
