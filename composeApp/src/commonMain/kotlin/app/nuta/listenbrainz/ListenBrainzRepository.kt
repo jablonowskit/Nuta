@@ -86,41 +86,24 @@ class ListenBrainzRepository(
     override suspend fun getLikedTracks(): List<Track> {
         val user = username()
         if (user.isBlank()) return emptyList()
-        data class Inline(val id: String, val hasMbid: Boolean, val title: String, val artist: String, val album: String, val artistMbid: String?)
-        val inline = mutableListOf<Inline>()
+        val inline = mutableListOf<FeedbackEntry>()
         var offset = 0
         var pageIndex = 0
         // Twardy limit stron — niespójny total_count z API (albo strona, która stale wraca
         // niepusta) zapętliłby pobieranie na zawsze.
         while (pageIndex++ < MAX_FEEDBACK_PAGES) {
-            val page = runCatching {
-                val response = httpGet("https://api.listenbrainz.org/1/feedback/user/$user/get-feedback?score=1&metadata=true&count=100&offset=$offset")
-                if (response.isBlank()) return@runCatching null
-                json.parseToJsonElement(response).jsonObject
+            val response = runCatching {
+                httpGet("https://api.listenbrainz.org/1/feedback/user/$user/get-feedback?score=1&metadata=true&count=100&offset=$offset")
             }.getOrElse { error ->
                 logger.info("ListenBrainz", "no_feedback", "Brak polubień ListenBrainz lub nieznany użytkownik", fields = mapOf("reason" to (error.message ?: "unknown")))
                 null
             } ?: break
-            val feedback = page["feedback"] as? JsonArray ?: break
-            feedback.forEach { item ->
-                val entry = item as? JsonObject ?: return@forEach
-                val mbid = entry["recording_mbid"]?.jsonPrimitive?.contentOrNull
-                val id = mbid ?: entry["recording_msid"]?.jsonPrimitive?.contentOrNull ?: return@forEach
-                val metadata = entry["track_metadata"] as? JsonObject ?: return@forEach
-                val title = metadata["track_name"]?.jsonPrimitive?.contentOrNull ?: return@forEach
-                val artist = metadata["artist_name"]?.jsonPrimitive?.contentOrNull.orEmpty()
-                val album = metadata["release_name"]?.jsonPrimitive?.contentOrNull.orEmpty()
-                // mbid_mapping bywa jawnym JSON null (nie brakującym polem) dla wpisów bez
-                // dopasowania — .jsonObject rzuca na JsonNull zamiast zwrócić null, stąd `as?`.
-                val artistMbid = (metadata["mbid_mapping"] as? JsonObject)?.get("artist_mbids")?.let { it as? JsonArray }
-                    ?.firstOrNull()?.jsonPrimitive?.contentOrNull
-                inline += Inline(id, mbid != null, title, artist, album, artistMbid)
-            }
-            val totalCount = page["total_count"]?.jsonPrimitive?.contentOrNull?.toIntOrNull() ?: inline.size
-            offset += feedback.size
-            if (feedback.isEmpty() || offset >= totalCount) break
+            val page = parseFeedbackPage(response) ?: break
+            inline += page.entries
+            offset += page.entriesOnPage
+            if (page.entriesOnPage == 0 || offset >= (page.totalCount ?: inline.size)) break
         }
-        val durationByMbid = lookupMetadata(inline.filter { it.hasMbid }.map(Inline::id)).associate { it.id to it.durationMs }
+        val durationByMbid = lookupMetadata(inline.filter { it.hasMbid }.map(FeedbackEntry::id)).associate { it.id to it.durationMs }
         return inline.map {
             Track(
                 id = it.id,
@@ -292,25 +275,13 @@ class ListenBrainzRepository(
         if (mbids.isEmpty()) return emptyList()
         val tracks = mutableListOf<Track>()
         mbids.distinct().chunked(50).forEach { chunk ->
-            val root = runCatching {
-                val response = httpGet("https://api.listenbrainz.org/1/metadata/recording/?recording_mbids=${chunk.joinToString(",")}&inc=artist")
-                if (response.isBlank()) return@runCatching null
-                json.parseToJsonElement(response).jsonObject
+            val response = runCatching {
+                httpGet("https://api.listenbrainz.org/1/metadata/recording/?recording_mbids=${chunk.joinToString(",")}&inc=artist")
             }.getOrElse { error ->
                 logger.warn("ListenBrainz", "metadata_lookup_failed", "Nie udało się dociągnąć metadanych nagrań", fields = mapOf("reason" to (error.message ?: "unknown")))
                 null
             } ?: return@forEach
-            chunk.forEach { mbid ->
-                val entry = root[mbid]?.jsonObject ?: return@forEach
-                val recording = entry["recording"]?.jsonObject
-                val name = recording?.get("name")?.jsonPrimitive?.contentOrNull ?: return@forEach
-                val length = recording["length"]?.jsonPrimitive?.longOrNull ?: 0L
-                val artistObj = entry["artist"]?.jsonObject
-                val artists = (artistObj?.get("artists") as? JsonArray).orEmpty()
-                val artistNames = artists.mapNotNull { it.jsonObject["name"]?.jsonPrimitive?.contentOrNull }
-                val artistMbid = artists.firstOrNull()?.jsonObject?.get("artist_mbid")?.jsonPrimitive?.contentOrNull
-                tracks += Track(id = mbid, title = name, artists = artistNames, album = "", durationMs = length, artistMbid = artistMbid)
-            }
+            tracks += parseMetadataLookup(response, chunk)
         }
         return tracks
     }
@@ -330,10 +301,98 @@ class ListenBrainzRepository(
         return Track(id = mbid, title = title, artists = listOfNotNull(creator.takeIf(String::isNotBlank)), album = "", durationMs = duration)
     }
 
-    private companion object {
+    /** Jeden wpis polubienia sparsowany z `get-feedback`, przed dociągnięciem czasu trwania. */
+    internal data class FeedbackEntry(
+        val id: String,
+        /** true = `id` to MBID (można dociągnąć metadane); false = tylko MSID z MessyBrainz. */
+        val hasMbid: Boolean,
+        val title: String,
+        val artist: String,
+        val album: String,
+        val artistMbid: String?,
+    )
+
+    /** Jedna strona `get-feedback`: wpisy + dane potrzebne do decyzji o kolejnej stronie. */
+    internal data class FeedbackPage(
+        val entries: List<FeedbackEntry>,
+        /** Liczba elementów w tablicy `feedback` — także tych pominiętych przy parsowaniu,
+            bo offset kolejnej strony musi się zgadzać z tym, co zwróciło API. */
+        val entriesOnPage: Int,
+        val totalCount: Int?,
+    )
+
+    internal companion object {
         const val SyntheticRecommendationsId = "listenbrainz-recommendations"
         /** 100 wpisów na stronę — 200 stron to 20 000 polubień, znacznie powyżej realnych bibliotek. */
         const val MAX_FEEDBACK_PAGES = 200
         val MbidRegex = Regex("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
+
+        private val parserJson = Json { ignoreUnknownKeys = true }
+
+        /**
+         * Parsuje jedną stronę `feedback/user/{u}/get-feedback?metadata=true`.
+         * Zwraca null, gdy odpowiedzi nie da się użyć (pusta, niepoprawna, bez tablicy
+         * `feedback`) — wywołujący przerywa wtedy paginację.
+         *
+         * Wydzielone z [getLikedTracks], bo właśnie tu wystąpiły wszystkie trzy realne awarie:
+         * pusta odpowiedź (204) wysypywała parsowanie, `mbid_mapping` jako jawny JSON null
+         * rzucał wyjątek na `.jsonObject`, a wpisy mające tylko `recording_msid` były gubione.
+         */
+        fun parseFeedbackPage(body: String): FeedbackPage? {
+            if (body.isBlank()) return null
+            val page = runCatching { parserJson.parseToJsonElement(body) as? JsonObject }.getOrNull() ?: return null
+            val feedback = page["feedback"] as? JsonArray ?: return null
+            val entries = feedback.mapNotNull { item ->
+                val entry = item as? JsonObject ?: return@mapNotNull null
+                val mbid = entry["recording_mbid"]?.jsonPrimitive?.contentOrNull
+                // Wpisy bez dopasowania w MusicBrainz mają tylko MSID (MessyBrainz) — też są
+                // prawidłowymi polubieniami i muszą się pokazać na liście Ulubionych.
+                val id = mbid ?: entry["recording_msid"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
+                val metadata = entry["track_metadata"] as? JsonObject ?: return@mapNotNull null
+                val title = metadata["track_name"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
+                // mbid_mapping bywa jawnym JSON null (nie brakującym polem) dla wpisów bez
+                // dopasowania — .jsonObject rzuca na JsonNull zamiast zwrócić null, stąd `as?`.
+                val artistMbid = (metadata["mbid_mapping"] as? JsonObject)?.get("artist_mbids")?.let { it as? JsonArray }
+                    ?.firstOrNull()?.jsonPrimitive?.contentOrNull
+                FeedbackEntry(
+                    id = id,
+                    hasMbid = mbid != null,
+                    title = title,
+                    artist = metadata["artist_name"]?.jsonPrimitive?.contentOrNull.orEmpty(),
+                    album = metadata["release_name"]?.jsonPrimitive?.contentOrNull.orEmpty(),
+                    artistMbid = artistMbid,
+                )
+            }
+            return FeedbackPage(
+                entries = entries,
+                entriesOnPage = feedback.size,
+                totalCount = page["total_count"]?.jsonPrimitive?.contentOrNull?.toIntOrNull(),
+            )
+        }
+
+        /**
+         * Parsuje odpowiedź `metadata/recording/` (batch lookup). Kształt różni się od
+         * MusicBrainz search (`artist.artists[].name`, nie `artist-credit[].artist.name`),
+         * dlatego to osobny parser. Nieznane MBID-y API po prostu pomija, więc brak klucza
+         * jest normalną ścieżką, nie błędem.
+         */
+        fun parseMetadataLookup(body: String, mbids: List<String>): List<Track> {
+            if (body.isBlank()) return emptyList()
+            val root = runCatching { parserJson.parseToJsonElement(body) as? JsonObject }.getOrNull() ?: return emptyList()
+            return mbids.mapNotNull { mbid ->
+                val entry = root[mbid] as? JsonObject ?: return@mapNotNull null
+                val recording = entry["recording"] as? JsonObject ?: return@mapNotNull null
+                val name = recording["name"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
+                val artists = ((entry["artist"] as? JsonObject)?.get("artists") as? JsonArray).orEmpty()
+                Track(
+                    id = mbid,
+                    title = name,
+                    artists = artists.mapNotNull { (it as? JsonObject)?.get("name")?.jsonPrimitive?.contentOrNull },
+                    album = "",
+                    durationMs = recording["length"]?.jsonPrimitive?.longOrNull ?: 0L,
+                    artistMbid = (artists.firstOrNull() as? JsonObject)?.get("artist_mbid")?.jsonPrimitive?.contentOrNull,
+                )
+            }
+        }
     }
 }
