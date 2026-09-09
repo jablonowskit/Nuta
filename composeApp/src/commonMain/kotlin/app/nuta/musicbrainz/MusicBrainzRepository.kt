@@ -19,8 +19,8 @@ import kotlinx.serialization.json.longOrNull
  */
 class MusicBrainzRepository(private val logger: NutaLogger) {
     suspend fun search(query: String): SearchResult {
-        if (query.isBlank()) return SearchResult(emptyList(), emptyList())
-        val encoded = java.net.URLEncoder.encode(query, "UTF-8")
+        val lucene = buildLuceneQuery(query) ?: return SearchResult(emptyList(), emptyList())
+        val encoded = java.net.URLEncoder.encode(lucene, "UTF-8")
         val body = httpGet(
             "https://musicbrainz.org/ws/2/recording/?query=$encoded&fmt=json&limit=20",
             headers = mapOf("User-Agent" to UserAgent),
@@ -32,6 +32,34 @@ class MusicBrainzRepository(private val logger: NutaLogger) {
 
     internal companion object {
         const val UserAgent = "Nuta/1.0 ( https://github.com/jablonowskit/Nuta )"
+
+        /**
+         * Buduje zapytanie Lucene wymagające, by **każde** wpisane słowo trafiło w tytuł
+         * nagrania **albo** w nazwę wykonawcy — bez zgadywania, które słowa są czym.
+         *
+         * Wcześniej surowy tekst szedł prosto do `query=`, co dawało fatalne wyniki: MusycBrainz
+         * szukał słów gdziekolwiek i dla „Haddaway What Is Love" zwracał 2,2 mln trafień, na
+         * czele covery przypadkowych wykonawców, a oryginał nie mieścił się nawet w top 25.
+         * Po zmianie (zweryfikowane 09.09.2026): 376 trafień z „Haddaway — What Is Love" na
+         * pierwszym miejscu; „Ice MC Scream" 365 598 → 24 z poprawnym utworem na czele.
+         *
+         * Każde słowo jest wstawiane jako fraza w cudzysłowach, bo to neutralizuje znaki
+         * specjalne Lucene bez ich wycinania — „AC/DC" wyszukuje się poprawnie, a wcześniejsza
+         * próba zamiany takich znaków na spacje rozbijała zapytanie.
+         *
+         * Zwraca null dla pustego zapytania (nie ma czego szukać).
+         */
+        fun buildLuceneQuery(query: String): String? {
+            val words = query.split(WhitespaceRegex)
+                // Cudzysłów i backslash to jedyne znaki, których cytowanie nie neutralizuje —
+                // zostawione, zamknęłyby frazę w środku i zepsuły składnię.
+                .map { it.replace("\"", "").replace("\\", "").trim() }
+                .filter(String::isNotBlank)
+            if (words.isEmpty()) return null
+            return words.joinToString(" AND ") { """(recording:"$it" OR artistname:"$it")""" }
+        }
+
+        private val WhitespaceRegex = Regex("\\s+")
 
         private val json = Json { ignoreUnknownKeys = true }
 
