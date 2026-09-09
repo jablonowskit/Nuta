@@ -54,6 +54,7 @@
     <string name="filter_tracks">Utwory</string>
     <string name="filter_artists">Wykonawcy</string>
     <string name="filter_playlists">Playlisty</string>
+    <string name="section_artists">WYKONAWCY</string>
     <string name="section_playlists">PLAYLISTY</string>
     <string name="section_tracks">UTWORY</string>
     <string name="search_no_results">Brak wyników dla „%1$s”</string>

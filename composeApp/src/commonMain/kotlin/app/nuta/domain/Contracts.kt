@@ -1,5 +1,6 @@
 package app.nuta.domain
 
+import app.nuta.core.models.Artist
 import app.nuta.core.models.PlayerState
 import app.nuta.core.models.Playlist
 import app.nuta.core.models.SearchResult
@@ -16,6 +17,11 @@ interface SpotifyRepository {
     suspend fun isTrackLiked(trackId: String): Boolean
     suspend fun setTrackLiked(track: Track, liked: Boolean)
     suspend fun search(query: String): SearchResult
+    /**
+     * Utwory danego wykonawcy, dociągane z serwisu — nie tylko te, które akurat wpadły
+     * w wyniki wyszukiwania. Używane po wejściu w wykonawcę z ekranu Szukaj.
+     */
+    suspend fun getArtistTracks(artist: Artist, limit: Int = 50): List<Track>
     suspend fun getTrackRadio(seed: Track, limit: Int = 20): List<Track>
     suspend fun createPlaylist(name: String, description: String = ""): Playlist
     suspend fun addTracksToPlaylist(playlistId: String, tracks: List<Track>)

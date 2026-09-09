@@ -22,12 +22,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import app.nuta.AppContainer
+import app.nuta.core.models.Artist
 import app.nuta.core.models.PlayerStatus
 import app.nuta.core.models.Playlist
 import app.nuta.core.models.SearchResult
 import app.nuta.core.models.Track
 import app.nuta.resources.*
 import app.nuta.search.matchesLoosely
+import app.nuta.ui.ArtistSearchCard
 import app.nuta.ui.EmptyState
 import app.nuta.ui.ErrorState
 import app.nuta.ui.PlaylistCard
@@ -52,6 +54,7 @@ internal fun SearchScreen(
     state: SearchViewState,
     onStateChange: (SearchViewState) -> Unit,
     onPlaylist: (Playlist) -> Unit,
+    onArtist: (Artist) -> Unit,
     onAddToPlaylist: (Track) -> Unit,
 ) {
     val scope = rememberCoroutineScope()
@@ -146,14 +149,26 @@ internal fun SearchScreen(
             }
         }
         val visiblePlaylists = if (state.searchPlaylists) state.result.playlists else emptyList()
+        // Wykonawcy zawężani tym samym dopasowaniem co utwory (odpornym na diakrytyki),
+        // żeby lista nie pokazywała trafień niezwiązanych z wpisanym tekstem.
+        val visibleArtists = if (!state.searchArtists) emptyList() else state.result.artists.filter { artist ->
+            queryOrGroups.isEmpty() || queryOrGroups.any { andWords -> andWords.all { artist.name.matchesLoosely(it) } }
+        }
         val searchPlaybackSettings by container.playbackSettings.settings.collectAsState()
         LaunchedEffect(visibleTracks, searchPlaybackSettings.prefetchEnabled) {
             if (searchPlaybackSettings.prefetchEnabled) container.audioPlayer.prefetch(visibleTracks)
         }
-        if (state.error != null) ErrorState(state.error) else if (state.query.isNotBlank() && visibleTracks.isEmpty() && visiblePlaylists.isEmpty()) {
+        if (state.error != null) ErrorState(state.error) else if (state.query.isNotBlank() && visibleTracks.isEmpty() && visiblePlaylists.isEmpty() && visibleArtists.isEmpty()) {
             EmptyState(stringResource(Res.string.search_no_results, state.query))
         } else {
             ScrollableLazyColumn(Modifier.fillMaxSize()) {
+                if (visibleArtists.isNotEmpty()) {
+                    item { SectionLabel(stringResource(Res.string.section_artists)) }
+                    items(visibleArtists, key = { "a-${it.id}" }) { artist ->
+                        ArtistSearchCard(artist) { onArtist(artist) }
+                    }
+                    item { Spacer(Modifier.height(18.dp)) }
+                }
                 if (visiblePlaylists.isNotEmpty()) {
                     item { SectionLabel(stringResource(Res.string.section_playlists)) }
                     items(visiblePlaylists, key = { "p-${it.id}" }) { PlaylistCard(it) { onPlaylist(it) } }

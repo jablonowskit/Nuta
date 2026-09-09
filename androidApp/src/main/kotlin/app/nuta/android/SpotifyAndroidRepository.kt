@@ -184,6 +184,23 @@ class SpotifyAndroidRepository(
         return collectArtists(root)
     }
 
+    /**
+     * Utwory wykonawcy przez wyszukiwanie po jego nazwie, zawężone do trafień, w których ten
+     * wykonawca faktycznie występuje — pathfinder nie ma sprawdzonego zapytania „utwory
+     * wykonawcy", a `searchTracks` jest już zweryfikowane i wystarcza do zbudowania kolejki.
+     */
+    override suspend fun getArtistTracks(artist: Artist, limit: Int): List<Track> {
+        if (artist.name.isBlank()) return emptyList()
+        val found = runCatching { search(artist.name).tracks }.getOrElse { error ->
+            logger.warn("SpotifyAndroid", "artist_tracks_failed", "Nie udało się pobrać utworów wykonawcy", fields = mapOf("reason" to (error.message ?: "unknown")))
+            emptyList()
+        }
+        val byArtist = found.filter { track -> track.artists.any { it.equals(artist.name, ignoreCase = true) } }
+        // Gdy dokładne dopasowanie nazwy nic nie zostawi (inna pisownia, „feat."), pokazujemy
+        // same wyniki wyszukiwania — lepsze niż pusty ekran.
+        return (byArtist.ifEmpty(found::toList)).distinctBy(Track::id).take(limit)
+    }
+
     override suspend fun getTrackRadio(seed: Track, limit: Int): List<Track> {
         val candidates = (seed.artists + seed.album + seed.title).filter(String::isNotBlank)
             .flatMap { search(it).tracks }

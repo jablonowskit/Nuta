@@ -66,6 +66,7 @@ import app.nuta.ui.screens.PlaylistsScreen
 import app.nuta.ui.screens.QueueScreen
 import app.nuta.ui.screens.SearchScreen
 import app.nuta.ui.screens.SettingsScreen
+import app.nuta.core.models.Artist
 import app.nuta.core.models.Destination
 import app.nuta.core.models.Playlist
 import app.nuta.core.models.SearchResult
@@ -215,6 +216,35 @@ private fun NutaAppContent(container: AppContainer) {
                             "Nie udało się otworzyć playlisty",
                             fields = mapOf("playlistIdLength" to playlist.id.length.toString()),
                             throwable = it,
+                        )
+                    }
+                loading = false
+            }
+        }
+
+        /**
+         * Wejście w wykonawcę z ekranu Szukaj. Utwory dociągane z serwisu (nie tylko te
+         * z bieżących wyników) trafiają do syntetycznej playlisty, więc pokazuje je ten sam
+         * [PlaylistDetails] co playlisty — bez osobnego ekranu i drugiej ścieżki nawigacji.
+         */
+        fun selectArtist(artist: Artist) {
+            scope.launch {
+                loading = true
+                loadError = null
+                runCatching { container.spotifyRepository.getArtistTracks(artist) }
+                    .onSuccess { tracks ->
+                        selectedPlaylist = Playlist(
+                            id = "artist-${artist.id}",
+                            name = artist.name,
+                            description = "",
+                            tracks = tracks,
+                        )
+                    }
+                    .onFailure {
+                        loadError = it.message ?: errorUnknownLabel
+                        container.logger.warn(
+                            "Search", "artist_open_failed", "Nie udało się otworzyć wykonawcy",
+                            fields = mapOf("reason" to (it.message ?: "unknown")),
                         )
                     }
                 loading = false
@@ -389,6 +419,7 @@ private fun NutaAppContent(container: AppContainer) {
                                     state = searchState,
                                     onStateChange = { searchState = it },
                                     onPlaylist = ::selectPlaylist,
+                                    onArtist = ::selectArtist,
                                     onAddToPlaylist = ::openAddToPlaylistDialog,
                                 )
                                 Destination.QUEUE -> QueueScreen(playerState, container)
