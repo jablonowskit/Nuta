@@ -85,7 +85,7 @@ przez SABR:
 ## Wynik / dostawa
 Wynik researchu (jak działa UMP/SABR, jaki jest realny zakres pracy, jakie istniejące
 implementacje/dokumentacja są dostępne, ocena czasu/ryzyka) trafia do kolejnego pliku w
-tym samym katalogu: `openspec/changes/2026-08-sabr-blocker/sabr-research.md`,
+tym samym katalogu: `docs/sabr-blocker/sabr-research.md`,
 committed i wypchnięty na `main` — dostępny dla przyszłych sesji/innych narzędzi, nie
 tylko w rozmowie, w której powstał.
 

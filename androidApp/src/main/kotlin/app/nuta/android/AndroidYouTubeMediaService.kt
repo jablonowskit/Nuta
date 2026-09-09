@@ -87,7 +87,7 @@ class AndroidYouTubeMediaService(
         val watch = request("https://www.youtube.com/watch?v=$videoId&hl=en&gl=US")
         val key = Regex("\"INNERTUBE_API_KEY\":\"([^\"]+)\"").find(watch)?.groupValues?.get(1) ?: error("Brak klucza YouTube")
         val visitor = Regex("\"VISITOR_DATA\":\"([^\"]+)\"").find(watch)?.groupValues?.get(1)
-        // Curl-owy test wszystkich 6 profili z 22.08.2026 (openspec/changes/2026-08-sabr-blocker/)
+        // Curl-owy test wszystkich 6 profili z 22.08.2026 (docs/sabr-blocker/)
         // pokazał, że TYLKO VISIONOS i ANDROID_VR dają cokolwiek użyteczne — WEB/TVHTML5 nie
         // przechodzą nawet playability, a ANDROID/IOS mają playability OK, ale tylko SABR (bez
         // url). Usunięte jako bezsensowne, zamiast zaśmiecać listę profilami, które i tak zawodzą.

@@ -12,7 +12,7 @@ enum class LoudnessNormalization { OFF, GENTLE, NORMAL }
  * Który profil klienta InnerTube resolver ma próbować przy rozwiązywaniu strumienia YouTube.
  * AUTO = VISIONOS jako pierwszy, potem ANDROID_VR jako fallback (jedyne dwa profile, które wg
  * testów z 22.08.2026 dają cokolwiek użyteczne — WEB/ANDROID/IOS/TVHTML5 usunięte jako bezsensowne,
- * patrz openspec/changes/2026-08-sabr-blocker/). Wybór konkretnego klienta próbuje TYLKO tego
+ * patrz docs/sabr-blocker/). Wybór konkretnego klienta próbuje TYLKO tego
  * jednego, bez fallbacku — przydatne do ręcznego diagnozowania, który profil akurat działa.
  */
 enum class YouTubeClientProfile { AUTO, VISIONOS, ANDROID_VR }
@@ -20,7 +20,7 @@ enum class YouTubeClientProfile { AUTO, VISIONOS, ANDROID_VR }
 /**
  * Skąd rozwiązywać strumień audio dla utworu. AUTO próbuje YouTube, a przy błędzie
  * (np. YouTube wymusi SABR na VISIONOS tak jak zrobił to wcześniej z WEB/TVHTML5/ANDROID_VR —
- * patrz openspec/changes/2026-08-sabr-blocker/) automatycznie spada na SoundCloud dla tego
+ * patrz docs/sabr-blocker/) automatycznie spada na SoundCloud dla tego
  * samego utworu. YOUTUBE/SOUNDCLOUD to jawny, wymuszony wybór jednego źródła bez fallbacku —
  * przydatne do diagnozowania, które źródło akurat działa.
  */
