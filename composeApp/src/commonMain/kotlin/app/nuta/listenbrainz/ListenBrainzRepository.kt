@@ -1,6 +1,7 @@
 package app.nuta.listenbrainz
 
 import app.nuta.core.logging.NutaLogger
+import app.nuta.core.models.Artist
 import app.nuta.core.models.Playlist
 import app.nuta.core.models.SearchResult
 import app.nuta.core.models.Track
