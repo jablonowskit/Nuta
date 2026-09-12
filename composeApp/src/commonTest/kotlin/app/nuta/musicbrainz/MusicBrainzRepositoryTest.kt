@@ -179,4 +179,20 @@ class MusicBrainzRepositoryTest {
         )
         assertNull(MusicBrainzRepository.buildArtistQuery("   "))
     }
+
+    @Test
+    fun recognizesHttp503FromHttpGetExceptionMessage() {
+        // Regresja 12.09.2026: użytkownik zobaczył w UI "HTTP 503: {"error": "The MusicBrainz
+        // web server is currently busy..."}" po wyszukaniu "because" z filtrami Utwory+Wykonawcy
+        // włączonymi — czyli search() strzelał dwoma żądaniami (recording + artist) do
+        // musicbrainz.org bez żadnego odstępu. Zweryfikowane curlem: dwa żądania bez odstępu
+        // dają 503 niezawodnie; httpGet rzuca zwykły wyjątek w formacie "HTTP $status: $body"
+        // (patrz HttpFetch.android.kt/desktop.kt), więc rozpoznanie jest po treści komunikatu.
+        assertTrue(MusicBrainzRepository.isHttp503(RuntimeException(
+            """HTTP 503: {"error": "The MusicBrainz web server is currently busy. Please try again later."}""",
+        )))
+        assertTrue(!MusicBrainzRepository.isHttp503(RuntimeException("HTTP 500: internal error")))
+        assertTrue(!MusicBrainzRepository.isHttp503(RuntimeException("Unable to resolve host")))
+        assertTrue(!MusicBrainzRepository.isHttp503(RuntimeException(null as String?)))
+    }
 }
