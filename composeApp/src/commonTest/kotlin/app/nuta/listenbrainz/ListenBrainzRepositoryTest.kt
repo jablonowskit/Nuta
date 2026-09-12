@@ -1,9 +1,23 @@
 package app.nuta.listenbrainz
 
+import app.nuta.core.logging.NutaLogger
+import app.nuta.musicbrainz.MusicBrainzRepository
+import app.nuta.settings.InMemoryPlaybackSettingsStore
+import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+
+/** Logger no-op: te testy sprawdzają wyjątki i wartości zwrotne, nie same logi. */
+private class NoOpLogger : NutaLogger {
+    override fun trace(module: String, event: String, message: String, operationId: String, fields: Map<String, String>) {}
+    override fun debug(module: String, event: String, message: String, operationId: String, fields: Map<String, String>) {}
+    override fun info(module: String, event: String, message: String, operationId: String, fields: Map<String, String>) {}
+    override fun warn(module: String, event: String, message: String, operationId: String, fields: Map<String, String>) {}
+    override fun error(module: String, event: String, message: String, operationId: String, fields: Map<String, String>, throwable: Throwable?) {}
+}
 
 /**
  * Testy parserów odpowiedzi ListenBrainz. Wejście to **prawdziwe** odpowiedzi API (pobrane
@@ -239,5 +253,26 @@ class ListenBrainzRepositoryTest {
         assertEquals("", playlists[0].description)
         assertTrue(ListenBrainzRepository.parsePlaylistSearch("").isEmpty())
         assertTrue(ListenBrainzRepository.parsePlaylistSearch("<html>502</html>").isEmpty())
+    }
+
+    @Test
+    fun getLikedTracksFailsLoudlyWhenUsernameMissing() {
+        // Regresja 12.09.2026: użytkownik zgłosił "puste ulubione" na desktopie. Przyczyna:
+        // desktop trzyma ustawienia w InMemoryPlaybackSettingsStore (Main.kt), więc
+        // listenBrainzUsername jest pusty przy każdym uruchomieniu, niezależnie od tego, co
+        // skonfigurowano na Androidzie. getLikedTracks() wcześniej cicho zwracał emptyList()
+        // w tym przypadku — nierozróżnialne w UI od stanu "naprawdę brak polubień"
+        // (LikedScreen pokazuje ten sam EmptyState w obu przypadkach). Musi rzucić zrozumiały
+        // wyjątek, tak jak requireToken() robi to dla brakującego tokenu, żeby dotarł do
+        // LikedScreen jako ErrorState zamiast fałszywego "brak polubionych utworów".
+        val repository = ListenBrainzRepository(
+            settingsStore = InMemoryPlaybackSettingsStore(),
+            musicBrainz = MusicBrainzRepository(NoOpLogger()),
+            logger = NoOpLogger(),
+        )
+        val error = assertFailsWith<IllegalStateException> {
+            runBlocking { repository.getLikedTracks() }
+        }
+        assertTrue(error.message.orEmpty().contains("Ustawieniach"), error.message.orEmpty())
     }
 }
