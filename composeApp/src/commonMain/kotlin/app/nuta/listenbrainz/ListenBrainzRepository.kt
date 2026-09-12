@@ -85,8 +85,15 @@ class ListenBrainzRepository(
         prawdziwą długość przez [lookupMetadata] (batch `/metadata/recording/`, ma pole
         `length`); tylko wpisy z gołym `recording_msid` (bez MBID) zostają z durationMs=0. */
     override suspend fun getLikedTracks(): List<Track> {
+        // Wcześniej pusty username dawał cicho emptyList() — nierozróżnialne od "naprawdę
+        // brak polubień" w UI (LikedScreen pokazywał zwykłe "brak polubionych utworów", bez
+        // podpowiedzi, że przyczyną jest brakująca konfiguracja). Zweryfikowane 12.09.2026:
+        // desktop trzyma ustawienia w InMemoryPlaybackSettingsStore (Main.kt), więc username
+        // jest pusty przy każdym uruchomieniu, niezależnie od tego, co skonfigurowano na
+        // Androidzie — a to akurat cichy błąd konfiguracji, nie stan "brak polubień", więc
+        // rzucamy zrozumiały wyjątek tak jak requireToken() robi to dla tokenu.
         val user = username()
-        if (user.isBlank()) return emptyList()
+        check(user.isNotBlank()) { "Skonfiguruj nazwę użytkownika ListenBrainz w Ustawieniach" }
         val inline = mutableListOf<FeedbackEntry>()
         var offset = 0
         var pageIndex = 0
