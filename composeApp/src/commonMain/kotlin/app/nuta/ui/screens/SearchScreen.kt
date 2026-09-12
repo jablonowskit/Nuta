@@ -8,8 +8,10 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.Checkbox
+import androidx.compose.material.CircularProgressIndicator
 import androidx.compose.material.OutlinedTextField
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
@@ -83,22 +85,29 @@ internal fun SearchScreen(
                 result = SearchResult(emptyList(), emptyList()),
                 error = null,
                 lastExecutedQuery = submittedQuery,
+                loading = false,
             ))
             return@LaunchedEffect
         }
         delay(400)
+        // Ustawiane DOPIERO po debounce: przy szybkim pisaniu każdy poprzedni LaunchedEffect
+        // jest anulowany, zanim tu dotrze, więc spinner nie miga po każdym znaku — tylko gdy
+        // zapytanie faktycznie ruszyło do sieci. Bez tego pola ekran przez cały czas
+        // oczekiwania (debounce + samo zapytanie, wydłużone przez retry na 503 z MusicBrainz —
+        // potrafi to trwać kilka sekund) pokazywał "brak wyników", co czytało się jako "nie działa".
+        onStateChange(currentState.copy(loading = true))
         // Spotify nie zna składni "|"/"&" — do zapytania serwerowego wysyłamy same słowa,
         // dokładne dopasowanie OR/AND liczymy potem lokalnie (visibleTracks niżej).
         val serverSearchTerm = submittedQuery.split(Regex("[|&\\s]+")).filter(String::isNotBlank).distinct().joinToString(" ")
         runCatching { container.spotifyRepository.search(serverSearchTerm) }
             .onSuccess {
                 if (currentState.query == submittedQuery) {
-                    onStateChange(currentState.copy(result = it, error = null, lastExecutedQuery = submittedQuery))
+                    onStateChange(currentState.copy(result = it, error = null, lastExecutedQuery = submittedQuery, loading = false))
                 }
             }
             .onFailure {
                 if (currentState.query == submittedQuery) {
-                    onStateChange(currentState.copy(error = it.message ?: searchUnknownError, lastExecutedQuery = submittedQuery))
+                    onStateChange(currentState.copy(error = it.message ?: searchUnknownError, lastExecutedQuery = submittedQuery, loading = false))
                 }
             }
     }
@@ -158,7 +167,14 @@ internal fun SearchScreen(
         LaunchedEffect(visibleTracks, searchPlaybackSettings.prefetchEnabled) {
             if (searchPlaybackSettings.prefetchEnabled) container.audioPlayer.prefetch(visibleTracks)
         }
-        if (state.error != null) ErrorState(state.error) else if (state.query.isNotBlank() && visibleTracks.isEmpty() && visiblePlaylists.isEmpty() && visibleArtists.isEmpty()) {
+        if (state.error != null) {
+            ErrorState(state.error)
+        } else if (state.loading && visibleTracks.isEmpty() && visiblePlaylists.isEmpty() && visibleArtists.isEmpty()) {
+            // Bez tego stanu ekran przez cały czas wyszukiwania (debounce + zapytanie, wydłużone
+            // przez retry na 503 z przeciążonego MusicBrainz — potrafi to trwać kilka sekund)
+            // pokazywał "brak wyników", zanim właściwe wyniki zdążyły przyjść.
+            CircularProgressIndicator(Modifier.align(Alignment.CenterHorizontally).padding(top = 24.dp))
+        } else if (state.query.isNotBlank() && visibleTracks.isEmpty() && visiblePlaylists.isEmpty() && visibleArtists.isEmpty()) {
             EmptyState(stringResource(Res.string.search_no_results, state.query))
         } else {
             ScrollableLazyColumn(Modifier.fillMaxSize()) {

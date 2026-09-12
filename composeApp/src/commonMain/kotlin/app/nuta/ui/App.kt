@@ -94,6 +94,13 @@ internal data class SearchViewState(
     val searchTracks: Boolean = true,
     val searchArtists: Boolean = true,
     val searchPlaylists: Boolean = true,
+    /**
+     * Trwa zapytanie sieciowe do bieżącego `query`. Bez tego pola ekran przez cały czas
+     * oczekiwania (debounce + samo zapytanie, wydłużone przez retry na 503 z MusicBrainz —
+     * potrafi to trwać kilka sekund) pokazywał "brak wyników" zamiast informacji, że
+     * wyszukiwanie jeszcze trwa — użytkownik odczytywał to jako "nie działa".
+     */
+    val loading: Boolean = false,
 )
 
 @Composable
