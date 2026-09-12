@@ -21,6 +21,14 @@
 
 - Do prostych, jednoznacznych zadań (proste wyszukiwanie, drobne poprawki, mechaniczne zmiany) używaj prostszych/tańszych modeli LLM.
 - Do zadań złożonych (wieloetapowe zmiany, analiza architektury, trudne decyzje projektowe) używaj bardziej zaawansowanych modeli LLM.
+- To samo dotyczy subagentów: proste, mechaniczne zadania (znajdź plik, sprawdź czy coś
+  istnieje, drobna poprawka) → prostszy/tańszy subagent; złożone (analiza architektury,
+  wieloetapowa zmiana, trudna decyzja projektowa) → bardziej zaawansowany.
+- Deleguj do subagenta tylko wtedy, gdy zadanie **nie wymaga** całego bieżącego kontekstu
+  rozmowy. Jeśli praca zależy od tego, co już ustalono w tej sesji (konkretny
+  zdiagnozowany błąd, decyzje z ostatnich wiadomości), subagent zaczyna bez tego
+  kontekstu i albo zgaduje, albo trzeba mu go w całości powtórzyć — wtedy taniej i
+  pewniej zrobić to samemu.
 
 ## Czym jest ten projekt
 
