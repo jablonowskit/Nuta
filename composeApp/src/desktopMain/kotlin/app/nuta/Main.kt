@@ -16,7 +16,7 @@ import app.nuta.platform.RotatingJsonLogSink
 import app.nuta.spotify.SpotifyLoginPrototype
 import app.nuta.spotify.SpotifyTestTokenStore
 import app.nuta.spotify.SpotifyWebSearchRepository
-import app.nuta.settings.InMemoryPlaybackSettingsStore
+import app.nuta.settings.FilePlaybackSettingsStore
 import app.nuta.soundcloud.NutaSoundCloudMediaService
 import app.nuta.youtube.NutaYouTubeMediaService
 import app.nuta.youtube.SourceSelectingMediaService
@@ -45,7 +45,10 @@ fun main() {
     )
     // Jedna instancja dzielona przez UI i resolver strumienia — inaczej suwaki jakości/kodeka
     // zapisywałyby się do innego obiektu niż ten, który czyta wybór formatu.
-    val playbackSettings = InMemoryPlaybackSettingsStore()
+    // FilePlaybackSettingsStore zamiast InMemoryPlaybackSettingsStore od 19.09.2026 — zgłoszone:
+    // użytkownik musiał wpisywać username/token ListenBrainz od nowa po każdym uruchomieniu
+    // desktopu, bo poprzedni store żył wyłącznie w pamięci procesu.
+    val playbackSettings = FilePlaybackSettingsStore(scope, logger)
     val youtubeMediaService = SourceSelectingMediaService(
         playbackSettings,
         NutaYouTubeMediaService(logger, playbackSettings),
