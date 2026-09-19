@@ -7,10 +7,16 @@ import kotlin.math.pow
 import kotlin.math.sqrt
 
 /**
- * Normalizacja głośności działająca na sygnale: mierzy bieżący poziom RMS i dąży do wspólnego
- * poziomu docelowego, więc **ścisza głośne utwory i podnosi ciche** — w przeciwieństwie do
- * `android.media.audiofx.LoudnessEnhancer`, który potrafi tylko wzmacniać (i którego część
- * urządzeń, m.in. Galaxy A55, nie inicjalizuje wcale — `Error: -3`).
+ * Normalizacja głośności działająca na sygnale: mierzy bieżący poziom RMS i **ścisza fragmenty
+ * głośniejsze niż cel** — w przeciwieństwie do `android.media.audiofx.LoudnessEnhancer`, który
+ * potrafi tylko wzmacniać (i którego część urządzeń, m.in. Galaxy A55, nie inicjalizuje wcale —
+ * `Error: -3`).
+ *
+ * Świadomie NIE podnosi cichych fragmentów (`maxBoostDb = 0`, patrz niżej) — zgłoszone na słuch
+ * 19.09.2026: wcześniejsze wzmacnianie ciszy w połączeniu z tłumieniem szczytów dawało słyszalne,
+ * powtarzające się "pompowanie" w rytm utworu (różnica między podniesioną ciszą a ściszonym
+ * szczytem wypadała mocniej niż faktyczna dynamika oryginału). Sam-tłumienie jest bardziej
+ * przewidywalne: ciche partie zostają w spokoju, korygowane są tylko wyraźne szczyty.
  *
  * Czysta logika, bez zależności od Androida ani mpv, żeby dała się przetestować jednostkowo;
  * platformowe opakowanie (`AudioProcessor` w Media3) tylko podaje jej próbki.
@@ -18,7 +24,7 @@ import kotlin.math.sqrt
  * Algorytm (jednoprzebiegowy, bo strumień jest odtwarzany na żywo — nie znamy go z góry):
  * 1. RMS liczony w oknie ~400 ms, tak jak „momentary loudness" w EBU R128.
  * 2. Z RMS wynika wzmocnienie potrzebne do trafienia w cel, ograniczone do [maxAttenuation,
- *    maxBoost] — bez tego cisza między utworami byłaby wzmacniana do szumu.
+ *    maxBoost] (maxBoost=0, więc realnie tylko do [maxAttenuation, 1.0]).
  * 3. Wzmocnienie zmienia się płynnie (attack/release), żeby nie „pompowało" na perkusji.
  * 4. Limiter twardo przycina próbki przekraczające [Ceiling], co chroni przed przesterowaniem
  *    po wzmocnieniu.
@@ -41,8 +47,15 @@ class LoudnessNormalizer(
         LoudnessNormalization.NORMAL -> -16.0
     }
 
-    /** GENTLE koryguje łagodniej — mniejszy zakres ingerencji w oryginalne proporcje utworu. */
-    private val maxBoostDb: Double = if (mode == LoudnessNormalization.GENTLE) 6.0 else 12.0
+    /**
+     * Zgłoszone na słuch 19.09.2026: wzmacnianie cichych fragmentów (dawne +6/+12 dB) w
+     * połączeniu z tłumieniem głośnych dawało słyszalne "pompowanie" w rytm utworu — różnica
+     * między podniesioną ciszą a ściszonym szczytem wypadała mocniej niż faktyczna dynamika
+     * oryginału. maxBoostDb=0 usuwa wzmacnianie całkowicie: normalizator już tylko tłumi
+     * głośne fragmenty (gainFor zwraca co najwyżej 1.0, nigdy więcej), nie dotyka cichych.
+     * GENTLE nadal koryguje łagodniej niż NORMAL — mniejszy dozwolony zakres tłumienia.
+     */
+    private val maxBoostDb: Double = 0.0
     private val maxAttenuationDb: Double = if (mode == LoudnessNormalization.GENTLE) -6.0 else -12.0
 
     private val windowSamples: Int = (sampleRateHz * WindowMs / 1000).coerceAtLeast(1) * channelCount
@@ -89,9 +102,10 @@ class LoudnessNormalizer(
     }
 
     /**
-     * Płynne dojście do docelowego wzmocnienia. Ściszamy szybciej niż wzmacniamy (attack
-     * krótszy od release), bo nagły głośny fragment trzeba opanować od razu, a zbyt szybkie
-     * wzmacnianie ciszy słychać jako „pompowanie".
+     * Płynne dojście do docelowego wzmocnienia. Tłumimy szybciej niż wracamy do gain=1.0
+     * (attack krótszy od release): nagły głośny fragment trzeba opanować w rozsądnym czasie,
+     * ale nie natychmiast — zbyt krótki attack (dawne 50 ms) było słychać jako "szarpnięcie"
+     * w dół, patrz [AttackMs].
      */
     private fun approach(from: Double, to: Double): Double {
         val stepMs = 1000.0 / sampleRateHz
@@ -111,7 +125,17 @@ class LoudnessNormalizer(
         const val SilenceFloorDbfs = -50.0
         /** -1.5 dBFS, ten sam sufit co `TP=-1.5` w desktopowym loudnorm. */
         const val Ceiling = 0.84f
-        const val AttackMs = 50.0
+        /**
+         * Zgłoszone na słuch 19.09.2026: przy poprzednim 50 ms wzrost głośności (np. wejście
+         * refrenu) dawał słyszalne, powtarzające się "szarpnięcie" w dół przez cały utwór —
+         * klasyczny efekt pompowania (pumping) znany z agresywnej kompresji. Policzone: 50 ms
+         * dawało 90% korekty w ~115 ms dla typowego skoku zwrotka→refren (16 dB) — wystarczająco
+         * szybko, żeby ucho usłyszało moment "łapania" głośności, zamiast płynnego dostosowania.
+         * 250 ms rozciąga to do ~576 ms, wciąż mieszcząc się w 2-sekundowym oknie stabilizacji,
+         * które zakładają testy w LoudnessNormalizerTest (rmsAfterProcessing liczy RMS z drugiej
+         * połowy 4-sekundowego sygnału).
+         */
+        const val AttackMs = 250.0
         const val ReleaseMs = 400.0
     }
 }
