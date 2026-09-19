@@ -5,10 +5,10 @@ import java.net.URL
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
-actual suspend fun httpGet(url: String, headers: Map<String, String>): String = withContext(Dispatchers.IO) {
+actual suspend fun httpGet(url: String, headers: Map<String, String>, timeoutMs: Int): String = withContext(Dispatchers.IO) {
     val connection = URL(url).openConnection() as HttpURLConnection
     try {
-        connection.connectTimeout = 15_000; connection.readTimeout = 20_000
+        connection.connectTimeout = timeoutMs; connection.readTimeout = timeoutMs
         headers.forEach { (key, value) -> connection.setRequestProperty(key, value) }
         val status = connection.responseCode
         val response = (if (status in 200..299) connection.inputStream else connection.errorStream)?.bufferedReader()?.use { it.readText() }.orEmpty()
@@ -17,10 +17,10 @@ actual suspend fun httpGet(url: String, headers: Map<String, String>): String = 
     } finally { connection.disconnect() }
 }
 
-actual suspend fun httpPost(url: String, headers: Map<String, String>, body: String): String = withContext(Dispatchers.IO) {
+actual suspend fun httpPost(url: String, headers: Map<String, String>, body: String, timeoutMs: Int): String = withContext(Dispatchers.IO) {
     val connection = URL(url).openConnection() as HttpURLConnection
     try {
-        connection.connectTimeout = 15_000; connection.readTimeout = 20_000
+        connection.connectTimeout = timeoutMs; connection.readTimeout = timeoutMs
         connection.requestMethod = "POST"
         connection.doOutput = true
         connection.setRequestProperty("Content-Type", "application/json")

@@ -86,6 +86,14 @@ class MusicBrainzRepository(private val logger: NutaLogger) {
      * z innym ruchem, nie jest to czysto lokalne "1 req/s"). Jedyne, co dało 3/3 sukcesów
      * w tym samym teście: pojedynczy retry z 2 s backoffu po samym 503. Dlatego oba
      * mechanizmy razem — throttling ogranicza to, na co mamy wpływ, retry łapie resztę.
+     *
+     * [MusicBrainzTimeoutMs] jest znacznie krótszy niż domyślny [DefaultHttpTimeoutMs]:
+     * zweryfikowane curlem 19.09.2026, gdy serwer odpowiada — sukcesem albo błędem — robi to
+     * w 0,3-0,6 s, nigdy wolniej. Znaleziony na urządzeniu przypadek, który to uzasadnia:
+     * wyszukiwanie „unbeliev” trwało ~42 s, bo po 503 retry trafił w żądanie, które w ogóle
+     * nie dostało odpowiedzi — z domyślnymi timeoutami (15 s connect + 20 s read) plus 2 s
+     * backoffu retry to się sumowało. Krótszy timeout nie skraca czasu przy prawdziwym 503
+     * (ten przychodzi szybko i tak), tylko ogranicza czas czekania na martwe połączenie.
      */
     private suspend fun throttledGet(url: String): String {
         requestMutex.withLock {
@@ -94,13 +102,13 @@ class MusicBrainzRepository(private val logger: NutaLogger) {
             lastRequestAtMs = nowMs()
         }
         return try {
-            httpGet(url, headers = mapOf("User-Agent" to UserAgent))
+            httpGet(url, headers = mapOf("User-Agent" to UserAgent), timeoutMs = MusicBrainzTimeoutMs)
         } catch (error: Throwable) {
             if (!isHttp503(error)) throw error
             logger.warn("MusicBrainz", "rate_limited_retry", "MusicBrainz zwrócił 503 — ponawiam po backoffie", fields = mapOf("url" to url))
             delay(RetryBackoffMs)
             requestMutex.withLock { lastRequestAtMs = nowMs() }
-            httpGet(url, headers = mapOf("User-Agent" to UserAgent))
+            httpGet(url, headers = mapOf("User-Agent" to UserAgent), timeoutMs = MusicBrainzTimeoutMs)
         }
     }
 
@@ -116,6 +124,11 @@ class MusicBrainzRepository(private val logger: NutaLogger) {
 
         /** Ile czekać po 503, zanim ponowimy raz — zweryfikowane curlem: 2 s dało 3/3 sukcesów. */
         const val RetryBackoffMs = 2_000L
+
+        /** Timeout (connect+read) dla żądań do musicbrainz.org — zweryfikowane curlem
+            19.09.2026: serwer odpowiada w 0,3-0,6 s, sukcesem albo błędem. 5 s to duży margines
+            ponad obserwowany czas, ale wciąż dużo krótszy niż domyślne 20 s dla innych serwisów. */
+        const val MusicBrainzTimeoutMs = 5_000
 
         /**
          * Rozpoznaje 503 po treści wyjątku [httpGet][app.nuta.net.httpGet] (format
