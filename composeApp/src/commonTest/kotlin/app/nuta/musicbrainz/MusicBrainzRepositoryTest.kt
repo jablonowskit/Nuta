@@ -107,11 +107,48 @@ class MusicBrainzRepositoryTest {
         // w tytuł ALBO w wykonawcę — bez zgadywania, które słowo jest czym.
         val built = MusicBrainzRepository.buildLuceneQuery("Haddaway What Is Love")
         assertEquals(
-            """(recording:"Haddaway" OR artistname:"Haddaway") AND """ +
-                """(recording:"What" OR artistname:"What") AND """ +
-                """(recording:"Is" OR artistname:"Is") AND """ +
-                """(recording:"Love" OR artistname:"Love")""",
+            """(recording:Haddaway* OR artistname:Haddaway*) AND """ +
+                """(recording:What* OR artistname:What*) AND """ +
+                """(recording:Is* OR artistname:Is*) AND """ +
+                """(recording:Love* OR artistname:Love*)""",
             built,
+        )
+    }
+
+    @Test
+    fun usesPrefixWildcardForPlainWords() {
+        // Regresja 19.09.2026: użytkownik wpisujący fragment słowa w trakcie pisania (np.
+        // "unbe" zanim doklepie "Unbelievable") widział przypadkowe trafienia zamiast
+        // prawdziwego utworu. Cytowana fraza `"unbe"` szuka DOKŁADNEGO tokenu — zweryfikowane
+        // curlem: dało 14 przypadkowych trafień z tytułem dosłownie "Unbe". Wildcard `unbe*`
+        // (bez cudzysłowu) dał 3535 trafień z "Unbelievers"/"Unbelievable Truth" na czele.
+        assertEquals(
+            """(recording:unbe* OR artistname:unbe*)""",
+            MusicBrainzRepository.buildLuceneQuery("unbe"),
+        )
+    }
+
+    @Test
+    fun wildcardWorksForWordsWithPolishDiacritics() {
+        // \w w Kotlinie/JVM jest Unicode-aware — "światła" (z ogonkiem) też kwalifikuje się
+        // do wildcarda, nie tylko czysty ASCII. Ważne, bo to częsty przypadek w tym projekcie
+        // (użytkownicy piszą polskie tytuły), a błędna klasyfikacja cichcem cofnęłaby ich do
+        // wolniejszego dopasowania dokładnego bez żadnego widocznego objawu w testach ASCII-only.
+        assertEquals(
+            """(recording:światła* OR artistname:światła*)""",
+            MusicBrainzRepository.buildLuceneQuery("światła"),
+        )
+    }
+
+    @Test
+    fun fallsBackToQuotedPhraseForWordsWithSpecialCharacters() {
+        // Wildcard łamie się na słowach ze znakami specjalnymi Lucene — zweryfikowane curlem:
+        // "AC\/DC*" (escapowany slash + wildcard) dał 0 wyników, mimo że sam escape bez
+        // wildcarda i sam wildcard bez znaków specjalnych działają osobno. Dlatego takie
+        // słowa zostają przy cytowanej frazie — zachowanie sprzed tej zmiany, nadal poprawne.
+        assertEquals(
+            """(recording:"AC/DC" OR artistname:"AC/DC")""",
+            MusicBrainzRepository.buildLuceneQuery("AC/DC"),
         )
     }
 
@@ -174,7 +211,7 @@ class MusicBrainzRepositoryTest {
     fun buildsArtistQueryOverNameAndAlias() {
         // Alias łapie warianty pisowni, np. gdy katalog trzyma inną formę nazwy.
         assertEquals(
-            """(artist:"Sigur" OR alias:"Sigur") AND (artist:"Ros" OR alias:"Ros")""",
+            """(artist:Sigur* OR alias:Sigur*) AND (artist:Ros* OR alias:Ros*)""",
             MusicBrainzRepository.buildArtistQuery("Sigur Ros"),
         )
         assertNull(MusicBrainzRepository.buildArtistQuery("   "))

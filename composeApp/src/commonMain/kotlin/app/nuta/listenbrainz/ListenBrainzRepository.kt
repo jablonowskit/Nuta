@@ -11,6 +11,9 @@ import app.nuta.net.httpGet
 import app.nuta.net.httpPost
 import app.nuta.settings.PlaybackSettingsStore
 import java.net.URLEncoder
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
@@ -160,20 +163,40 @@ class ListenBrainzRepository(
      * playlisty z ListenBrainz (`playlist/search` — zweryfikowane 09.09.2026, 695 trafień dla
      * „dance"). Playlisty w wynikach przychodzą bez utworów; dociąga je [getPlaylistTracks]
      * przy otwarciu, tak samo jak dla Spotify.
+     *
+     * Oba żądania idą RÓWNOLEGLE (`async`), nie sekwencyjnie. Wcześniej `searchPlaylists`
+     * czekał, aż `musicBrainz.search` się skończy, więc każda awaria/spowolnienie playlist
+     * dokładała się w całości do czasu odpowiedzi wyszukiwania utworów — mimo że te dwa
+     * zapytania nie mają ze sobą nic wspólnego. Znaleziony na żywo 19.09.2026: `playlist/search`
+     * bywa martwy po stronie ListenBrainz (TCP/TLS łączy się, ale serwer nie odsyła ani bajtu —
+     * zweryfikowane curlem `-v`, 0 danych po 10+ s), podczas gdy MusicBrainz odpowiadał w 1,5 s.
      */
-    override suspend fun search(query: String): SearchResult {
-        val catalog = musicBrainz.search(query)
-        return catalog.copy(playlists = searchPlaylists(query))
+    override suspend fun search(query: String): SearchResult = coroutineScope {
+        val catalogDeferred = async { musicBrainz.search(query) }
+        val playlistsDeferred = async { searchPlaylists(query) }
+        catalogDeferred.await().copy(playlists = playlistsDeferred.await())
     }
 
     private suspend fun searchPlaylists(query: String): List<Playlist> {
         if (query.isBlank()) return emptyList()
         val encoded = URLEncoder.encode(query, "UTF-8")
         return runCatching {
-            val response = httpGet("https://api.listenbrainz.org/1/playlist/search?query=$encoded&count=20")
+            // Timeout krótszy niż domyślne 20 s: zweryfikowane curlem 19.09.2026, gdy ten
+            // endpoint w ogóle odpowiada, robi to w ~1-2 s (patrz getLikedTracks/lookupMetadata
+            // na tym samym hoście) — długie oczekiwanie oznacza martwe połączenie, nie serwer
+            // pracujący nad odpowiedzią, więc nie ma powodu czekać na to pełne 20 s.
+            val response = httpGet(
+                "https://api.listenbrainz.org/1/playlist/search?query=$encoded&count=20",
+                timeoutMs = PlaylistSearchTimeoutMs,
+            )
             if (response.isBlank()) return@runCatching emptyList()
             parsePlaylistSearch(response)
         }.getOrElse { error ->
+            // CancellationException musi lecieć dalej — patrz analogiczny komentarz w
+            // MusicBrainzRepository.searchArtists. Ważniejsze tutaj, bo od 19.09.2026 ta
+            // funkcja biegnie równolegle z musicBrainz.search() w async {} — anulowanie
+            // jednej gałęzi musi anulować całość, nie zostać zamienione w pustą listę.
+            if (error is CancellationException) throw error
             logger.warn("ListenBrainz", "playlist_search_failed", "Nie udało się wyszukać playlist ListenBrainz", fields = mapOf("reason" to (error.message ?: "unknown")))
             emptyList()
         }
@@ -358,6 +381,10 @@ class ListenBrainzRepository(
         const val SyntheticRecommendationsId = "listenbrainz-recommendations"
         /** 100 wpisów na stronę — 200 stron to 20 000 polubień, znacznie powyżej realnych bibliotek. */
         const val MAX_FEEDBACK_PAGES = 200
+
+        /** Timeout dla `playlist/search` — zweryfikowane curlem 19.09.2026: gdy ten endpoint
+            odpowiada, robi to w 1-2 s; długie oczekiwanie oznacza martwe połączenie. */
+        const val PlaylistSearchTimeoutMs = 5_000
         val MbidRegex = Regex("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
 
         private val parserJson = Json { ignoreUnknownKeys = true }
