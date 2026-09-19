@@ -5,6 +5,7 @@ import app.nuta.core.models.Artist
 import app.nuta.core.models.SearchResult
 import app.nuta.core.models.Track
 import app.nuta.net.httpGet
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -54,6 +55,10 @@ class MusicBrainzRepository(private val logger: NutaLogger) {
             val encoded = java.net.URLEncoder.encode(lucene, "UTF-8")
             parseArtists(throttledGet("https://musicbrainz.org/ws/2/artist/?query=$encoded&fmt=json&limit=10"))
         }.getOrElse { error ->
+            // CancellationException musi lecieć dalej — inaczej anulowanie korutyny (np. przy
+            // szybkim pisaniu, gdy kolejny znak startuje nowe wyszukiwanie) zostałoby cicho
+            // zamienione na "brak wykonawców", zamiast prawidłowo przerwać całą operację.
+            if (error is CancellationException) throw error
             logger.warn("MusicBrainz", "artist_search_failed", "Nie udało się wyszukać wykonawców", fields = mapOf("reason" to (error.message ?: "unknown")))
             emptyList()
         }
@@ -147,28 +152,46 @@ class MusicBrainzRepository(private val logger: NutaLogger) {
          * Po zmianie (zweryfikowane 09.09.2026): 376 trafień z „Haddaway — What Is Love" na
          * pierwszym miejscu; „Ice MC Scream" 365 598 → 24 z poprawnym utworem na czele.
          *
-         * Każde słowo jest wstawiane jako fraza w cudzysłowach, bo to neutralizuje znaki
-         * specjalne Lucene bez ich wycinania — „AC/DC" wyszukuje się poprawnie, a wcześniejsza
-         * próba zamiany takich znaków na spacje rozbijała zapytanie.
-         *
          * Zwraca null dla pustego zapytania (nie ma czego szukać).
          */
         fun buildLuceneQuery(query: String): String? {
             val words = sanitizeWords(query)
             if (words.isEmpty()) return null
-            return words.joinToString(" AND ") { """(recording:"$it" OR artistname:"$it")""" }
+            return words.joinToString(" AND ") { """(${luceneClause("recording", it)} OR ${luceneClause("artistname", it)})""" }
         }
 
         /**
          * Zapytanie o wykonawców: każde słowo musi trafić w nazwę albo alias (`artist`
-         * obejmuje nazwę, `alias` łapie warianty pisowni). Ten sam zabieg z cytowaniem co
-         * w [buildLuceneQuery] neutralizuje znaki specjalne Lucene.
+         * obejmuje nazwę, `alias` łapie warianty pisowni).
          */
         fun buildArtistQuery(query: String): String? {
             val words = sanitizeWords(query)
             if (words.isEmpty()) return null
-            return words.joinToString(" AND ") { """(artist:"$it" OR alias:"$it")""" }
+            return words.joinToString(" AND ") { """(${luceneClause("artist", it)} OR ${luceneClause("alias", it)})""" }
         }
+
+        /**
+         * Jedna klauzula pola:słowo, z prefiksowym wildcardem dla "bezpiecznych" słów.
+         *
+         * Zweryfikowane curlem 19.09.2026 — problem realny, nie kosmetyczny: wpisując
+         * fragment słowa w trakcie pisania (np. „unbe” zanim doklepiesz „Unbelievable”),
+         * poprzednia wersja (cytowana fraza `"unbe"`) szukała DOKŁADNEGO tokenu „unbe” i
+         * dawała 14 przypadkowych trafień zamiast prawdziwego utworu. Wildcard `unbe*`
+         * (bez cudzysłowu) daje 3535 trafień z „Unbelievers”/„Unbelievable Truth” na czele.
+         *
+         * Wildcard działa tylko na słowie BEZ znaków specjalnych Lucene — testowane osobno:
+         * `AC\/DC*` (escapowany slash + wildcard) dał 0 wyników, mimo że `AC\/DC` (sam escape,
+         * bez wildcarda) i `unbe*` (sam wildcard, bez znaków specjalnych) działają osobno.
+         * Dlatego słowa ze znakami specjalnymi (np. „AC/DC") zostają przy cytowanej frazie —
+         * to zachowanie sprzed tej zmiany, nadal poprawne dla tego przypadku.
+         *
+         * `"unbe"*` (gwiazdka PO zamkniętym cudzysłowie) też przetestowane i odrzucone: nie
+         * jest błędem składni, ale MusicBrainz najwyraźniej ignoruje `*` w tej pozycji —
+         * `count` wychodzi ~40 milionów (prawie cała baza), więc to nie jest kontrolowany
+         * prefiks, tylko przypadek, że dokładne trafienia i tak mają najwyższy `score`.
+         */
+        private fun luceneClause(field: String, word: String): String =
+            if (SafeForWildcardRegex.matches(word)) "$field:$word*" else """$field:"$word""""
 
         /** Parser `ws/2/artist/`; pomija wpisy bez id lub nazwy zamiast rzucać wyjątkiem. */
         fun parseArtists(body: String): List<Artist> {
@@ -194,6 +217,12 @@ class MusicBrainzRepository(private val logger: NutaLogger) {
 
         private val WhitespaceRegex = Regex("\\s+")
         private val MbidRegex = Regex("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
+
+        /** UWAGA: `\w` w Kotlinie/JVM NIE jest Unicode-aware domyślnie — odrzuca „światła”
+            (dowiedzione testem `wildcardWorksForWordsWithPolishDiacritics`, który bez tej
+            poprawki faliła). `\p{L}` (dowolna litera Unicode) i `\p{N}` (dowolna cyfra Unicode)
+            działają bez dodatkowych flag i obejmują polskie znaki z ogonkami. */
+        private val SafeForWildcardRegex = Regex("^[\\p{L}\\p{N}_]+$")
 
         private val json = Json { ignoreUnknownKeys = true }
 

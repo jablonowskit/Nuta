@@ -41,6 +41,7 @@ import app.nuta.ui.SectionLabel
 import app.nuta.ui.TrackPlayButton
 import app.nuta.ui.TrackQueueButton
 import app.nuta.ui.TrackRow
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.stringResource
 import androidx.compose.ui.unit.sp
@@ -105,9 +106,20 @@ internal fun SearchScreen(
                     onStateChange(currentState.copy(result = it, error = null, lastExecutedQuery = submittedQuery, loading = false))
                 }
             }
-            .onFailure {
+            .onFailure { error ->
+                // Regresja 19.09.2026: `search()` uruchamia teraz dwa żądania równolegle przez
+                // `coroutineScope { async {...} }` (patrz ListenBrainzRepository.search) — gdy
+                // ten LaunchedEffect jest anulowany (naturalne przy szybkim pisaniu: kolejny
+                // znak startuje nowy efekt i Compose anuluje ten), `coroutineScope` propaguje
+                // `CancellationException`. `runCatching` NIE rethrow'uje jej automatycznie, więc
+                // trafiała tu jako zwykły błąd z komunikatem „The coroutine scope left the
+                // composition" — użytkownik widział to jako czerwony błąd na ekranie, mimo że
+                // to nie awaria, tylko naturalne anulowanie przegranego wyścigu zapytań.
+                // Trzeba rzucić dalej, żeby korutyna faktycznie się zakończyła — inaczej
+                // dotrwałaby do onStateChange mimo że jest już martwa.
+                if (error is CancellationException) throw error
                 if (currentState.query == submittedQuery) {
-                    onStateChange(currentState.copy(error = it.message ?: searchUnknownError, lastExecutedQuery = submittedQuery, loading = false))
+                    onStateChange(currentState.copy(error = error.message ?: searchUnknownError, lastExecutedQuery = submittedQuery, loading = false))
                 }
             }
     }
