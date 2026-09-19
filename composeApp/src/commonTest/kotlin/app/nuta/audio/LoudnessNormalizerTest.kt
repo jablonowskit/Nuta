@@ -40,11 +40,13 @@ class LoudnessNormalizerTest {
     }
 
     @Test
-    fun quietTrackIsBoostedTowardsTarget() {
-        // Cichy utwór (-30 dBFS) przy celu -16 dBFS: dozwolone +12 dB, więc dochodzi do -18.
+    fun quietTrackIsLeftUntouched() {
+        // Regresja 19.09.2026: wcześniej cichy utwór (-30 dBFS) był wzmacniany w stronę celu
+        // (-16 dBFS). Zgłoszone na słuch: wzmacnianie ciszy w połączeniu z tłumieniem szczytów
+        // dawało słyszalne "pompowanie" w rytm utworu. maxBoostDb=0 usuwa wzmacnianie całkowicie
+        // — cichy sygnał ma zostać dokładnie taki, jaki był, niezależnie od trybu.
         val out = rmsAfterProcessing(LoudnessNormalization.NORMAL, inputDbfs = -30.0)
-        assertTrue(out > -30.0 + 6, "oczekiwano wzmocnienia, wyszło $out dBFS")
-        assertTrue(out <= -16.0 + 1, "nie powinno przekroczyć celu, wyszło $out dBFS")
+        assertTrue(abs(out - -30.0) < 0.5, "cichy sygnał nie powinien być ruszany, wyszło $out dBFS")
     }
 
     @Test
@@ -56,19 +58,26 @@ class LoudnessNormalizerTest {
 
     @Test
     fun loudAndQuietEndUpCloserTogether() {
+        // Rozrzut maleje tylko od strony głośnej (tłumienie) — cicha strona zostaje bez zmian
+        // od 19.09.2026 (patrz quietTrackIsLeftUntouched), więc zbliżenie jest połowiczne
+        // względem starego zachowania, ale nadal wyraźne.
         val quiet = rmsAfterProcessing(LoudnessNormalization.NORMAL, inputDbfs = -28.0)
         val loud = rmsAfterProcessing(LoudnessNormalization.NORMAL, inputDbfs = -8.0)
         val spreadBefore = 20.0
         val spreadAfter = abs(loud - quiet)
-        assertTrue(spreadAfter < spreadBefore / 2, "rozrzut miał zmaleć: $spreadBefore -> $spreadAfter dB")
+        assertTrue(spreadAfter < spreadBefore, "rozrzut miał zmaleć: $spreadBefore -> $spreadAfter dB")
+        assertTrue(abs(quiet - -28.0) < 0.5, "cicha strona nie powinna się ruszyć, wyszło $quiet dBFS")
     }
 
     @Test
-    fun gentleModeCorrectsLessThanNormal() {
-        val gentle = rmsAfterProcessing(LoudnessNormalization.GENTLE, inputDbfs = -34.0)
-        val normal = rmsAfterProcessing(LoudnessNormalization.NORMAL, inputDbfs = -34.0)
-        // GENTLE ma limit +6 dB, NORMAL +12 dB, więc NORMAL musi wyjść wyżej.
-        assertTrue(normal > gentle, "NORMAL ($normal) powinien wzmocnić bardziej niż GENTLE ($gentle)")
+    fun gentleModeAttenuatesLessThanNormal() {
+        // GENTLE ma maxAttenuationDb=-6, NORMAL=-12 — dla bardzo głośnego sygnału (-4 dBFS,
+        // wymagającego więcej niż -6 dB korekty do celu) NORMAL musi ściszyć mocniej.
+        // (Nie testujemy już na cichym sygnale — maxBoostDb=0 w obu trybach, więc oba
+        // zostawiłyby go bez zmian i test niczego by nie odróżniał, patrz quietTrackIsLeftUntouched.)
+        val gentle = rmsAfterProcessing(LoudnessNormalization.GENTLE, inputDbfs = -4.0)
+        val normal = rmsAfterProcessing(LoudnessNormalization.NORMAL, inputDbfs = -4.0)
+        assertTrue(normal < gentle, "NORMAL ($normal) powinien ściszyć mocniej niż GENTLE ($gentle)")
     }
 
     @Test
