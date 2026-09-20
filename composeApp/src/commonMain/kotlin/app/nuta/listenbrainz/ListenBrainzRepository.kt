@@ -207,7 +207,14 @@ class ListenBrainzRepository(
 
     override suspend fun getTrackRadio(seed: Track, limit: Int): List<Track> {
         val token = requireToken()
-        val artistMbid = seed.artistMbid
+        // seed.artistMbid bywa nieustawiony zależnie od tego, skąd Track trafił do kolejki
+        // (np. lb-radio potrafi zwrócić JSPF bez additional_metadata/artist_identifiers,
+        // mimo że ten sam parser dla zapisanych playlist ma je zawsze) — zamiast cicho
+        // rezygnować, doszukujemy MBID artysty przez MusicBrainz po tytule/wykonawcy,
+        // tak jak resolveMbid robi to już dla polubień.
+        val artistMbid = seed.artistMbid ?: seed.artists.firstOrNull()?.takeIf(String::isNotBlank)?.let { artistName ->
+            musicBrainz.search("$artistName ${seed.title}").tracks.firstOrNull { it.title.equals(seed.title, ignoreCase = true) }?.artistMbid
+        }
         if (artistMbid == null) {
             logger.warn("ListenBrainz", "missing_artist_mbid", "Brak MBID artysty w utworze-ziarnie — nie można zbudować promptu lb-radio", fields = mapOf("trackId" to seed.id))
             return emptyList()
