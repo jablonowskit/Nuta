@@ -344,7 +344,11 @@ class ListenBrainzRepository(
 
     /** Wspólny parser dla JSPF-podobnych odpowiedzi ListenBrainz (`playlist.track[]` i
         `payload.jspf.playlist.track[]` z lb-radio) — obie mają ten sam kształt pojedynczego
-        elementu (`identifier`, `title`, `creator`, `duration`), więc wystarczy jeden parser. */
+        elementu (`identifier`, `title`, `creator`, `duration`), więc wystarczy jeden parser.
+        Bez `artistMbid` przycisk "podobne utwory" (getTrackRadio) milczy dla każdego utworu
+        z playlisty/radia ListenBrainz — MBID artysty trzeba więc wyciągnąć z rozszerzenia
+        `extension["…jspf#track"].additional_metadata.artists[0].artist_mbid`, z fallbackiem
+        na `artist_identifiers[0]` (URL `.../artist/<mbid>`). */
     private fun trackFromJspf(element: kotlinx.serialization.json.JsonElement): Track? {
         val obj = element.jsonObject
         val identifier = (obj["identifier"] as? JsonArray)?.firstOrNull()?.jsonPrimitive?.contentOrNull
@@ -354,7 +358,21 @@ class ListenBrainzRepository(
         val title = obj["title"]?.jsonPrimitive?.contentOrNull ?: return null
         val creator = obj["creator"]?.jsonPrimitive?.contentOrNull.orEmpty()
         val duration = obj["duration"]?.jsonPrimitive?.longOrNull ?: 0L
-        return Track(id = mbid, title = title, artists = listOfNotNull(creator.takeIf(String::isNotBlank)), album = "", durationMs = duration)
+        val trackExtension = obj["extension"]?.jsonObject
+            ?.get("https://musicbrainz.org/doc/jspf#track")?.jsonObject
+        val artistMbid = trackExtension?.get("additional_metadata")?.jsonObject
+            ?.get("artists")?.let { it as? JsonArray }?.firstOrNull()?.jsonObject
+            ?.get("artist_mbid")?.jsonPrimitive?.contentOrNull
+            ?: (trackExtension?.get("artist_identifiers") as? JsonArray)?.firstOrNull()?.jsonPrimitive?.contentOrNull
+                ?.substringAfterLast('/')
+        return Track(
+            id = mbid,
+            title = title,
+            artists = listOfNotNull(creator.takeIf(String::isNotBlank)),
+            album = "",
+            durationMs = duration,
+            artistMbid = artistMbid,
+        )
     }
 
     /** Jeden wpis polubienia sparsowany z `get-feedback`, przed dociągnięciem czasu trwania. */
