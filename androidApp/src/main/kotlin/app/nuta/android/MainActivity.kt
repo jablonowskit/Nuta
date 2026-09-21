@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material.CircularProgressIndicator
 import androidx.compose.material.Text
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -23,6 +24,7 @@ import app.nuta.resources.playback_connect_failed
 import app.nuta.settings.DataSource
 import app.nuta.spotify.SpotifyWebToken
 import app.nuta.ui.NutaApp
+import kotlinx.coroutines.delay
 import org.jetbrains.compose.resources.stringResource
 
 class MainActivity : ComponentActivity() {
@@ -50,6 +52,19 @@ class MainActivity : ComponentActivity() {
             }
             val settings by playbackSettings.settings.collectAsState()
             var token by remember { mutableStateOf(restoredToken) }
+            // Ważność tokenu była sprawdzana tylko raz, przy starcie (restoredToken wyżej). Sesja
+            // Spotify żyje ~1 h, więc po tym czasie każdy ekran pokazywał "Sesja Spotify wygasła"
+            // (check() w SpotifyAndroidRepository), ale apka nigdy nie wracała do logowania, bo
+            // token != null — jedynym wyjściem było wyczyszczenie danych aplikacji. Zerujemy go
+            // w momencie wygaśnięcia, co samo przywraca ekran logowania.
+            val activeExpiry = token?.expiresAtMs
+            LaunchedEffect(activeExpiry) {
+                val expiry = activeExpiry ?: return@LaunchedEffect
+                val remaining = expiry - System.currentTimeMillis() - TokenExpiryMarginMs
+                if (remaining > 0) delay(remaining)
+                preferences.edit().remove("accessToken").remove("expiresAt").apply()
+                token = null
+            }
             // Logowanie do Spotify ma sens tylko wtedy, gdy DataSource faktycznie wskazuje na
             // Spotify — bez tego warunku apka żądała logowania nawet w trybie ListenBrainz,
             // gdzie SpotifyAndroidRepository i tak nigdy nie jest używane (patrz
@@ -76,5 +91,11 @@ class MainActivity : ComponentActivity() {
                 NutaApp(container)
             }
         }
+    }
+
+    private companion object {
+        /** Ten sam margines, co check() w SpotifyAndroidRepository — logujemy ponownie, zanim
+            zapytania zaczną padać, a nie dopiero po pierwszym błędzie. */
+        const val TokenExpiryMarginMs = 60_000L
     }
 }
