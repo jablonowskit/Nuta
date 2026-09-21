@@ -17,6 +17,7 @@ import app.nuta.youtube.YouTubeMediaService
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import java.time.Instant
 
@@ -27,6 +28,8 @@ import java.time.Instant
 object AppServices {
     private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
     @Volatile private var started = false
+    /** Anulowany i tworzony od nowa przy każdym połączeniu — patrz connectController. */
+    @Volatile private var scrobblerScope: CoroutineScope? = null
 
     lateinit var logger: MemoryLogger
         private set
@@ -51,16 +54,43 @@ object AppServices {
         val soundCloud = AndroidSoundCloudMediaService(logger, playbackSettings)
         youtubeMediaService = SourceSelectingMediaService(playbackSettings, youTube, soundCloud, logger)
         listenBrainzRepository = ListenBrainzRepository(playbackSettings, MusicBrainzRepository(logger), logger)
+        connectController(context.applicationContext)
+    }
+
+    /**
+     * Łączy się z usługą odtwarzania i — co najważniejsze — obsługuje rozłączenie. Wcześniej nic
+     * go nie wykrywało: po ubiciu usługi przez system `audioPlayer` wskazywał na martwy kontroler,
+     * a `started = true` blokowało ponowną inicjalizację, więc play/seek szły w próżnię, a UI
+     * pokazywało stan sprzed rozłączenia — bez żadnego komunikatu. Po rozłączeniu zwalniamy
+     * kontroler i łączymy się ponownie, żeby odtwarzanie dało się wznowić bez restartu apki.
+     */
+    private fun connectController(context: Context) {
         val sessionToken = SessionToken(context, ComponentName(context, PlaybackService::class.java))
-        val future = MediaController.Builder(context, sessionToken).buildAsync()
+        val future = MediaController.Builder(context, sessionToken)
+            .setListener(object : MediaController.Listener {
+                override fun onDisconnected(controller: MediaController) {
+                    logger.warn("Playback", "controller_disconnected", "Usługa odtwarzania rozłączona — łączę ponownie")
+                    controller.release()
+                    audioPlayer.value = null
+                    connectController(context)
+                }
+            })
+            .buildAsync()
         future.addListener({
             runCatching { future.get() }
                 .onSuccess { controller ->
+                    playerConnectFailed.value = false
                     val player = Media3AudioPlayer(controller, scope, youtubeMediaService, logger, context.getSharedPreferences("playback-queue", Context.MODE_PRIVATE), playbackSettings)
                     audioPlayer.value = player
                     // Scrobbler sam sprawdza dataSource przy każdym utworze, więc podłączamy go
                     // raz, do skope'u procesu — niezależnie od aktualnie wybranego źródła danych.
-                    ListenBrainzScrobbler(playbackSettings, logger).attach(player, scope)
+                    // Własny scope per połączenie: po rozłączeniu i ponownym podpięciu stary
+                    // scrobbler musi zniknąć, inaczej każde odsłuchanie poszłoby zgłoszone tyle
+                    // razy, ile było połączeń.
+                    scrobblerScope?.cancel()
+                    val attachScope = CoroutineScope(Dispatchers.Default + SupervisorJob())
+                    scrobblerScope = attachScope
+                    ListenBrainzScrobbler(playbackSettings, logger).attach(player, attachScope)
                 }
                 .onFailure { error ->
                     playerConnectFailed.value = true

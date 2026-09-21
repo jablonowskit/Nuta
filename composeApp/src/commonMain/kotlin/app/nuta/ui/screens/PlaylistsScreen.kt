@@ -6,11 +6,13 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.Button
 import androidx.compose.material.OutlinedButton
 import androidx.compose.material.Text
+import androidx.compose.material.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
@@ -49,9 +51,20 @@ internal fun PlaylistsScreen(playlists: List<Playlist>, onSelect: (Playlist) -> 
 
 
 @Composable
-internal fun PlaylistDetails(playlist: Playlist, playerState: PlayerState, container: AppContainer, onAddToPlaylist: (Track) -> Unit) {
+internal fun PlaylistDetails(
+    playlist: Playlist,
+    playerState: PlayerState,
+    container: AppContainer,
+    onAddToPlaylist: (Track) -> Unit,
+    onBack: () -> Unit,
+) {
     val scope = rememberCoroutineScope()
     Column(Modifier.fillMaxSize()) {
+        // Szczegóły playlisty przykrywają cały obszar treści, a wejście tutaj z Szukaj nie miało
+        // wyjścia: jedyną drogą powrotu była zmiana zakładki, która kasowała wyniki wyszukiwania.
+        TextButton(onClick = onBack, contentPadding = PaddingValues(0.dp)) {
+            Text("‹ ${stringResource(Res.string.back)}", maxLines = 1, softWrap = false)
+        }
         Heading(playlist.name, playlist.description)
         Spacer(Modifier.height(16.dp))
         Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
