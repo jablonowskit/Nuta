@@ -29,6 +29,12 @@ data class SearchResult(
     val tracks: List<Track>,
     val playlists: List<Playlist>,
     val artists: List<Artist> = emptyList(),
+    /**
+     * true, gdy wyszukiwanie playlist zawiodło, mimo że reszta wyników przyszła poprawnie
+     * (oba zapytania lecą równolegle — patrz ListenBrainzRepository.search). Bez tego pustą
+     * listę playlist z awarii serwisu widać w UI tak samo jak realny brak trafień.
+     */
+    val playlistsUnavailable: Boolean = false,
 )
 
 enum class PlayerStatus { IDLE, LOADING, PLAYING, PAUSED, ENDED, ERROR }
