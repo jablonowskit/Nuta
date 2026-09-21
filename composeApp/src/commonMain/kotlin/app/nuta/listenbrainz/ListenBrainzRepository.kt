@@ -73,6 +73,10 @@ class ListenBrainzRepository(
             if (response.isBlank()) return@runCatching null
             json.parseToJsonElement(response).jsonObject["playlist"]?.jsonObject?.get("track") as? JsonArray
         }.getOrElse { error ->
+            // Patrz analogiczny komentarz w searchPlaylists — anulowanie (użytkownik wyszedł
+            // z playlisty przed jej doładowaniem) nie może zamienić się w ciche emptyList(),
+            // bo UI pokazałoby wtedy "pusta playlista" zamiast przerwać ładowanie.
+            if (error is CancellationException) throw error
             logger.warn("ListenBrainz", "playlist_tracks_failed", "Nie udało się pobrać playlisty ListenBrainz", fields = mapOf("playlistId" to playlistId, "reason" to (error.message ?: "unknown")))
             null
         } ?: return emptyList()
@@ -349,39 +353,6 @@ class ListenBrainzRepository(
         return tracks
     }
 
-    /** Wspólny parser dla JSPF-podobnych odpowiedzi ListenBrainz (`playlist.track[]` i
-        `payload.jspf.playlist.track[]` z lb-radio) — obie mają ten sam kształt pojedynczego
-        elementu (`identifier`, `title`, `creator`, `duration`), więc wystarczy jeden parser.
-        Bez `artistMbid` przycisk "podobne utwory" (getTrackRadio) milczy dla każdego utworu
-        z playlisty/radia ListenBrainz — MBID artysty trzeba więc wyciągnąć z rozszerzenia
-        `extension["…jspf#track"].additional_metadata.artists[0].artist_mbid`, z fallbackiem
-        na `artist_identifiers[0]` (URL `.../artist/<mbid>`). */
-    private fun trackFromJspf(element: kotlinx.serialization.json.JsonElement): Track? {
-        val obj = element.jsonObject
-        val identifier = (obj["identifier"] as? JsonArray)?.firstOrNull()?.jsonPrimitive?.contentOrNull
-            ?: obj["identifier"]?.jsonPrimitive?.contentOrNull
-            ?: return null
-        val mbid = identifier.substringAfterLast('/')
-        val title = obj["title"]?.jsonPrimitive?.contentOrNull ?: return null
-        val creator = obj["creator"]?.jsonPrimitive?.contentOrNull.orEmpty()
-        val duration = obj["duration"]?.jsonPrimitive?.longOrNull ?: 0L
-        val trackExtension = obj["extension"]?.jsonObject
-            ?.get("https://musicbrainz.org/doc/jspf#track")?.jsonObject
-        val artistMbid = trackExtension?.get("additional_metadata")?.jsonObject
-            ?.get("artists")?.let { it as? JsonArray }?.firstOrNull()?.jsonObject
-            ?.get("artist_mbid")?.jsonPrimitive?.contentOrNull
-            ?: (trackExtension?.get("artist_identifiers") as? JsonArray)?.firstOrNull()?.jsonPrimitive?.contentOrNull
-                ?.substringAfterLast('/')
-        return Track(
-            id = mbid,
-            title = title,
-            artists = listOfNotNull(creator.takeIf(String::isNotBlank)),
-            album = "",
-            durationMs = duration,
-            artistMbid = artistMbid,
-        )
-    }
-
     /** Jeden wpis polubienia sparsowany z `get-feedback`, przed dociągnięciem czasu trwania. */
     internal data class FeedbackEntry(
         val id: String,
@@ -485,6 +456,39 @@ class ListenBrainzRepository(
          * dlatego to osobny parser. Nieznane MBID-y API po prostu pomija, więc brak klucza
          * jest normalną ścieżką, nie błędem.
          */
+        /** Wspólny parser dla JSPF-podobnych odpowiedzi ListenBrainz (`playlist.track[]` i
+            `payload.jspf.playlist.track[]` z lb-radio) — obie mają ten sam kształt pojedynczego
+            elementu (`identifier`, `title`, `creator`, `duration`), więc wystarczy jeden parser.
+            Bez `artistMbid` przycisk "podobne utwory" (getTrackRadio) milczy dla każdego utworu
+            z playlisty/radia ListenBrainz — MBID artysty trzeba więc wyciągnąć z rozszerzenia
+            `extension["…jspf#track"].additional_metadata.artists[0].artist_mbid`, z fallbackiem
+            na `artist_identifiers[0]` (URL `.../artist/<mbid>`). */
+        fun trackFromJspf(element: kotlinx.serialization.json.JsonElement): Track? {
+            val obj = element.jsonObject
+            val identifier = (obj["identifier"] as? JsonArray)?.firstOrNull()?.jsonPrimitive?.contentOrNull
+                ?: obj["identifier"]?.jsonPrimitive?.contentOrNull
+                ?: return null
+            val mbid = identifier.substringAfterLast('/')
+            val title = obj["title"]?.jsonPrimitive?.contentOrNull ?: return null
+            val creator = obj["creator"]?.jsonPrimitive?.contentOrNull.orEmpty()
+            val duration = obj["duration"]?.jsonPrimitive?.longOrNull ?: 0L
+            val trackExtension = obj["extension"]?.jsonObject
+                ?.get("https://musicbrainz.org/doc/jspf#track")?.jsonObject
+            val artistMbid = trackExtension?.get("additional_metadata")?.jsonObject
+                ?.get("artists")?.let { it as? JsonArray }?.firstOrNull()?.jsonObject
+                ?.get("artist_mbid")?.jsonPrimitive?.contentOrNull
+                ?: (trackExtension?.get("artist_identifiers") as? JsonArray)?.firstOrNull()?.jsonPrimitive?.contentOrNull
+                    ?.substringAfterLast('/')
+            return Track(
+                id = mbid,
+                title = title,
+                artists = listOfNotNull(creator.takeIf(String::isNotBlank)),
+                album = "",
+                durationMs = duration,
+                artistMbid = artistMbid,
+            )
+        }
+
         fun parseMetadataLookup(body: String, mbids: List<String>): List<Track> {
             if (body.isBlank()) return emptyList()
             val root = runCatching { parserJson.parseToJsonElement(body) as? JsonObject }.getOrNull() ?: return emptyList()

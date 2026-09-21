@@ -4,6 +4,7 @@ import app.nuta.core.logging.NutaLogger
 import app.nuta.musicbrainz.MusicBrainzRepository
 import app.nuta.settings.InMemoryPlaybackSettingsStore
 import kotlinx.coroutines.runBlocking
+import kotlinx.serialization.json.Json
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -253,6 +254,78 @@ class ListenBrainzRepositoryTest {
         assertEquals("", playlists[0].description)
         assertTrue(ListenBrainzRepository.parsePlaylistSearch("").isEmpty())
         assertTrue(ListenBrainzRepository.parsePlaylistSearch("<html>502</html>").isEmpty())
+    }
+
+    @Test
+    fun jspfTrackCarriesArtistMbidFromExtension() {
+        // Prawdziwy element z playlisty `createdfor` (Daily Jams, sprawdzone curlem 20.09.2026).
+        // Bez artistMbid getTrackRadio nie zbuduje promptu `artist:(...)` i przycisk "podobne
+        // utwory" milczy dla każdego utworu odpalonego z playlisty ListenBrainz.
+        val element = Json.parseToJsonElement("""
+            {
+              "album": "Hurry Up, We're Dreaming",
+              "creator": "M83",
+              "duration": 235386,
+              "extension": {
+                "https://musicbrainz.org/doc/jspf#track": {
+                  "additional_metadata": {
+                    "artists": [{"artist_credit_name": "M83", "artist_mbid": "6d7b7cd4-254b-4c25-83f6-dd20f98ceacd", "join_phrase": ""}]
+                  },
+                  "artist_identifiers": ["https://musicbrainz.org/artist/6d7b7cd4-254b-4c25-83f6-dd20f98ceacd"]
+                }
+              },
+              "identifier": ["https://musicbrainz.org/recording/c4423a70-1e8e-45c8-98ad-c51bb25de925"],
+              "title": "Reunion"
+            }
+        """.trimIndent())
+        val track = ListenBrainzRepository.trackFromJspf(element)
+        requireNotNull(track)
+        assertEquals("c4423a70-1e8e-45c8-98ad-c51bb25de925", track.id)
+        assertEquals("Reunion", track.title)
+        assertEquals(listOf("M83"), track.artists)
+        assertEquals(235386L, track.durationMs)
+        assertEquals("6d7b7cd4-254b-4c25-83f6-dd20f98ceacd", track.artistMbid)
+    }
+
+    @Test
+    fun jspfTrackFallsBackToArtistIdentifiersUrl() {
+        // Gdy brakuje additional_metadata, MBID trzeba wyjąć z końca URL-a w artist_identifiers.
+        val element = Json.parseToJsonElement("""
+            {
+              "creator": "Dark Sky",
+              "duration": 256533,
+              "extension": {
+                "https://musicbrainz.org/doc/jspf#track": {
+                  "artist_identifiers": ["https://musicbrainz.org/artist/85196917-8606-4996-a54b-f3e5ae0b070a"]
+                }
+              },
+              "identifier": ["https://musicbrainz.org/recording/5f822fc9-0367-4792-993a-72f7025f4d51"],
+              "title": "Angels"
+            }
+        """.trimIndent())
+        val track = ListenBrainzRepository.trackFromJspf(element)
+        requireNotNull(track)
+        assertEquals("85196917-8606-4996-a54b-f3e5ae0b070a", track.artistMbid)
+    }
+
+    @Test
+    fun jspfTrackToleratesMissingExtensionAndFields() {
+        // lb-radio potrafi zwrócić element bez `extension` — wtedy artistMbid zostaje null,
+        // a getTrackRadio dociąga go przez MusicBrainz (patrz fallback w getTrackRadio).
+        val bare = Json.parseToJsonElement("""
+            {"identifier": "https://musicbrainz.org/recording/106b3a28-4766-48c8-82f3-865e478504eb",
+             "title": "Something Good"}
+        """.trimIndent())
+        val track = ListenBrainzRepository.trackFromJspf(bare)
+        requireNotNull(track)
+        assertEquals("106b3a28-4766-48c8-82f3-865e478504eb", track.id)
+        assertNull(track.artistMbid)
+        // Brak `creator` nie może dać listy z pustym stringiem.
+        assertTrue(track.artists.isEmpty())
+        assertEquals(0L, track.durationMs)
+        // Element bez tytułu albo bez identyfikatora jest pomijany, nie rzuca.
+        assertNull(ListenBrainzRepository.trackFromJspf(Json.parseToJsonElement("""{"title":"Bez id"}""")))
+        assertNull(ListenBrainzRepository.trackFromJspf(Json.parseToJsonElement("""{"identifier":"x/y"}""")))
     }
 
     @Test

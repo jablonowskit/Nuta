@@ -4,6 +4,7 @@ import app.nuta.core.logging.NutaLogger
 import app.nuta.core.models.Track
 import app.nuta.settings.AudioSource
 import app.nuta.settings.PlaybackSettingsStore
+import kotlinx.coroutines.CancellationException
 
 /**
  * Delegates to whichever concrete resolver matches the user's `AudioSource` setting, read
@@ -21,6 +22,10 @@ class SourceSelectingMediaService(
         AudioSource.YOUTUBE -> youTube.resolve(track)
         AudioSource.SOUNDCLOUD -> soundCloud.resolve(track)
         AudioSource.AUTO -> runCatching { youTube.resolve(track) }.getOrElse { error ->
+            // Anulowanie (użytkownik przeskoczył na kolejny utwór w trakcie rozwiązywania) nie
+            // jest awarią YouTube — bez tego rzutu lecielibyśmy w fallback i wysyłali zbędne
+            // żądanie do SoundCloud dla utworu, którego już nikt nie odtwarza.
+            if (error is CancellationException) throw error
             logger.warn("SourceSelector", "youtube_failed_falling_back", "YouTube nie zwrócił strumienia — próbuję SoundCloud", fields = mapOf(
                 "track" to track.title,
                 "reason" to (error.message ?: "unknown"),
