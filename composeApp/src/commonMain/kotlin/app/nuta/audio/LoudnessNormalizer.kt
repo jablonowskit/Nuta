@@ -68,6 +68,18 @@ class LoudnessNormalizer(
     val active: Boolean get() = targetDbfs != 0.0
 
     /**
+     * Zeruje stan pomiaru i wzmocnienia. Wołane przy seeku i zmianie utworu: bez tego tłumienie
+     * wyliczone dla poprzedniego materiału (nawet -12 dB) obowiązuje dalej i schodzi dopiero
+     * przez [ReleaseMs], więc początek kolejnego utworu po głośnym jest słyszalnie za cichy.
+     */
+    fun reset() {
+        sumOfSquares = 0.0
+        samplesInWindow = 0
+        currentGain = 1.0
+        targetGain = 1.0
+    }
+
+    /**
      * Przetwarza jedną próbkę znormalizowaną do [-1, 1] i zwraca próbkę wyjściową.
      * Wywoływane per próbka, bo `AudioProcessor` dostaje bufor PCM bez podziału na kanały.
      */

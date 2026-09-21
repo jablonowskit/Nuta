@@ -16,7 +16,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.Button
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -73,10 +72,6 @@ fun SpotifyAndroidLogin(
         }
     }
 
-    DisposableEffect(Unit) {
-        onDispose { webView?.destroy() }
-    }
-
     Column(Modifier.fillMaxSize().background(Color(0xFF101418))) {
         Row(Modifier.fillMaxWidth().background(Color(0xFF131A20)).padding(10.dp)) {
             Text(status, color = Color.White, modifier = Modifier.weight(1f).padding(10.dp), maxLines = 2)
@@ -110,6 +105,15 @@ fun SpotifyAndroidLogin(
                     webView = this
                     loadUrl("https://accounts.spotify.com/")
                 }
+            },
+            // destroy() musi iść przez onRelease, nie przez DisposableEffect: onDispose efektu
+            // biegnie ZANIM Compose odepnie widok z hierarchii, więc WebView był niszczony wciąż
+            // podpięty ("WebView.destroy() called while still attached!") i wyciekał renderer
+            // process. Objaw: rotacja ekranu albo przełączenie źródła danych w trakcie logowania.
+            onRelease = { view ->
+                view.loadUrl("about:blank")
+                view.destroy()
+                webView = null
             },
         )
     }

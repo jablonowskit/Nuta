@@ -24,6 +24,7 @@ import androidx.compose.material.OutlinedButton
 import androidx.compose.material.Slider
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -225,10 +226,10 @@ internal fun CompactPlayerBar(
     CompactTransportRow(state, container, isLiked, favoriteLoading, onToggleLiked, onOpenQueue, similarModeActive, onSimilarModeChange, showSimilarButton = false)
     Row(Modifier.fillMaxWidth().height(38.dp), verticalAlignment = Alignment.CenterVertically) {
         Text(formatTime(state.positionMs), color = Color(0xFF8D9BA6), fontSize = 10.sp)
-        Slider(
-            value = if (state.durationMs > 0) state.positionMs.coerceAtMost(state.durationMs).toFloat() else 0f,
-            onValueChange = { scope.launch { container.audioPlayer.seekTo(it.toLong()) } },
-            valueRange = 0f..state.durationMs.coerceAtLeast(1).toFloat(), enabled = track != null,
+        PositionSlider(
+            state = state,
+            container = container,
+            enabled = track != null,
             modifier = Modifier.weight(1f).padding(horizontal = 2.dp),
         )
         Text(formatTime(state.durationMs), color = Color(0xFF8D9BA6), fontSize = 10.sp)
@@ -255,6 +256,51 @@ internal fun CompactPlayerBar(
     }
     }
 }
+
+/**
+ * Suwak pozycji, który podczas przeciągania rysuje się z lokalnego stanu, a nie z
+ * `state.positionMs`. Bez tego uchwyt wracał pod palec i ruszał dopiero, gdy player
+ * faktycznie przeskoczył i zaraportował nową pozycję — czyli po dociągnięciu bufora.
+ * `seekTo` leci raz, po puszczeniu palca, zamiast przy każdej klatce przeciągania.
+ */
+@Composable
+private fun PositionSlider(
+    state: PlayerState,
+    container: AppContainer,
+    enabled: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    val scope = rememberCoroutineScope()
+    var scrubbingMs by remember { mutableStateOf<Float?>(null) }
+    // Po puszczeniu palca player przez chwilę raportuje jeszcze starą pozycję, więc trzymamy
+    // docelową wartość aż do momentu, gdy faktycznie do niej dojedzie — inaczej uchwyt mrugnąłby
+    // z powrotem na poprzednie miejsce.
+    var pendingSeekMs by remember { mutableStateOf<Long?>(null) }
+    LaunchedEffect(state.positionMs, pendingSeekMs) {
+        val pending = pendingSeekMs ?: return@LaunchedEffect
+        if (kotlin.math.abs(state.positionMs - pending) < SeekSettledToleranceMs) pendingSeekMs = null
+    }
+    val displayedMs = scrubbingMs ?: pendingSeekMs?.toFloat() ?: state.positionMs.toFloat()
+    val durationMs = state.durationMs.coerceAtLeast(1).toFloat()
+    Slider(
+        value = displayedMs.coerceIn(0f, durationMs),
+        onValueChange = { scrubbingMs = it },
+        onValueChangeFinished = {
+            val target = scrubbingMs?.toLong()
+            scrubbingMs = null
+            if (target != null) {
+                pendingSeekMs = target
+                scope.launch { container.audioPlayer.seekTo(target) }
+            }
+        },
+        valueRange = 0f..durationMs,
+        enabled = enabled,
+        modifier = modifier,
+    )
+}
+
+/** Na tyle blisko celu, że uznajemy seek za wykonany (player raportuje pozycję skokowo). */
+private const val SeekSettledToleranceMs = 1_500L
 
 private fun playerSubtitle(track: Track, state: PlayerState): String {
     val stream = streamDescription(state).takeIf(String::isNotBlank)
@@ -414,10 +460,9 @@ internal fun PlayerBar(
         ) { Text(if (radioLoading) "…" else "♬+", fontSize = 22.sp) }
         Spacer(Modifier.width(18.dp))
         Text(formatTime(state.positionMs), color = Color(0xFF8D9BA6), fontSize = 11.sp)
-        Slider(
-            value = if (state.durationMs > 0) state.positionMs.toFloat() else 0f,
-            onValueChange = { value -> scope.launch { container.audioPlayer.seekTo(value.toLong()) } },
-            valueRange = 0f..(state.durationMs.coerceAtLeast(1L).toFloat()),
+        PositionSlider(
+            state = state,
+            container = container,
             enabled = track != null,
             modifier = Modifier.weight(1f).padding(horizontal = 10.dp),
         )

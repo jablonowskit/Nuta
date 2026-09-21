@@ -9,6 +9,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
@@ -84,7 +85,20 @@ class YtEjsSolver(private val context: Context, private val logger: NutaLogger) 
         return solutions
     }
 
-    private suspend fun evaluate(view: WebView, script: String): String = suspendCancellableCoroutine { cont ->
-        view.evaluateJavascript(script) { result -> cont.resume(result ?: "null") }
+    /**
+     * Timeout jest tu krytyczny, nie ostrożnościowy: `evaluateJavascript` nie oddzwania wcale, gdy
+     * renderer WebView padnie, a `solve()` jest wołane z `Media3AudioPlayer.play()` spod
+     * `NonCancellable` + `loadMutex` — bez limitu czasu player zostawałby zablokowany na stałe,
+     * bez możliwości przerwania (anulowanie korutyny też by nie pomogło).
+     */
+    private suspend fun evaluate(view: WebView, script: String): String = withTimeout(EvaluateTimeoutMs) {
+        suspendCancellableCoroutine { cont ->
+            view.evaluateJavascript(script) { result -> cont.resume(result ?: "null") }
+        }
+    }
+
+    private companion object {
+        /** Solver liczy pojedyncze wyzwania w dziesiątkach ms; sekundy oznaczają padnięty renderer. */
+        const val EvaluateTimeoutMs = 15_000L
     }
 }
