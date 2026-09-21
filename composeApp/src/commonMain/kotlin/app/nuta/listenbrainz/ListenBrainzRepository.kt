@@ -178,10 +178,15 @@ class ListenBrainzRepository(
     override suspend fun search(query: String): SearchResult = coroutineScope {
         val catalogDeferred = async { musicBrainz.search(query) }
         val playlistsDeferred = async { searchPlaylists(query) }
-        catalogDeferred.await().copy(playlists = playlistsDeferred.await())
+        val playlists = playlistsDeferred.await()
+        catalogDeferred.await().copy(
+            playlists = playlists.orEmpty(),
+            playlistsUnavailable = playlists == null,
+        )
     }
 
-    private suspend fun searchPlaylists(query: String): List<Playlist> {
+    /** null = wyszukiwanie playlist zawiodło (w odróżnieniu od pustej listy, czyli braku trafień). */
+    private suspend fun searchPlaylists(query: String): List<Playlist>? {
         if (query.isBlank()) return emptyList()
         val encoded = URLEncoder.encode(query, "UTF-8")
         return runCatching {
@@ -202,7 +207,7 @@ class ListenBrainzRepository(
             // jednej gałęzi musi anulować całość, nie zostać zamienione w pustą listę.
             if (error is CancellationException) throw error
             logger.warn("ListenBrainz", "playlist_search_failed", "Nie udało się wyszukać playlist ListenBrainz", fields = mapOf("reason" to (error.message ?: "unknown")))
-            emptyList()
+            null
         }
     }
 
