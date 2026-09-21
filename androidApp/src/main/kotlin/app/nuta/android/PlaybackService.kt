@@ -39,15 +39,21 @@ class PlaybackService : MediaSessionService() {
         AppServices.start(this)
         val settingsStore = AndroidPlaybackSettingsStore(getSharedPreferences("playback-settings", MODE_PRIVATE))
         val upstreamFactory = ClientAwareDataSourceFactory(DefaultHttpDataSource.Factory().setAllowCrossProtocolRedirects(true), AppServices.logger)
+        // SimpleCache skanuje przy tworzeniu indeks na dysku (do cacheSizeMb, domyślnie 150 MB),
+        // a onCreate() usługi pierwszoplanowej ma na Androidzie 12+ twardy limit 5 s na
+        // startForeground. Dlatego cache powstaje leniwie, przy pierwszym faktycznym otwarciu
+        // strumienia — ExoPlayer woła createDataSource() dopiero wtedy, czyli już poza ścieżką
+        // startu usługi. Zmierzone na Galaxy A55: onCreate ~90 ms przy małym cache'u, ale rośnie
+        // z jego zapełnieniem, a przekroczenie limitu kończy się zabiciem usługi przez system.
         val cacheSizeBytes = settingsStore.settings.value.cacheSizeMb.toLong() * 1024 * 1024
-        val cache = SimpleCache(File(cacheDir, "stream-cache"), LeastRecentlyUsedCacheEvictor(cacheSizeBytes), StandaloneDatabaseProvider(this))
-        streamCache = cache
-        val cacheFactory = CacheDataSource.Factory()
-            .setCache(cache)
-            .setUpstreamDataSourceFactory(upstreamFactory)
-            .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
-        PlaybackQueueBridge.streamCacheFactory = cacheFactory
-        PlaybackQueueBridge.streamCache = cache
+        val cacheDirectory = File(cacheDir, "stream-cache")
+        val databaseProvider = StandaloneDatabaseProvider(this)
+        val cacheFactory = LazyCacheDataSourceFactory(upstreamFactory) {
+            SimpleCache(cacheDirectory, LeastRecentlyUsedCacheEvictor(cacheSizeBytes), databaseProvider).also {
+                streamCache = it
+                PlaybackQueueBridge.streamCache = it
+            }
+        }
         val player = ExoPlayer.Builder(this)
             .setMediaSourceFactory(DefaultMediaSourceFactory(cacheFactory))
             .setLoadControl(loadControl(settingsStore.settings.value.bufferSize))
@@ -192,6 +198,25 @@ class PlaybackService : MediaSessionService() {
         }
     }
 
+    /**
+     * Tworzy `CacheDataSource.Factory` (a z nią sam `SimpleCache`) dopiero przy pierwszym
+     * `createDataSource()`, czyli przy pierwszym faktycznym otwarciu strumienia — poza ścieżką
+     * `onCreate()` usługi, gdzie skanowanie indeksu cache'u zjadałoby budżet na `startForeground`.
+     */
+    private class LazyCacheDataSourceFactory(
+        private val upstream: DataSource.Factory,
+        private val createCache: () -> SimpleCache,
+    ) : DataSource.Factory {
+        private val delegate: CacheDataSource.Factory by lazy {
+            CacheDataSource.Factory()
+                .setCache(createCache())
+                .setUpstreamDataSourceFactory(upstream)
+                .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
+        }
+
+        override fun createDataSource(): DataSource = delegate.createDataSource()
+    }
+
     private class QueueAwarePlayer(player: Player) : ForwardingPlayer(player) {
         override fun getAvailableCommands(): Player.Commands = super.getAvailableCommands().buildUpon()
             .addAll(
@@ -266,8 +291,8 @@ class PlaybackService : MediaSessionService() {
             release()
             mediaSession = null
         }
-        PlaybackQueueBridge.streamCacheFactory = null
         PlaybackQueueBridge.streamCache = null
+        // null, jeśli nic nie zdążyło zagrać — cache powstaje leniwie (LazyCacheDataSourceFactory).
         streamCache?.release()
         streamCache = null
         super.onDestroy()
