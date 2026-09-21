@@ -28,6 +28,7 @@
     <string name="no_playlists">No playlists</string>
     <string name="play_all">Play all</string>
     <string name="add_all_to_queue">Add to queue</string>
+    <string name="back">Back</string>
     <plurals name="track_count">
         <item quantity="one">%1$d track</item>
         <item quantity="other">%1$d tracks</item>

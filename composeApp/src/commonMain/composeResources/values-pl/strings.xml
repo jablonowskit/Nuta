@@ -28,6 +28,7 @@
     <string name="no_playlists">Brak playlist</string>
     <string name="play_all">Odtwórz całość</string>
     <string name="add_all_to_queue">Dodaj do kolejki</string>
+    <string name="back">Wstecz</string>
     <plurals name="track_count">
         <item quantity="one">%1$d utwór</item>
         <item quantity="few">%1$d utwory</item>

@@ -419,7 +419,15 @@ private fun NutaAppContent(container: AppContainer) {
                         when {
                             loading -> CircularProgressIndicator(Modifier.align(Alignment.Center))
                             loadError != null -> ErrorState(loadError ?: errorUnknownLabel)
-                            selectedPlaylist != null -> PlaylistDetails(selectedPlaylist!!, playerState, container, onAddToPlaylist = ::openAddToPlaylistDialog)
+                            selectedPlaylist != null -> PlaylistDetails(
+                                selectedPlaylist!!,
+                                playerState,
+                                container,
+                                onAddToPlaylist = ::openAddToPlaylistDialog,
+                                // Wracamy na tę samą zakładkę, z której weszliśmy — searchState
+                                // żyje wyżej, więc wyniki wyszukiwania są nadal na miejscu.
+                                onBack = { selectedPlaylist = null },
+                            )
                             else -> when (destination) {
                                 Destination.HOME -> HomeScreen(
                                     playlists = playlists,
