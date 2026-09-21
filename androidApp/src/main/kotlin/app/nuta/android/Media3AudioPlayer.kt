@@ -14,6 +14,7 @@ import app.nuta.domain.AudioPlayer
 import app.nuta.settings.PlaybackSettingsStore
 import app.nuta.youtube.YouTubeMediaService
 import app.nuta.youtube.YouTubeResolution
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
@@ -238,7 +239,18 @@ class Media3AudioPlayer(
             if (!cached.isCompleted) {
                 logger.info("Media3Player", "prefetch_miss_pending", "Prefetch jeszcze się nie zakończył — czekam na niego zamiast startować od nowa", fields = mapOf("track" to track.title))
             }
-            val resolution = runCatching { cached.await() }.getOrNull()
+            // Anulowanie samego prefetchu (eksmisja przez evictOldestPrefetchesLocked) jest tu
+            // normalną ścieżką — wtedy po prostu rozwiązujemy strumień od nowa. Ale anulowanie
+            // scope'u wywołującego musi lecieć dalej, inaczej startowalibyśmy nowe żądanie
+            // sieciowe w już anulowanej korutynie.
+            val resolution = try {
+                cached.await()
+            } catch (error: CancellationException) {
+                if (!cached.isCancelled) throw error
+                null
+            } catch (_: Throwable) {
+                null
+            }
             val expiresAtMs = resolution?.stream?.expiresAtMs
             if (resolution != null && (expiresAtMs == null || expiresAtMs - System.currentTimeMillis() > PREFETCH_EXPIRY_MARGIN_MS)) {
                 logger.info("Media3Player", "prefetch_hit", "Użyto rozwiązania z prefetchu", fields = mapOf("track" to track.title))

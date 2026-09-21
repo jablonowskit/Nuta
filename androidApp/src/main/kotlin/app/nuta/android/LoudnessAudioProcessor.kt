@@ -61,11 +61,17 @@ class LoudnessAudioProcessor(
         if (mode != activeMode) rebuildNormalizer(inputAudioFormat)
         val current = normalizer
 
-        val size = inputBuffer.remaining()
+        // Liczymy w pełnych próbkach 16-bit, nie w bajtach: gdyby bufor miał nieparzystą liczbę
+        // bajtów, asShortBuffer() zobaczyłby o jedną próbkę mniej, a konsumpcja całego `remaining`
+        // zgubiłaby ostatni bajt — przy stereo trwale zamieniłoby to kanały L/R w reszcie strumienia.
+        val size = inputBuffer.remaining() / BytesPerSample * BytesPerSample
         val output = replaceOutputBuffer(size)
         if (current == null || !current.active) {
             // Tryb OFF: przepisujemy bajty bez zmian (procesor zostaje w potoku — patrz isActive).
+            val limit = inputBuffer.limit()
+            inputBuffer.limit(inputBuffer.position() + size)
             output.put(inputBuffer)
+            inputBuffer.limit(limit)
             output.flip()
             return
         }
@@ -74,15 +80,25 @@ class LoudnessAudioProcessor(
         // samo robi wbudowany SonicAudioProcessor (asShortBuffer bez własnego order()).
         val input = inputBuffer.asShortBuffer()
         val out = output.asShortBuffer()
-        while (input.hasRemaining()) {
+        val samples = size / BytesPerSample
+        repeat(samples) {
             val sample = input.get().toFloat() / Short.MAX_VALUE
             val processed = current.processSample(sample)
             out.put((processed * Short.MAX_VALUE).toInt().coerceIn(MinPcm, MaxPcm).toShort())
         }
         // Przesuwamy pozycje: widoki ShortBuffer nie ruszają pozycji buforów bazowych.
         inputBuffer.position(inputBuffer.position() + size)
-        output.position(out.position() * 2)
+        output.position(out.position() * BytesPerSample)
         output.flip()
+    }
+
+    /**
+     * Media3 woła `flush()` przy seeku i przy zmianie utworu (a `reset()` dopiero przy zwalnianiu
+     * potoku), więc bez tego stan DSP przechodził na kolejny utwór: tłumienie wyliczone dla
+     * poprzedniego, głośnego materiału obowiązywało dalej i schodziło dopiero przez ReleaseMs.
+     */
+    override fun onFlush() {
+        normalizer?.reset()
     }
 
     override fun onReset() {
@@ -93,5 +109,7 @@ class LoudnessAudioProcessor(
     private companion object {
         const val MinPcm = -32768
         const val MaxPcm = 32767
+        /** PCM 16-bit — jedyny format, który przepuszcza onConfigure. */
+        const val BytesPerSample = 2
     }
 }

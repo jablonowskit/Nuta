@@ -246,6 +246,20 @@ class PlaybackService : MediaSessionService() {
                 .build()
         }
 
+    /**
+     * MediaSessionService sam z siebie NIE zatrzymuje się po zamknięciu apki z ekranu ostatnich
+     * aplikacji. Przy wstrzymanym odtwarzaniu zostawał więc żywy ExoPlayer, SimpleCache i sesja,
+     * a powiadomienie było już zwinięte — usługi nie dało się ubić inaczej niż zabiciem procesu.
+     * Gdy coś gra, zostawiamy ją w spokoju: to normalne odtwarzanie w tle.
+     */
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        val player = mediaSession?.player
+        if (player == null || !player.playWhenReady || player.mediaItemCount == 0) {
+            stopSelf()
+        }
+        super.onTaskRemoved(rootIntent)
+    }
+
     override fun onDestroy() {
         mediaSession?.run {
             player.release()
