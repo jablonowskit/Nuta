@@ -90,6 +90,11 @@ internal fun SearchScreen(
             ))
             return@LaunchedEffect
         }
+        // Powrót ze szczegółów playlisty/wykonawcy usuwa ten ekran z kompozycji (renderowany jest
+        // wtedy PlaylistDetails), więc po powrocie LaunchedEffect startuje od nowa — bez tego
+        // warunku to samo zapytanie leciało drugi raz do sieci, kasując widoczne już wyniki.
+        val alreadyHasResults = state.result.run { tracks.isNotEmpty() || playlists.isNotEmpty() || artists.isNotEmpty() }
+        if (submittedQuery == state.lastExecutedQuery && alreadyHasResults) return@LaunchedEffect
         delay(400)
         // Ustawiane DOPIERO po debounce: przy szybkim pisaniu każdy poprzedni LaunchedEffect
         // jest anulowany, zanim tu dotrze, więc spinner nie miga po każdym znaku — tylko gdy
