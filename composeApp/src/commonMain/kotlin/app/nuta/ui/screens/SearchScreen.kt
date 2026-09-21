@@ -191,7 +191,11 @@ internal fun SearchScreen(
             // przez retry na 503 z przeciążonego MusicBrainz — potrafi to trwać kilka sekund)
             // pokazywał "brak wyników", zanim właściwe wyniki zdążyły przyjść.
             CircularProgressIndicator(Modifier.align(Alignment.CenterHorizontally).padding(top = 24.dp))
-        } else if (state.query.isNotBlank() && visibleTracks.isEmpty() && visiblePlaylists.isEmpty() && visibleArtists.isEmpty()) {
+        } else if (state.query.isNotBlank() && visibleTracks.isEmpty() && visiblePlaylists.isEmpty() && visibleArtists.isEmpty() &&
+            !(state.searchPlaylists && state.result.playlistsUnavailable)
+        ) {
+            // Gdy jedynym powodem pustki jest awaria wyszukiwania playlist, "brak wyników" byłoby
+            // mylące — wtedy schodzimy niżej i pokazujemy sekcję z informacją o niedostępności.
             EmptyState(stringResource(Res.string.search_no_results, state.query))
         } else {
             ScrollableLazyColumn(Modifier.fillMaxSize()) {
@@ -205,6 +209,20 @@ internal fun SearchScreen(
                 if (visiblePlaylists.isNotEmpty()) {
                     item { SectionLabel(stringResource(Res.string.section_playlists)) }
                     items(visiblePlaylists, key = { "p-${it.id}" }) { PlaylistCard(it) { onPlaylist(it) } }
+                    item { Spacer(Modifier.height(18.dp)) }
+                } else if (state.searchPlaylists && state.result.playlistsUnavailable) {
+                    // Awaria wyszukiwania playlist (ListenBrainz playlist/search bywa martwy —
+                    // GET wisi bez odpowiedzi, zweryfikowane curlem 21.09.2026) dawała pustą
+                    // sekcję nieodróżnialną od realnego braku trafień.
+                    item { SectionLabel(stringResource(Res.string.section_playlists)) }
+                    item {
+                        Text(
+                            stringResource(Res.string.playlist_search_unavailable),
+                            color = Color(0xFF8D9BA6),
+                            fontSize = 13.sp,
+                            modifier = Modifier.padding(vertical = 8.dp),
+                        )
+                    }
                     item { Spacer(Modifier.height(18.dp)) }
                 }
                 if (visibleTracks.isNotEmpty()) {
