@@ -91,6 +91,32 @@ class LoudnessNormalizerTest {
     }
 
     @Test
+    fun resetClearsAttenuationCarriedFromPreviousTrack() {
+        // Media3 woła flush() przy seeku i zmianie utworu. Bez reset() tłumienie wyliczone dla
+        // poprzedniego, głośnego materiału obowiązywało dalej, więc początek kolejnego utworu
+        // był słyszalnie za cichy (schodziło dopiero przez ReleaseMs).
+        val n = normalizer(LoudnessNormalization.NORMAL)
+        val amplitude = amplitudeForRms(-10.0)
+        // Sinus, nie stała: DC o tej amplitudzie wpadłby w limiter i mierzylibyśmy obcięcie
+        // sufitem zamiast wypracowanego tłumienia.
+        fun sampleAt(i: Int) =
+            (amplitude * kotlin.math.sin(2.0 * kotlin.math.PI * 440.0 * (i / 2) / 48_000.0)).toFloat()
+        repeat(48_000 * 2) { n.processSample(sampleAt(it)) }
+
+        // Szczyt sinusa po ustabilizowaniu — normalizator tłumi materiał głośniejszy niż cel.
+        val probe = amplitude
+        val attenuated = n.processSample(probe)
+        assertTrue(attenuated < probe * 0.9f, "spodziewane tłumienie po głośnym utworze, wyszło $attenuated")
+
+        n.reset()
+        // Zaraz po resecie gain wraca do 1.0, więc ta sama próbka przechodzi bez tłumienia.
+        assertTrue(
+            abs(n.processSample(probe) - probe) < probe * 0.01f,
+            "po reset() gain miał wrócić do 1.0",
+        )
+    }
+
+    @Test
     fun silenceIsNotAmplifiedIntoNoise() {
         val n = normalizer(LoudnessNormalization.NORMAL)
         // Bardzo cicha próbka (-60 dBFS, poniżej progu) nie powinna być windowana do celu.
