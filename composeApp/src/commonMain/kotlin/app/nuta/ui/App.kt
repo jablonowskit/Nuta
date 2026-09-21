@@ -71,6 +71,7 @@ import app.nuta.core.models.Destination
 import app.nuta.core.models.Playlist
 import app.nuta.core.models.SearchResult
 import app.nuta.core.models.Track
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
@@ -341,7 +342,13 @@ private fun NutaAppContent(container: AppContainer) {
                     likedTracks = it
                     likedLoaded = true
                 }
-                .onFailure { likedError = it.message ?: likedFetchFailedLabel }
+                .onFailure { error ->
+                    // Zmiana źródła danych/ekranu anuluje ten efekt — bez tego rzutu anulowanie
+                    // lądowało w likedError i użytkownik widział czerwony błąd zamiast po prostu
+                    // przerwanego ładowania.
+                    if (error is CancellationException) throw error
+                    likedError = error.message ?: likedFetchFailedLabel
+                }
             likedLoading = false
         }
 
