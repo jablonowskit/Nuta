@@ -34,13 +34,18 @@ class MusicBrainzRepository(private val logger: NutaLogger) {
     private val requestMutex = Mutex()
 
     suspend fun search(query: String): SearchResult {
-        val lucene = buildLuceneQuery(query) ?: return SearchResult(emptyList(), emptyList())
-        val encoded = java.net.URLEncoder.encode(lucene, "UTF-8")
-        val body = throttledGet("https://musicbrainz.org/ws/2/recording/?query=$encoded&fmt=json&limit=20")
-        val tracks = parseRecordings(body)
+        val tracks = searchTracks(query)
         val artists = searchArtists(query)
-        logger.info("MusicBrainz", "search_completed", "Zakończono wyszukiwanie MusicBrainz", fields = mapOf("results" to tracks.size.toString(), "artists" to artists.size.toString()))
         return SearchResult(tracks = tracks, playlists = emptyList(), artists = artists)
+    }
+
+    /** Same nagrania — osobno od wykonawców, żeby UI mogło je pokazać bez czekania na drugie żądanie. */
+    suspend fun searchTracks(query: String): List<Track> {
+        val lucene = buildLuceneQuery(query) ?: return emptyList()
+        val encoded = java.net.URLEncoder.encode(lucene, "UTF-8")
+        val tracks = parseRecordings(throttledGet("https://musicbrainz.org/ws/2/recording/?query=$encoded&fmt=json&limit=20"))
+        logger.info("MusicBrainz", "search_completed", "Zakończono wyszukiwanie MusicBrainz", fields = mapOf("results" to tracks.size.toString()))
+        return tracks
     }
 
     /**
@@ -49,7 +54,7 @@ class MusicBrainzRepository(private val logger: NutaLogger) {
      * ma dać wykonawcę nawet wtedy, gdy żaden jego utwór nie trafi w top wyników.
      * Błąd tego żądania nie może wywalić całego wyszukiwania, dlatego runCatching.
      */
-    private suspend fun searchArtists(query: String): List<Artist> {
+    suspend fun searchArtists(query: String): List<Artist> {
         val lucene = buildArtistQuery(query) ?: return emptyList()
         return runCatching {
             val encoded = java.net.URLEncoder.encode(lucene, "UTF-8")
