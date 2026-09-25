@@ -4,6 +4,7 @@ import app.nuta.core.logging.NutaLogger
 import app.nuta.core.models.PlayerState
 import app.nuta.core.models.PlayerStatus
 import app.nuta.core.models.Track
+import app.nuta.core.models.withResolvedDuration
 import app.nuta.domain.AudioPlayer
 import app.nuta.settings.LoudnessNormalization
 import app.nuta.settings.PlaybackSettingsStore
@@ -149,6 +150,7 @@ class MpvAudioPlayer(
             sendCommand("set_property", "af", loudnormFilter(settingsStore.settings.value.loudnessNormalization))
             sendCommand("set_property", "pause", false)
             _state.value = _state.value.copy(status = PlayerStatus.PLAYING)
+                .withResolvedDuration(current.id, resolution.match.candidate.durationMs)
             logger.info("MpvPlayer", "playback_started", "Rozpoczęto odtwarzanie audio", fields = mapOf("codec" to resolution.stream.codec, "container" to resolution.stream.container))
             startTicker()
         } catch (error: Throwable) {

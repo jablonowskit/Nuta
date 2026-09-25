@@ -32,7 +32,9 @@ fun rankCandidate(track: Track, title: String, channelOrUser: String, durationMs
         }
     }
     if (artist.isNotBlank() && haystack.contains(artist)) { score += 30; reasons += "artist" }
-    durationMs?.let {
+    // Utwór bez długości (MusicBrainz `length: null` -> 0) nie ma czego porównywać — wcześniej
+    // każdy kandydat dostawał wtedy "duration_bad", co faworyzowało przypadkowe lyric video.
+    durationMs?.takeIf { track.durationMs > 0 }?.let {
         val difference = kotlin.math.abs(it - track.durationMs)
         when {
             difference <= 3_000 -> { score += 25; reasons += "duration_exact" }

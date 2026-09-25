@@ -10,6 +10,7 @@ import app.nuta.core.logging.NutaLogger
 import app.nuta.core.models.PlayerState
 import app.nuta.core.models.PlayerStatus
 import app.nuta.core.models.Track
+import app.nuta.core.models.withResolvedDuration
 import app.nuta.domain.AudioPlayer
 import app.nuta.settings.PlaybackSettingsStore
 import app.nuta.youtube.YouTubeMediaService
@@ -282,7 +283,7 @@ class Media3AudioPlayer(
                     stateFlow.value = stateFlow.value.copy(
                         streamBitrate = resolution.stream.bitrate,
                         streamCodec = resolution.stream.codec,
-                    )
+                    ).withResolvedDuration(track.id, resolution.match.candidate.durationMs)
                     withContext(Dispatchers.Main) {
                         player.setMediaItem(MediaItem.Builder()
                             .setUri(url)
