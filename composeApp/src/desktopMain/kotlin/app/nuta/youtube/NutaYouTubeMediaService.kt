@@ -36,10 +36,17 @@ class NutaYouTubeMediaService(
         logger.info("YouTubeSearch", "youtube_search_started", "Rozpoczęto wyszukiwanie kandydata", operationId)
         return try {
             val matches = search(track)
-            val selected = matches.firstOrNull() ?: error("YouTube nie zwrócił kandydatów")
+            val selected = selectBestMatch(matches, "YouTube")
             logger.info(
                 "YouTubeSearch", "youtube_match_selected", "Wybrano dopasowanie YouTube", operationId,
-                mapOf("score" to selected.score.toString(), "candidateCount" to matches.size.toString()),
+                mapOf(
+                    "score" to selected.score.toString(),
+                    "candidateCount" to matches.size.toString(),
+                    "track" to track.title,
+                    "matchedTitle" to selected.candidate.title,
+                    "matchedChannel" to selected.candidate.channel,
+                    "reasons" to selected.reasons.joinToString(","),
+                ),
             )
             val stream = resolveStream(selected.candidate.videoId, operationId)
             YouTubeResolution(selected, matches.drop(1), stream)
