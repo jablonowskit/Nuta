@@ -14,8 +14,12 @@
         android:label="Nuta"
         android:supportsRtl="true"
         android:theme="@style/Theme.Nuta">
+        <!-- configChanges: obrót ekranu nie może odtwarzać Activity od nowa — stan UI (tekst
+             i wyniki wyszukiwania, zakładka, otwarta playlista) siedzi w remember{} i przepadał.
+             Compose sam przerysowuje układ po zmianie konfiguracji. -->
         <activity
             android:name=".MainActivity"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|density"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
