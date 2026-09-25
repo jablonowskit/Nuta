@@ -157,7 +157,8 @@ class MusicBrainzRepository(private val logger: NutaLogger) {
         fun buildLuceneQuery(query: String): String? {
             val words = sanitizeWords(query)
             if (words.isEmpty()) return null
-            return words.joinToString(" AND ") { """(${luceneClause("recording", it)} OR ${luceneClause("artistname", it)})""" }
+            val boostExact = words.size >= 2
+            return words.joinToString(" AND ") { """(${luceneClause("recording", it, boostExact)} OR ${luceneClause("artistname", it, boostExact)})""" }
         }
 
         /**
@@ -167,7 +168,8 @@ class MusicBrainzRepository(private val logger: NutaLogger) {
         fun buildArtistQuery(query: String): String? {
             val words = sanitizeWords(query)
             if (words.isEmpty()) return null
-            return words.joinToString(" AND ") { """(${luceneClause("artist", it)} OR ${luceneClause("alias", it)})""" }
+            val boostExact = words.size >= 2
+            return words.joinToString(" AND ") { """(${luceneClause("artist", it, boostExact)} OR ${luceneClause("alias", it, boostExact)})""" }
         }
 
         /**
@@ -190,8 +192,24 @@ class MusicBrainzRepository(private val logger: NutaLogger) {
          * `count` wychodzi ~40 milionów (prawie cała baza), więc to nie jest kontrolowany
          * prefiks, tylko przypadek, że dokładne trafienia i tak mają najwyższy `score`.
          */
-        private fun luceneClause(field: String, word: String): String =
-            if (SafeForWildcardRegex.matches(word)) "$field:$word*" else """$field:"$word""""
+        /**
+         * Dokładne słowo z premią (`^4`) OR prefiks. Sam wildcard dawał wszystkim trafieniom ten
+         * sam wynik (Lucene nie punktuje trafień prefiksowych), więc kolejność była przypadkowa:
+         * dla "pet shop boys sin" `sin*` łapało też "Single" i "It's a Sin" ginęło wśród
+         * "Single Version" (zgłoszone 25.09.2026, sprawdzone curlem). Prefiks zostaje, żeby
+         * niedokończone słowo nadal znajdowało pełne.
+         *
+         * Premia tylko przy zapytaniach z kilku słów: samo "unbe" to zwykle niedokończone pisanie,
+         * a z premią na górę wracały utwory zatytułowane dosłownie "Unbe" — dokładnie błąd z
+         * 19.09.2026 (sprawdzone curlem po zmianie).
+         */
+        private fun luceneClause(field: String, word: String, boostExact: Boolean): String = when {
+            !SafeForWildcardRegex.matches(word) -> """$field:"$word""""
+            boostExact -> "($field:$word^$ExactWordBoost OR $field:$word*)"
+            else -> "$field:$word*"
+        }
+
+        private const val ExactWordBoost = 4
 
         /** Parser `ws/2/artist/`; pomija wpisy bez id lub nazwy zamiast rzucać wyjątkiem. */
         fun parseArtists(body: String): List<Artist> {
