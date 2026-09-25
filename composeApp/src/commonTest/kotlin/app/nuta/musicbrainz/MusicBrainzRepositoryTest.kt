@@ -107,10 +107,10 @@ class MusicBrainzRepositoryTest {
         // w tytuł ALBO w wykonawcę — bez zgadywania, które słowo jest czym.
         val built = MusicBrainzRepository.buildLuceneQuery("Haddaway What Is Love")
         assertEquals(
-            """(recording:Haddaway* OR artistname:Haddaway*) AND """ +
-                """(recording:What* OR artistname:What*) AND """ +
-                """(recording:Is* OR artistname:Is*) AND """ +
-                """(recording:Love* OR artistname:Love*)""",
+            """((recording:Haddaway^4 OR recording:Haddaway*) OR (artistname:Haddaway^4 OR artistname:Haddaway*)) AND """ +
+                """((recording:What^4 OR recording:What*) OR (artistname:What^4 OR artistname:What*)) AND """ +
+                """((recording:Is^4 OR recording:Is*) OR (artistname:Is^4 OR artistname:Is*)) AND """ +
+                """((recording:Love^4 OR recording:Love*) OR (artistname:Love^4 OR artistname:Love*))""",
             built,
         )
     }
@@ -126,6 +126,19 @@ class MusicBrainzRepositoryTest {
             """(recording:unbe* OR artistname:unbe*)""",
             MusicBrainzRepository.buildLuceneQuery("unbe"),
         )
+    }
+
+    @Test
+    fun exactWordOutranksPrefixMatch() {
+        // Regresja 25.09.2026: "pet shop boys sin" nie pokazywało "It's a Sin" na górze —
+        // `sin*` łapało też "Single", a Lucene daje wszystkim trafieniom prefiksowym ten sam
+        // wynik, więc kolejność była przypadkowa. Dokładne słowo musi dostać premię.
+        val built = requireNotNull(MusicBrainzRepository.buildLuceneQuery("pet shop boys sin"))
+        assertTrue("recording:sin^4" in built, built)
+        assertTrue("recording:sin*" in built, "prefiks musi zostać dla niedokończonych słów: $built")
+        // Pojedyncze słowo to zwykle niedokończone pisanie — premia wyniosłaby na górę utwory
+        // zatytułowane dosłownie "Unbe" zamiast "Unbelievable" (błąd z 19.09.2026).
+        assertTrue("^" !in requireNotNull(MusicBrainzRepository.buildLuceneQuery("unbe")))
     }
 
     @Test
@@ -165,7 +178,7 @@ class MusicBrainzRepositoryTest {
         assertTrue(!messy.contains('\\'), messy)
         assertTrue(!messy.contains("\"b\""), messy)
         // Dwa słowa na wejściu ("a\"b" i "c\\d") dają dwie klauzule.
-        assertEquals(2, Regex("recording:").findAll(messy).count(), messy)
+        assertEquals(2, messy.split(" AND ").size, messy)
     }
 
     @Test
@@ -211,7 +224,7 @@ class MusicBrainzRepositoryTest {
     fun buildsArtistQueryOverNameAndAlias() {
         // Alias łapie warianty pisowni, np. gdy katalog trzyma inną formę nazwy.
         assertEquals(
-            """(artist:Sigur* OR alias:Sigur*) AND (artist:Ros* OR alias:Ros*)""",
+            """((artist:Sigur^4 OR artist:Sigur*) OR (alias:Sigur^4 OR alias:Sigur*)) AND ((artist:Ros^4 OR artist:Ros*) OR (alias:Ros^4 OR alias:Ros*))""",
             MusicBrainzRepository.buildArtistQuery("Sigur Ros"),
         )
         assertNull(MusicBrainzRepository.buildArtistQuery("   "))
