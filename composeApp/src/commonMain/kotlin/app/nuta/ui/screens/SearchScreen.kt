@@ -73,8 +73,14 @@ internal fun SearchScreen(
     // Bez tego przełączenie DataSource zostawiało na ekranie wyniki wyszukiwania z
     // poprzedniego backendu — kliknięcie takiego wyniku wysyłało ID z jednego źródła
     // (np. Spotify) do drugiego (ListenBrainz), które go nie rozpoznaje.
+    // Tylko przy FAKTYCZNEJ zmianie źródła: LaunchedEffect startuje przy każdym wejściu na ekran,
+    // także po powrocie ze szczegółów wykonawcy — bezwarunkowe czyszczenie kasowało wtedy wyniki
+    // i wyszukiwanie ruszało od nowa (zgłoszone 25.09.2026).
     LaunchedEffect(settings.dataSource) {
-        onStateChange(currentState.copy(result = SearchResult(emptyList(), emptyList())))
+        val source = currentState.resultDataSource
+        if (source != null && source != settings.dataSource) {
+            onStateChange(currentState.copy(result = SearchResult(emptyList(), emptyList()), resultDataSource = null, lastExecutedQuery = ""))
+        }
     }
 
     // Filtry (searchTracks/Artists/Playlists) tylko zawężają już pobrane wyniki lokalnie
@@ -94,7 +100,9 @@ internal fun SearchScreen(
         // wtedy PlaylistDetails), więc po powrocie LaunchedEffect startuje od nowa — bez tego
         // warunku to samo zapytanie leciało drugi raz do sieci, kasując widoczne już wyniki.
         val alreadyHasResults = state.result.run { tracks.isNotEmpty() || playlists.isNotEmpty() || artists.isNotEmpty() }
-        if (submittedQuery == state.lastExecutedQuery && alreadyHasResults) return@LaunchedEffect
+        if (submittedQuery == currentState.lastExecutedQuery && alreadyHasResults &&
+            currentState.resultDataSource == settings.dataSource
+        ) return@LaunchedEffect
         delay(400)
         // Ustawiane DOPIERO po debounce: przy szybkim pisaniu każdy poprzedni LaunchedEffect
         // jest anulowany, zanim tu dotrze, więc spinner nie miga po każdym znaku — tylko gdy
@@ -102,13 +110,16 @@ internal fun SearchScreen(
         // oczekiwania (debounce + samo zapytanie, wydłużone przez retry na 503 z MusicBrainz —
         // potrafi to trwać kilka sekund) pokazywał "brak wyników", co czytało się jako "nie działa".
         onStateChange(currentState.copy(loading = true))
+        var finished = false
+        try {
         // Spotify nie zna składni "|"/"&" — do zapytania serwerowego wysyłamy same słowa,
         // dokładne dopasowanie OR/AND liczymy potem lokalnie (visibleTracks niżej).
         val serverSearchTerm = submittedQuery.split(Regex("[|&\\s]+")).filter(String::isNotBlank).distinct().joinToString(" ")
         runCatching { container.spotifyRepository.search(serverSearchTerm) }
+            .also { if (it.exceptionOrNull() !is CancellationException) finished = true }
             .onSuccess {
                 if (currentState.query == submittedQuery) {
-                    onStateChange(currentState.copy(result = it, error = null, lastExecutedQuery = submittedQuery, loading = false))
+                    onStateChange(currentState.copy(result = it, error = null, lastExecutedQuery = submittedQuery, loading = false, resultDataSource = settings.dataSource))
                 }
             }
             .onFailure { error ->
@@ -127,6 +138,19 @@ internal fun SearchScreen(
                     onStateChange(currentState.copy(error = error.message ?: searchUnknownError, lastExecutedQuery = submittedQuery, loading = false))
                 }
             }
+        } finally {
+            // Anulowanie w trakcie zapytania (wyjście do szczegółów wykonawcy, zmiana źródła)
+            // omija oba powyższe gałęzie i zostawiało loading = true — spinner kręcił się bez
+            // końca (zgłoszone 25.09.2026 na desktopie). Nowe zapytanie i tak ustawi go ponownie.
+            // Tylko po PRZERWANYM zapytaniu. Po udanym `currentState` jest jeszcze sprzed
+            // rekompozycji (bez nowych wyników), więc copy() nadpisywało świeże wyniki pustą
+            // listą — ekran pokazywał "Brak wyników" mimo 20 trafień w logu.
+            // I tylko gdy zapytanie się nie zmieniło: blokujące żądanie HTTP kończy się dopiero po
+            // odpowiedzi/timeoucie, więc przerwane stare zapytanie potrafiło dojść tu kilka sekund
+            // później i zgasić spinner NOWEMU — ekran pokazywał wtedy "Brak wyników" w trakcie
+            // szukania. Przy zmianie tekstu spinnerem rządzi już nowe zapytanie.
+            if (!finished && currentState.query == submittedQuery) onStateChange(currentState.copy(loading = false))
+        }
     }
 
     Column(Modifier.fillMaxSize()) {
@@ -165,12 +189,14 @@ internal fun SearchScreen(
         val queryOrGroups = state.query.split("|").map { group ->
             group.trim().split(Regex("[&\\s]+")).filter(String::isNotBlank)
         }.filter(List<String>::isNotEmpty)
-        val visibleTracks = state.result.tracks.filter { track ->
+        // Każde pole wyboru włącza/ukrywa SWOJĄ sekcję, tak jak "Wykonawcy" i "Playlisty". Wcześniej
+        // "Utwory" znaczyło tylko "dopasowuj po tytule", więc utwory trafione po wykonawcy zostawały
+        // i odznaczenie nie dawało żadnej reakcji (zgłoszone 25.09.2026), a odznaczenie "Wykonawcy"
+        // po cichu wycinało też utwory dopasowane po nazwie wykonawcy.
+        val visibleTracks = if (!state.searchTracks) emptyList() else state.result.tracks.filter { track ->
             queryOrGroups.isEmpty() || queryOrGroups.any { andWords ->
                 andWords.all { word ->
-                    val titleMatches = state.searchTracks && track.title.matchesLoosely(word)
-                    val artistMatches = state.searchArtists && track.artists.any { it.matchesLoosely(word) }
-                    titleMatches || artistMatches
+                    track.title.matchesLoosely(word) || track.artists.any { it.matchesLoosely(word) }
                 }
             }
         }

@@ -102,6 +102,8 @@ internal data class SearchViewState(
      * wyszukiwanie jeszcze trwa — użytkownik odczytywał to jako "nie działa".
      */
     val loading: Boolean = false,
+    /** Źródło danych, z którego pochodzi [result] — wyniki czyścimy tylko przy jego faktycznej zmianie. */
+    val resultDataSource: app.nuta.settings.DataSource? = null,
 )
 
 @Composable
