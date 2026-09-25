@@ -29,6 +29,7 @@ class DataSourceSelectingRepository(
     override suspend fun isTrackLiked(trackId: String): Boolean = active().isTrackLiked(trackId)
     override suspend fun setTrackLiked(track: Track, liked: Boolean) = active().setTrackLiked(track, liked)
     override suspend fun search(query: String): SearchResult = active().search(query)
+    override fun searchProgressive(query: String) = active().searchProgressive(query)
     override suspend fun getArtistTracks(artist: Artist, limit: Int): List<Track> = active().getArtistTracks(artist, limit)
     override suspend fun getTrackRadio(seed: Track, limit: Int): List<Track> = active().getTrackRadio(seed, limit)
     override suspend fun createPlaylist(name: String, description: String): Playlist = active().createPlaylist(name, description)

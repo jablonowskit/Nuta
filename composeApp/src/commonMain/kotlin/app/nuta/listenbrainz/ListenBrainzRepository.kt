@@ -14,6 +14,11 @@ import java.net.URLEncoder
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.channelFlow
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
@@ -186,6 +191,35 @@ class ListenBrainzRepository(
     }
 
     /** null = wyszukiwanie playlist zawiodło (w odróżnieniu od pustej listy, czyli braku trafień). */
+    /**
+     * Dwa etapy: najpierw katalog MusicBrainz (utwory + wykonawcy), potem playlisty. Wcześniej
+     * utwory czekały na playlisty, a `playlist/search` bywa martwy i zawsze dobija do 5-sekundowego
+     * timeoutu — ekran pokazywał spinner przez całe 5 s, choć utwory były gotowe po ~1 s.
+     */
+    override fun searchProgressive(query: String): Flow<SearchResult> = channelFlow {
+        // Utwory, wykonawcy i playlisty niezależnie — każda część trafia na ekran od razu po
+        // zakończeniu. Wykonawcy dotąd czekali na utwory (limit MusicBrainz ~1 żądanie/s, więc
+        // drugie żądanie to co najmniej +1,1 s), a wszystko razem czekało na playlisty.
+        val lock = Mutex()
+        var current = SearchResult(emptyList(), emptyList(), playlistsLoading = true, tracksLoading = true)
+        suspend fun update(change: (SearchResult) -> SearchResult) = lock.withLock {
+            current = change(current)
+            send(current)
+        }
+        launch {
+            val playlists = searchPlaylists(query)
+            update { it.copy(playlists = playlists.orEmpty(), playlistsUnavailable = playlists == null, playlistsLoading = false) }
+        }
+        launch {
+            val tracks = musicBrainz.searchTracks(query)
+            update { it.copy(tracks = tracks, tracksLoading = false) }
+            // Po utworach, nie równolegle: oba żądania i tak idą przez ten sam throttling
+            // MusicBrainz, a utwory są ważniejsze — mają dostać pierwszy slot.
+            val artists = musicBrainz.searchArtists(query)
+            update { it.copy(artists = artists) }
+        }
+    }
+
     private suspend fun searchPlaylists(query: String): List<Playlist>? {
         if (query.isBlank()) return emptyList()
         val encoded = URLEncoder.encode(query, "UTF-8")

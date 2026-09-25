@@ -4,6 +4,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -100,8 +102,10 @@ internal fun SearchScreen(
         // wtedy PlaylistDetails), więc po powrocie LaunchedEffect startuje od nowa — bez tego
         // warunku to samo zapytanie leciało drugi raz do sieci, kasując widoczne już wyniki.
         val alreadyHasResults = state.result.run { tracks.isNotEmpty() || playlists.isNotEmpty() || artists.isNotEmpty() }
+        // !playlistsLoading: wyjście przed dojściem playlist zostawiłoby inaczej wieczne "szukam playlist".
         if (submittedQuery == currentState.lastExecutedQuery && alreadyHasResults &&
-            currentState.resultDataSource == settings.dataSource
+            currentState.resultDataSource == settings.dataSource && !currentState.result.playlistsLoading &&
+            !currentState.result.tracksLoading
         ) return@LaunchedEffect
         delay(400)
         // Ustawiane DOPIERO po debounce: przy szybkim pisaniu każdy poprzedni LaunchedEffect
@@ -115,13 +119,17 @@ internal fun SearchScreen(
         // Spotify nie zna składni "|"/"&" — do zapytania serwerowego wysyłamy same słowa,
         // dokładne dopasowanie OR/AND liczymy potem lokalnie (visibleTracks niżej).
         val serverSearchTerm = submittedQuery.split(Regex("[|&\\s]+")).filter(String::isNotBlank).distinct().joinToString(" ")
-        runCatching { container.spotifyRepository.search(serverSearchTerm) }
-            .also { if (it.exceptionOrNull() !is CancellationException) finished = true }
-            .onSuccess {
+        runCatching {
+            // Etapami: utwory pojawiają się od razu, playlisty dochodzą, gdy odpowie ich endpoint.
+            container.spotifyRepository.searchProgressive(serverSearchTerm).collect { partial ->
                 if (currentState.query == submittedQuery) {
-                    onStateChange(currentState.copy(result = it, error = null, lastExecutedQuery = submittedQuery, loading = false, resultDataSource = settings.dataSource))
+                    // loading trzyma się, dopóki nie dojdą utwory — inaczej szybka odpowiedź playlist
+                    // dawałaby na chwilę "Brak wyników".
+                    onStateChange(currentState.copy(result = partial, error = null, lastExecutedQuery = submittedQuery, loading = partial.tracksLoading, resultDataSource = settings.dataSource))
                 }
             }
+        }
+            .also { if (it.exceptionOrNull() !is CancellationException) finished = true }
             .onFailure { error ->
                 // Regresja 19.09.2026: `search()` uruchamia teraz dwa żądania równolegle przez
                 // `coroutineScope { async {...} }` (patrz ListenBrainzRepository.search) — gdy
@@ -235,6 +243,16 @@ internal fun SearchScreen(
                 if (visiblePlaylists.isNotEmpty()) {
                     item { SectionLabel(stringResource(Res.string.section_playlists)) }
                     items(visiblePlaylists, key = { "p-${it.id}" }) { PlaylistCard(it) { onPlaylist(it) } }
+                    item { Spacer(Modifier.height(18.dp)) }
+                } else if (state.searchPlaylists && state.result.playlistsLoading) {
+                    item { SectionLabel(stringResource(Res.string.section_playlists)) }
+                    item {
+                        Row(Modifier.padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                            CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
+                            Spacer(Modifier.width(8.dp))
+                            Text(stringResource(Res.string.playlist_search_loading), color = Color(0xFF8D9BA6), fontSize = 13.sp)
+                        }
+                    }
                     item { Spacer(Modifier.height(18.dp)) }
                 } else if (state.searchPlaylists && state.result.playlistsUnavailable) {
                     // Awaria wyszukiwania playlist (ListenBrainz playlist/search bywa martwy —

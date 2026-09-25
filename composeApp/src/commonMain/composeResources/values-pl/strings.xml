@@ -57,6 +57,7 @@
     <string name="filter_playlists">Playlisty</string>
     <string name="section_artists">WYKONAWCY</string>
     <string name="section_playlists">PLAYLISTY</string>
+    <string name="playlist_search_loading">Szukam playlist…</string>
     <string name="playlist_search_unavailable">Wyszukiwanie playlist jest chwilowo niedostępne</string>
     <string name="section_tracks">UTWORY</string>
     <string name="search_no_results">Brak wyników dla „%1$s”</string>

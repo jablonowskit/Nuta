@@ -35,6 +35,10 @@ data class SearchResult(
      * listę playlist z awarii serwisu widać w UI tak samo jak realny brak trafień.
      */
     val playlistsUnavailable: Boolean = false,
+    /** Utwory już są, playlisty jeszcze się wyszukują (patrz SpotifyRepository.searchProgressive). */
+    val playlistsLoading: Boolean = false,
+    /** Utwory jeszcze się wyszukują — inne części mogły już dojść (patrz searchProgressive). */
+    val tracksLoading: Boolean = false,
 )
 
 enum class PlayerStatus { IDLE, LOADING, PLAYING, PAUSED, ENDED, ERROR }
