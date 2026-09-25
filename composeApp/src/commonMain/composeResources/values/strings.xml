@@ -55,6 +55,7 @@
     <string name="filter_playlists">Playlists</string>
     <string name="section_artists">ARTISTS</string>
     <string name="section_playlists">PLAYLISTS</string>
+    <string name="playlist_search_loading">Searching playlists…</string>
     <string name="playlist_search_unavailable">Playlist search is temporarily unavailable</string>
     <string name="section_tracks">TRACKS</string>
     <string name="search_no_results">No results for “%1$s”</string>

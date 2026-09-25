@@ -5,7 +5,9 @@ import app.nuta.core.models.PlayerState
 import app.nuta.core.models.Playlist
 import app.nuta.core.models.SearchResult
 import app.nuta.core.models.Track
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.flow
 
 interface SpotifyRepository {
     suspend fun getPlaylists(): List<Playlist>
@@ -17,6 +19,12 @@ interface SpotifyRepository {
     suspend fun isTrackLiked(trackId: String): Boolean
     suspend fun setTrackLiked(track: Track, liked: Boolean)
     suspend fun search(query: String): SearchResult
+    /**
+     * Wyniki wyszukiwania dostarczane etapami — każdy element to pełniejszy stan niż
+     * poprzedni. Domyślnie jeden etap (zwykłe [search]); źródło z wolniejszą częścią wyników
+     * (ListenBrainz: playlisty) nadpisuje to, żeby utwory nie czekały na playlisty.
+     */
+    fun searchProgressive(query: String): Flow<SearchResult> = flow { emit(search(query)) }
     /**
      * Utwory danego wykonawcy, dociągane z serwisu — nie tylko te, które akurat wpadły
      * w wyniki wyszukiwania. Używane po wejściu w wykonawcę z ekranu Szukaj.
