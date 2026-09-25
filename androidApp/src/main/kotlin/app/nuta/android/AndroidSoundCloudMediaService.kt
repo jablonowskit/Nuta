@@ -11,6 +11,7 @@ import app.nuta.youtube.YouTubeMatch
 import app.nuta.youtube.YouTubeMediaService
 import app.nuta.youtube.YouTubeResolution
 import app.nuta.youtube.rankCandidate
+import app.nuta.youtube.selectBestMatch
 import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
@@ -47,13 +48,16 @@ class AndroidSoundCloudMediaService(
 
     override suspend fun resolve(track: Track): YouTubeResolution {
         val matches = search(track)
-        val selected = matches.firstOrNull() ?: error("SoundCloud nie zwrócił kandydatów")
+        val selected = selectBestMatch(matches, "SoundCloud")
         val stream = resolveStream(selected.candidate.videoId)
         logger.info("AndroidSoundCloud", "stream_resolved", "Wybrano strumień audio SoundCloud", fields = mapOf(
             "codec" to stream.codec,
             "mimeType" to stream.mimeType,
             "bitrate" to stream.bitrate.toString(),
             "score" to selected.score.toString(),
+            "track" to track.title,
+            "matchedTitle" to selected.candidate.title,
+            "matchedChannel" to selected.candidate.channel,
         ))
         return YouTubeResolution(selected, matches.drop(1), stream)
     }
