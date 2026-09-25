@@ -1,6 +1,7 @@
 package app.nuta.youtube
 
 import app.nuta.core.models.Track
+import app.nuta.core.models.withResolvedDuration
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -59,6 +60,25 @@ class CandidateRankingTest {
         val exact = YouTubeCandidate("x", "Artist - Song", "Artist", 200_000, false)
         val off = YouTubeCandidate("y", "Artist - Song", "Artist", 220_000, false)
         assertTrue(score(t, off) < score(t, exact) - 25, "20 s różnicy powinno kosztować więcej niż brak bonusu")
+    }
+
+    @Test
+    fun missingTrackDurationIsNotComparedAtAll() {
+        // "St. Elmos Fire" z MusicBrainz przyszło z długością 0 — każdy kandydat dostawał
+        // "duration_bad" i wygrało lyric video z kanału fana (25.09.2026).
+        val t = track("John Parr", "St. Elmos Fire", 0)
+        val (_, reasons) = rankCandidate(t, "John Parr - St. Elmo's Fire", "John Parr", 250_000, false)
+        assertTrue(reasons.none { it.startsWith("duration") }, reasons.toString())
+    }
+
+    @Test
+    fun resolvedDurationFillsOnlyUnknownLength() {
+        val unknown = app.nuta.core.models.Track("a", "A", listOf("X"), "", 0)
+        val known = app.nuta.core.models.Track("b", "B", listOf("X"), "", 200_000)
+        val state = app.nuta.core.models.PlayerState(queue = listOf(unknown, known), currentIndex = 0)
+        assertEquals(250_000, state.withResolvedDuration("a", 250_000).durationMs)
+        val onKnown = state.copy(currentIndex = 1)
+        assertEquals(200_000, onKnown.withResolvedDuration("b", 250_000).durationMs)
     }
 
     @Test
