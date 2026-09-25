@@ -13,6 +13,7 @@ import app.nuta.youtube.YouTubeMatch
 import app.nuta.youtube.YouTubeMediaService
 import app.nuta.youtube.YouTubeResolution
 import app.nuta.youtube.rankCandidate
+import app.nuta.youtube.selectBestMatch
 import app.nuta.settings.PlaybackSettingsStore
 import app.nuta.settings.YouTubeClientProfile
 import java.net.HttpURLConnection
@@ -44,13 +45,19 @@ class AndroidYouTubeMediaService(
 
     override suspend fun resolve(track: Track): YouTubeResolution {
         val matches = search(track)
-        val selected = matches.firstOrNull() ?: error("YouTube nie zwrócił kandydatów")
+        val selected = selectBestMatch(matches, "YouTube")
         val stream = resolveStream(selected.candidate.videoId)
         logger.info("AndroidYouTube", "stream_resolved", "Wybrano strumień audio YouTube", fields = mapOf(
             "codec" to stream.codec,
             "mimeType" to stream.mimeType,
             "bitrate" to stream.bitrate.toString(),
             "score" to selected.score.toString(),
+            // Bez tytułu i kanału nie dało się sprawdzić, CO faktycznie gra — zły dopasowany
+            // utwór był wykrywalny tylko uchem.
+            "track" to track.title,
+            "matchedTitle" to selected.candidate.title,
+            "matchedChannel" to selected.candidate.channel,
+            "reasons" to selected.reasons.joinToString(","),
         ))
         return YouTubeResolution(selected, matches.drop(1), stream)
     }
