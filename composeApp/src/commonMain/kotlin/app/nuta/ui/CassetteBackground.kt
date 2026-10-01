@@ -23,16 +23,17 @@ import androidx.compose.ui.graphics.drawscope.rotate
 import kotlin.math.cos
 import kotlin.math.min
 import kotlin.math.sin
+import kotlin.math.sqrt
 
 /**
  * Znak wodny kasety magnetofonowej pod treścią ekranu. Szpule kręcą się tylko przy [playing]
- * (w pauzie animacja stoi), a [progress] przewija taśmę z lewej szpuli na prawą.
- * Szprychy hubów są jaśniejsze od obrysu kasety — inaczej obrót byłby niewidoczny
- * (okrągły kontur wygląda tak samo pod każdym kątem). Zweryfikowane na desktopie 01.10.2026.
+ * (w pauzie animacja stoi). [progress] (0..1 = pozycja/długość utworu) nawija taśmę z lewej
+ * szpuli na prawą: promień zwoju rośnie z pierwiastkiem postępu, bo ilość taśmy to pole
+ * pierścienia, nie sam promień — inaczej środek utworu wyglądałby jak prawie pełna prawa
+ * szpula. Zweryfikowane wizualnie 01.10.2026.
  *
  * Kąt jest czytany w ciele composable (nie tylko w Canvas), żeby każda klatka Animatable
- * wymusiła rekompozycję/przerysowanie — samo odczytanie w DrawScope bywało zbyt subtelne
- * przy bardzo niskim alpha.
+ * wymusiła rekompozycję/przerysowanie.
  */
 @Composable
 fun CassetteBackground(
@@ -45,7 +46,8 @@ fun CassetteBackground(
     LaunchedEffect(playing) {
         if (!playing) return@LaunchedEffect
         while (true) {
-            rotation.animateTo(rotation.value + 360f, tween(durationMillis = 2800, easing = LinearEasing))
+            // Ujemny przyrost = obrót przeciwnie do wskazówek zegara (obie szpule tak samo).
+            rotation.animateTo(rotation.value - 360f, tween(durationMillis = 2800, easing = LinearEasing))
             rotation.snapTo(rotation.value % 360f)
         }
     }
@@ -76,18 +78,30 @@ private fun DrawScope.drawCassette(topLeft: Offset, size: Size, angle: Float, pr
 
     val leftCenter = at(0.335f, windowTop + windowHeight / 2f)
     val rightCenter = at(0.665f, windowTop + windowHeight / 2f)
-    val hubRadius = h * 0.07f
-    val minTape = hubRadius * 1.2f
-    val maxTape = h * 0.2f
-    val leftTape = maxTape - (maxTape - minTape) * progress
-    val rightTape = minTape + (maxTape - minTape) * progress
+    val hubRadius = h * 0.065f
+    val maxTape = h * 0.22f
+    // Pole pierścienia ~ ilość taśmy → promień ~ sqrt(udziału).
+    val leftShare = 1f - progress
+    val rightShare = progress
+    val leftTape = hubRadius + (maxTape - hubRadius) * sqrt(leftShare)
+    val rightTape = hubRadius + (maxTape - hubRadius) * sqrt(rightShare)
     val window = Path().apply {
         addRoundRect(RoundRect(Rect(at(0.27f, windowTop), Size(w * 0.46f, h * windowHeight)), CornerRadius(h * 0.14f)))
     }
-    val tapeColor = color.copy(alpha = (color.alpha * 0.7f).coerceAtMost(0.12f))
+    val tapeFill = color.copy(alpha = (color.alpha * 1.6f).coerceIn(0.10f, 0.18f))
+    val tapeRing = color.copy(alpha = (color.alpha * 2.4f).coerceIn(0.14f, 0.26f))
     clipPath(window) {
-        drawCircle(tapeColor, leftTape, leftCenter)
-        drawCircle(tapeColor, rightTape, rightCenter)
+        drawTapePack(leftCenter, hubRadius, leftTape, tapeFill, tapeRing)
+        drawTapePack(rightCenter, hubRadius, rightTape, tapeFill, tapeRing)
+        // Taśma między szpulami — cienki mostek u dołu okienka.
+        val bridgeY = leftCenter.y + maxTape * 0.55f
+        drawLine(
+            tapeRing,
+            Offset(leftCenter.x + leftTape * 0.15f, bridgeY),
+            Offset(rightCenter.x - rightTape * 0.15f, bridgeY),
+            strokeWidth = h * 0.012f,
+            cap = StrokeCap.Round,
+        )
     }
     val reelColor = color.copy(alpha = (color.alpha * 2.2f).coerceIn(0.12f, 0.22f))
     drawReel(leftCenter, hubRadius, angle, reelColor)
@@ -105,6 +119,26 @@ private fun DrawScope.drawCassette(topLeft: Offset, size: Size, angle: Float, pr
 
     for ((x, y) in listOf(0.035f to 0.06f, 0.965f to 0.06f, 0.035f to 0.94f, 0.965f to 0.94f, 0.5f to 0.7f)) {
         drawCircle(color, h * 0.014f, at(x, y))
+    }
+}
+
+/** Zwój taśmy: wypełniony pierścień + kilka koncentrycznych linii jak nawinięcia. */
+private fun DrawScope.drawTapePack(
+    center: Offset,
+    hubRadius: Float,
+    outerRadius: Float,
+    fill: Color,
+    ring: Color,
+) {
+    if (outerRadius <= hubRadius * 1.05f) return
+    drawCircle(fill, outerRadius, center)
+    // Wykrawamy hub kolorem tła kasety (prawie czarny) — bez tego zwój zasłania szprychy.
+    drawCircle(Color(0xFF101418), hubRadius * 1.05f, center)
+    val rings = 4
+    val span = outerRadius - hubRadius
+    for (i in 1..rings) {
+        val r = hubRadius + span * (i / (rings + 1f))
+        drawCircle(ring, r, center, style = Stroke(width = span * 0.04f))
     }
 }
 
