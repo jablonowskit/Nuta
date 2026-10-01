@@ -191,7 +191,7 @@ internal fun CompactPlayerBar(
             )
         }
         Row(
-            Modifier.fillMaxWidth().height(52.dp).padding(horizontal = 8.dp),
+            Modifier.fillMaxWidth().height(52.dp).padding(start = 8.dp, end = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Cover(
@@ -199,8 +199,9 @@ internal fun CompactPlayerBar(
                 track?.imageUrl,
                 Modifier.size(40.dp).clickable { onOpenQueue() },
             )
+            // weight(1f) zabiera całą wolną szerokość — po prawej zostają tylko dwa małe przyciski.
             Column(
-                Modifier.weight(1f).padding(horizontal = 10.dp).clickable { onOpenQueue() },
+                Modifier.weight(1f).padding(start = 10.dp, end = 4.dp).clickable { onOpenQueue() },
             ) {
                 Text(
                     track?.title ?: stringResource(Res.string.nothing_playing),
@@ -219,9 +220,9 @@ internal fun CompactPlayerBar(
                     fontSize = 11.sp,
                 )
             }
-            Box(Modifier.size(40.dp), contentAlignment = Alignment.Center) {
+            Box(Modifier.size(36.dp), contentAlignment = Alignment.Center) {
                 if (state.status == PlayerStatus.LOADING) {
-                    Text("⏳︎", color = MaterialTheme.colors.primary, fontSize = 22.sp)
+                    Text("⏳︎", color = MaterialTheme.colors.primary, fontSize = 20.sp)
                 } else {
                     Box(
                         Modifier.fillMaxSize().clickable(enabled = track != null) {
@@ -235,13 +236,13 @@ internal fun CompactPlayerBar(
                         Text(
                             if (state.status == PlayerStatus.PLAYING) "⏸" else "▶",
                             color = MaterialTheme.colors.primary,
-                            fontSize = 22.sp,
+                            fontSize = 20.sp,
                         )
                     }
                 }
             }
             Box(
-                Modifier.size(40.dp).clickable(enabled = track != null) {
+                Modifier.size(36.dp).clickable(enabled = track != null) {
                     scope.launch { container.audioPlayer.next() }
                 },
                 contentAlignment = Alignment.Center,
@@ -250,7 +251,7 @@ internal fun CompactPlayerBar(
                     "⏭",
                     color = if (track != null) Color.White else Color(0xFF55616A),
                     fontWeight = FontWeight.Bold,
-                    fontSize = 20.sp,
+                    fontSize = 18.sp,
                 )
             }
         }
