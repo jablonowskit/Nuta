@@ -44,6 +44,7 @@ import app.nuta.core.models.PlayerState
 import app.nuta.core.models.PlayerStatus
 import app.nuta.core.models.Track
 import app.nuta.resources.*
+import app.nuta.ui.theme.LocalNutaPalette
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.stringResource
 
@@ -62,6 +63,7 @@ private fun CompactTransportRow(
     // sliderze pozycji — wyglądało jak osobna linia kontrolek.
     showSimilarButton: Boolean = true,
 ) {
+    val palette = LocalNutaPalette.current
     val scope = rememberCoroutineScope()
     val track = state.currentTrack
     var radioLoading by remember { mutableStateOf(false) }
@@ -72,10 +74,10 @@ private fun CompactTransportRow(
             // więc bez jawnego wyśrodkowania w Boxie każdy z nich "siadał" na innej wysokości mimo
             // identycznego Modifier.size(40.dp) na samym Tekście.
             Box(Modifier.size(40.dp).clickable(enabled = track != null) { scope.launch { container.audioPlayer.previous() } }, contentAlignment = Alignment.Center) {
-                Text("⏮", color = if (track != null) Color.White else Color(0xFF55616A), fontWeight = FontWeight.Bold, fontSize = 30.sp)
+                Text("⏮", color = if (track != null) Color.White else palette.onMuted, fontWeight = FontWeight.Bold, fontSize = 30.sp)
             }
             Box(Modifier.size(40.dp).clickable(enabled = track != null) { scope.launch { container.audioPlayer.seekTo((state.positionMs - 10_000).coerceAtLeast(0)) } }, contentAlignment = Alignment.Center) {
-                Text("⏪︎", color = if (track != null) Color.White else Color(0xFF55616A), fontSize = 28.sp)
+                Text("⏪︎", color = if (track != null) Color.White else palette.onMuted, fontSize = 28.sp)
             }
             Box(Modifier.size(40.dp), contentAlignment = Alignment.Center) {
                 if (state.status == PlayerStatus.LOADING) {
@@ -87,27 +89,27 @@ private fun CompactTransportRow(
                 }
             }
             Box(Modifier.size(40.dp).clickable(enabled = track != null) { scope.launch { container.audioPlayer.seekTo((state.positionMs + 10_000).coerceAtMost(state.durationMs)) } }, contentAlignment = Alignment.Center) {
-                Text("⏩︎", color = if (track != null) Color.White else Color(0xFF55616A), fontSize = 28.sp)
+                Text("⏩︎", color = if (track != null) Color.White else palette.onMuted, fontSize = 28.sp)
             }
             Box(Modifier.size(40.dp).clickable(enabled = track != null) { scope.launch { container.audioPlayer.next() } }, contentAlignment = Alignment.Center) {
-                Text("⏭", color = if (track != null) Color.White else Color(0xFF55616A), fontWeight = FontWeight.Bold, fontSize = 30.sp)
+                Text("⏭", color = if (track != null) Color.White else palette.onMuted, fontWeight = FontWeight.Bold, fontSize = 30.sp)
             }
             Box(Modifier.size(40.dp).clickable(enabled = track != null && !favoriteLoading) { onToggleLiked() }, contentAlignment = Alignment.Center) {
                 Text(
                     if (favoriteLoading) "…" else if (isLiked) "♥" else "♡",
-                    color = if (isLiked) Color(0xFFFF4D67) else if (track != null) Color.White else Color(0xFF55616A),
+                    color = if (isLiked) Color(0xFFFF4D67) else if (track != null) Color.White else palette.onMuted,
                     fontSize = 32.sp,
                 )
             }
             Box(
                 Modifier.size(40.dp)
-                    .background(if (state.shuffleEnabled) Color(0xFF2F6B45) else Color.Transparent, RoundedCornerShape(6.dp))
+                    .background(if (state.shuffleEnabled) palette.primaryVariant else Color.Transparent, RoundedCornerShape(6.dp))
                     .clickable(enabled = state.queue.size > 1) { scope.launch { container.audioPlayer.shuffleUpcoming(); onOpenQueue() } },
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
                     "⇄",
-                    color = when { state.shuffleEnabled -> Color.White; state.queue.size > 1 -> MaterialTheme.colors.primary; else -> Color(0xFF55616A) },
+                    color = when { state.shuffleEnabled -> Color.White; state.queue.size > 1 -> MaterialTheme.colors.primary; else -> palette.onMuted },
                     fontSize = 28.sp,
                     fontWeight = FontWeight.Bold,
                 )
@@ -115,7 +117,7 @@ private fun CompactTransportRow(
             if (showSimilarButton) {
                 Box(
                     Modifier.size(40.dp)
-                        .background(if (similarModeActive) Color(0xFF2F6B45) else Color.Transparent, RoundedCornerShape(6.dp))
+                        .background(if (similarModeActive) palette.primaryVariant else Color.Transparent, RoundedCornerShape(6.dp))
                         .clickable(enabled = track != null && !radioLoading) {
                             if (similarModeActive) onSimilarModeChange(false) else track?.let { seed ->
                                 scope.launch {
@@ -134,7 +136,7 @@ private fun CompactTransportRow(
                 ) {
                     Text(
                         if (radioLoading) "…" else "♬+",
-                        color = if (similarModeActive) Color.White else if (track != null) MaterialTheme.colors.primary else Color(0xFF55616A),
+                        color = if (similarModeActive) Color.White else if (track != null) MaterialTheme.colors.primary else palette.onMuted,
                         fontSize = 18.sp,
                         fontWeight = FontWeight.Bold,
                     )
@@ -157,6 +159,7 @@ internal fun CompactPlayerBar(
     collapsed: Boolean,
     onCollapsedChange: (Boolean) -> Unit,
 ) {
+    val palette = LocalNutaPalette.current
     val scope = rememberCoroutineScope()
     val track = state.currentTrack
     val dragThresholdPx = with(LocalDensity.current) { 24.dp.toPx() }
@@ -164,7 +167,7 @@ internal fun CompactPlayerBar(
     // Bez stałej wysokości w trybie rozwiniętym: tytuł/wykonawca mogą zająć do 2 linii.
     Column(
         Modifier.fillMaxWidth()
-            .background(Color(0xFF131A20))
+            .background(palette.chrome)
             .pointerInput(collapsed) {
                 // Palec w dół zwija, w górę rozwija. Pasek leży poza LazyColumn treści,
                 // więc gest nie konkuruje ze scrollem listy.
@@ -184,7 +187,7 @@ internal fun CompactPlayerBar(
         // [okładka | tytuł/artysta | ▶ ⏭]. Reszta kontrolek po przeciągnięciu w górę.
         val duration = state.durationMs.coerceAtLeast(1).toFloat()
         val progress = (state.positionMs.toFloat() / duration).coerceIn(0f, 1f)
-        Box(Modifier.fillMaxWidth().height(2.dp).background(Color(0xFF2A343D))) {
+        Box(Modifier.fillMaxWidth().height(2.dp).background(palette.divider)) {
             Box(
                 Modifier.fillMaxWidth(progress).height(2.dp)
                     .background(MaterialTheme.colors.primary),
@@ -213,7 +216,7 @@ internal fun CompactPlayerBar(
                 )
                 Text(
                     track?.artists?.joinToString() ?: stringResource(Res.string.choose_track),
-                    color = Color(0xFF8D9BA6),
+                    color = palette.muted,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     softWrap = false,
@@ -249,7 +252,7 @@ internal fun CompactPlayerBar(
             ) {
                 Text(
                     "⏭",
-                    color = if (track != null) Color.White else Color(0xFF55616A),
+                    color = if (track != null) Color.White else palette.onMuted,
                     fontWeight = FontWeight.Bold,
                     fontSize = 18.sp,
                 )
@@ -263,7 +266,7 @@ internal fun CompactPlayerBar(
         Modifier.fillMaxWidth().height(14.dp).clickable { onCollapsedChange(true) },
         contentAlignment = Alignment.Center,
     ) {
-        Box(Modifier.width(36.dp).height(4.dp).background(Color(0xFF3A4650), RoundedCornerShape(2.dp)))
+        Box(Modifier.width(36.dp).height(4.dp).background(palette.divider, RoundedCornerShape(2.dp)))
     }
     Row(
         Modifier.fillMaxWidth(),
@@ -273,27 +276,27 @@ internal fun CompactPlayerBar(
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Text(track?.title ?: stringResource(Res.string.nothing_playing), maxLines = 2, overflow = TextOverflow.Clip, softWrap = true, fontWeight = FontWeight.Bold, fontSize = 14.sp, modifier = Modifier.weight(1f))
                 streamBitrateLabel(state)?.let {
-                    Text(it, color = Color(0xFF8D9BA6), fontSize = 10.sp, maxLines = 1, modifier = Modifier.padding(start = 4.dp))
+                    Text(it, color = palette.muted, fontSize = 10.sp, maxLines = 1, modifier = Modifier.padding(start = 4.dp))
                 }
             }
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Text(track?.artists?.joinToString() ?: stringResource(Res.string.choose_track), color = Color(0xFF8D9BA6), fontSize = 11.sp, maxLines = 2, overflow = TextOverflow.Clip, softWrap = true, modifier = Modifier.weight(1f))
+                Text(track?.artists?.joinToString() ?: stringResource(Res.string.choose_track), color = palette.muted, fontSize = 11.sp, maxLines = 2, overflow = TextOverflow.Clip, softWrap = true, modifier = Modifier.weight(1f))
                 streamCodecLabel(state)?.let {
-                    Text(it, color = Color(0xFF8D9BA6), fontSize = 10.sp, maxLines = 1, modifier = Modifier.padding(start = 4.dp))
+                    Text(it, color = palette.muted, fontSize = 10.sp, maxLines = 1, modifier = Modifier.padding(start = 4.dp))
                 }
             }
         }
     }
     CompactTransportRow(state, container, isLiked, favoriteLoading, onToggleLiked, onOpenQueue, similarModeActive, onSimilarModeChange)
     Row(Modifier.fillMaxWidth().height(38.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text(formatTime(state.positionMs), color = Color(0xFF8D9BA6), fontSize = 10.sp)
+        Text(formatTime(state.positionMs), color = palette.muted, fontSize = 10.sp)
         PositionSlider(
             state = state,
             container = container,
             enabled = track != null,
             modifier = Modifier.weight(1f).padding(horizontal = 2.dp),
         )
-        Text(formatTime(state.durationMs), color = Color(0xFF8D9BA6), fontSize = 10.sp)
+        Text(formatTime(state.durationMs), color = palette.muted, fontSize = 10.sp)
     }
     }
     }
@@ -385,12 +388,13 @@ internal fun PlayerBar(
     collapsed: Boolean,
     onCollapsedChange: (Boolean) -> Unit,
 ) {
+    val palette = LocalNutaPalette.current
     val scope = rememberCoroutineScope()
     val track = state.currentTrack
     if (collapsed) {
         // Na desktopie gest przeciągania nie ma sensu — zwijanie/rozwijanie idzie przyciskiem ▴/▾.
         Row(
-            Modifier.fillMaxWidth().height(40.dp).background(Color(0xFF131A20)).padding(horizontal = 18.dp),
+            Modifier.fillMaxWidth().height(40.dp).background(palette.chrome).padding(horizontal = 18.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
@@ -421,14 +425,14 @@ internal fun PlayerBar(
     val radioFailedPrefix = stringResource(Res.string.radio_failed_prefix)
     val unknownErrorLabel = stringResource(Res.string.unknown_error)
     Row(
-        Modifier.fillMaxWidth().height(82.dp).background(Color(0xFF131A20)).padding(horizontal = 18.dp),
+        Modifier.fillMaxWidth().height(82.dp).background(palette.chrome).padding(horizontal = 18.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Cover(track?.title ?: "N", track?.imageUrl)
         Spacer(Modifier.width(12.dp))
         Column(Modifier.width(230.dp)) {
             Text(track?.title ?: stringResource(Res.string.nothing_playing), maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.Bold, lineHeight = 16.sp)
-            Text(track?.let { playerSubtitle(it, state) } ?: stringResource(Res.string.choose_track), color = Color(0xFF8D9BA6), fontSize = 12.sp, maxLines = 1, lineHeight = 14.sp)
+            Text(track?.let { playerSubtitle(it, state) } ?: stringResource(Res.string.choose_track), color = palette.muted, fontSize = 12.sp, maxLines = 1, lineHeight = 14.sp)
         }
         Text("▾", fontSize = 18.sp, modifier = Modifier.padding(start = 4.dp).clickable { onCollapsedChange(true) })
         Spacer(Modifier.width(14.dp))
@@ -457,7 +461,7 @@ internal fun PlayerBar(
             modifier = Modifier.size(74.dp),
             contentPadding = PaddingValues(0.dp),
             colors = ButtonDefaults.outlinedButtonColors(
-                backgroundColor = if (state.shuffleEnabled) Color(0xFF2F6B45) else Color.Transparent,
+                backgroundColor = if (state.shuffleEnabled) palette.primaryVariant else Color.Transparent,
                 contentColor = if (state.shuffleEnabled) Color.White else MaterialTheme.colors.primary,
             ),
         ) { Text("⇄", fontWeight = FontWeight.Bold, fontSize = 28.sp) }
@@ -496,19 +500,19 @@ internal fun PlayerBar(
             modifier = Modifier.size(74.dp),
             contentPadding = PaddingValues(0.dp),
             colors = ButtonDefaults.outlinedButtonColors(
-                backgroundColor = if (similarModeActive) Color(0xFF2F6B45) else Color.Transparent,
+                backgroundColor = if (similarModeActive) palette.primaryVariant else Color.Transparent,
                 contentColor = if (similarModeActive) Color.White else MaterialTheme.colors.primary,
             ),
         ) { Text(if (radioLoading) "…" else "♬+", fontSize = 22.sp) }
         Spacer(Modifier.width(18.dp))
-        Text(formatTime(state.positionMs), color = Color(0xFF8D9BA6), fontSize = 11.sp)
+        Text(formatTime(state.positionMs), color = palette.muted, fontSize = 11.sp)
         PositionSlider(
             state = state,
             container = container,
             enabled = track != null,
             modifier = Modifier.weight(1f).padding(horizontal = 10.dp),
         )
-        Text(formatTime(state.durationMs), color = Color(0xFF8D9BA6), fontSize = 11.sp)
+        Text(formatTime(state.durationMs), color = palette.muted, fontSize = 11.sp)
         Spacer(Modifier.width(14.dp))
         Text(
             when (state.status) {
@@ -518,12 +522,12 @@ internal fun PlayerBar(
                 PlayerStatus.ERROR -> stringResource(Res.string.status_error)
                 else -> state.status.name.lowercase()
             },
-            color = if (state.status == PlayerStatus.ERROR) Color(0xFFFF7B7B) else MaterialTheme.colors.primary,
+            color = if (state.status == PlayerStatus.ERROR) palette.danger else MaterialTheme.colors.primary,
             fontSize = 11.sp,
         )
         radioMessage?.let {
             Spacer(Modifier.width(8.dp))
-            Text(it, color = if (radioMessageIsError) Color(0xFFFF7B7B) else Color(0xFF8FE9AD), fontSize = 11.sp, maxLines = 1)
+            Text(it, color = if (radioMessageIsError) palette.danger else palette.success, fontSize = 11.sp, maxLines = 1)
         }
     }
 }

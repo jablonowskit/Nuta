@@ -20,6 +20,7 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.drawscope.rotate
+import app.nuta.ui.theme.LocalNutaPalette
 import kotlin.math.cos
 import kotlin.math.min
 import kotlin.math.sin
@@ -40,8 +41,10 @@ fun CassetteBackground(
     playing: Boolean,
     progress: Float,
     modifier: Modifier = Modifier,
-    color: Color = Color(0xFFE8EDF2).copy(alpha = 0.07f),
 ) {
+    val palette = LocalNutaPalette.current
+    val color = palette.onBackground.copy(alpha = 0.07f)
+    val hubCutout = palette.background
     val rotation = remember { Animatable(0f) }
     LaunchedEffect(playing) {
         if (!playing) return@LaunchedEffect
@@ -56,13 +59,20 @@ fun CassetteBackground(
         val width = min(size.width * 0.8f, size.height * 0.8f * CASSETTE_ASPECT)
         val height = width / CASSETTE_ASPECT
         val topLeft = Offset((size.width - width) / 2f, (size.height - height) / 2f)
-        drawCassette(topLeft, Size(width, height), angle, progress.coerceIn(0f, 1f), color)
+        drawCassette(topLeft, Size(width, height), angle, progress.coerceIn(0f, 1f), color, hubCutout)
     }
 }
 
 private const val CASSETTE_ASPECT = 1.6f
 
-private fun DrawScope.drawCassette(topLeft: Offset, size: Size, angle: Float, progress: Float, color: Color) {
+private fun DrawScope.drawCassette(
+    topLeft: Offset,
+    size: Size,
+    angle: Float,
+    progress: Float,
+    color: Color,
+    hubCutout: Color,
+) {
     val w = size.width
     val h = size.height
     val stroke = Stroke(width = w * 0.008f)
@@ -91,8 +101,8 @@ private fun DrawScope.drawCassette(topLeft: Offset, size: Size, angle: Float, pr
     val tapeFill = color.copy(alpha = (color.alpha * 1.6f).coerceIn(0.10f, 0.18f))
     val tapeRing = color.copy(alpha = (color.alpha * 2.4f).coerceIn(0.14f, 0.26f))
     clipPath(window) {
-        drawTapePack(leftCenter, hubRadius, leftTape, tapeFill, tapeRing)
-        drawTapePack(rightCenter, hubRadius, rightTape, tapeFill, tapeRing)
+        drawTapePack(leftCenter, hubRadius, leftTape, tapeFill, tapeRing, hubCutout)
+        drawTapePack(rightCenter, hubRadius, rightTape, tapeFill, tapeRing, hubCutout)
         // Taśma między szpulami — cienki mostek u dołu okienka.
         val bridgeY = leftCenter.y + maxTape * 0.55f
         drawLine(
@@ -129,11 +139,12 @@ private fun DrawScope.drawTapePack(
     outerRadius: Float,
     fill: Color,
     ring: Color,
+    hubCutout: Color,
 ) {
     if (outerRadius <= hubRadius * 1.05f) return
     drawCircle(fill, outerRadius, center)
-    // Wykrawamy hub kolorem tła kasety (prawie czarny) — bez tego zwój zasłania szprychy.
-    drawCircle(Color(0xFF101418), hubRadius * 1.05f, center)
+    // Wykrawamy hub kolorem tła skórki — bez tego zwój zasłania szprychy.
+    drawCircle(hubCutout, hubRadius * 1.05f, center)
     val rings = 4
     val span = outerRadius - hubRadius
     for (i in 1..rings) {

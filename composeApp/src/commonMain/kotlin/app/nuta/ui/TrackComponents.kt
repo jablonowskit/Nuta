@@ -31,6 +31,7 @@ import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.nuta.core.models.Track
+import app.nuta.ui.theme.LocalNutaPalette
 import kotlinx.coroutines.delay
 
 /**
@@ -49,10 +50,11 @@ internal fun TrackRow(
     // otwiera dodawanie do playlisty — mniej ikon, więcej miejsca, gest znany z innych appek.
     onLongPress: (() -> Unit)? = null,
 ) {
+    val palette = LocalNutaPalette.current
     BoxWithConstraints(Modifier.fillMaxWidth()) {
     val compact = maxWidth < 520.dp
     val rowModifier = Modifier.fillMaxWidth()
-        .background(if (active) Color(0xFF203129) else Color.Transparent, RoundedCornerShape(8.dp))
+        .background(if (active) palette.activeHighlight else Color.Transparent, RoundedCornerShape(8.dp))
         .let { base ->
             if (onLongPress != null) base.combinedClickable(onClick = onPlay, onLongClick = onLongPress)
             else base.clickable(onClick = onPlay)
@@ -65,7 +67,7 @@ internal fun TrackRow(
         if (active && loading) {
             Text("⏳︎", fontSize = 14.sp, modifier = Modifier.width(28.dp), textAlign = TextAlign.Center)
         } else {
-            Text(if (active) "▶" else "♪", color = if (active) MaterialTheme.colors.primary else Color(0xFF7D8B95), modifier = Modifier.width(28.dp))
+            Text(if (active) "▶" else "♪", color = if (active) MaterialTheme.colors.primary else palette.muted, modifier = Modifier.width(28.dp))
         }
         Column(Modifier.weight(1f)) {
             // Jedna linia z wielokropkiem zamiast zawijania do 2 linii — długie tytuły
@@ -73,11 +75,11 @@ internal fun TrackRow(
             // dodatkową linię, znacząco zmniejszając liczbę widocznych utworów na ekranie.
             Text(track.title, fontWeight = if (active) FontWeight.Bold else FontWeight.Normal, maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false)
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(track.artists.joinToString(), modifier = Modifier.weight(1f), color = Color(0xFF8F9CA6), fontSize = 12.sp)
-                Text(formatTime(track.durationMs), color = Color(0xFF8F9CA6), fontSize = 12.sp, modifier = Modifier.padding(end = 8.dp))
+                Text(track.artists.joinToString(), modifier = Modifier.weight(1f), color = palette.muted, fontSize = 12.sp)
+                Text(formatTime(track.durationMs), color = palette.muted, fontSize = 12.sp, modifier = Modifier.padding(end = 8.dp))
             }
         }
-        if (!compact) Text(track.album, color = Color(0xFF8F9CA6), fontSize = 12.sp, modifier = Modifier.width(170.dp), maxLines = 1, overflow = TextOverflow.Ellipsis)
+        if (!compact) Text(track.album, color = palette.muted, fontSize = 12.sp, modifier = Modifier.width(170.dp), maxLines = 1, overflow = TextOverflow.Ellipsis)
         if (titleAction != null || subtitleAction != null) {
             Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 titleAction?.invoke()

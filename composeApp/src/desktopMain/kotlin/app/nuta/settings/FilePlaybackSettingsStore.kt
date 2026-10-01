@@ -96,6 +96,7 @@ class FilePlaybackSettingsStore(
             playerCollapsed = root["playerCollapsed"]?.jsonPrimitive?.boolean ?: defaults.playerCollapsed,
             cacheSizeMb = root["cacheSizeMb"]?.jsonPrimitive?.int ?: defaults.cacheSizeMb,
             cassetteBackground = root["cassetteBackground"]?.jsonPrimitive?.boolean ?: defaults.cassetteBackground,
+            theme = root["theme"]?.jsonPrimitive?.contentOrNull?.let(::enumOrNull) ?: defaults.theme,
         ).also {
             logger.info("PlaybackSettings", "settings_loaded", "Odtworzono ustawienia odtwarzania z dysku", fields = mapOf("path" to file.toString()))
         }
@@ -124,6 +125,7 @@ class FilePlaybackSettingsStore(
                 put("playerCollapsed", value.playerCollapsed)
                 put("cacheSizeMb", value.cacheSizeMb)
                 put("cassetteBackground", value.cassetteBackground)
+                put("theme", value.theme.name)
             }.toString()
             Files.writeString(file, payload, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING)
             runCatching {

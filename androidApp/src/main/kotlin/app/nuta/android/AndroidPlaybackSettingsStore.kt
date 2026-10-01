@@ -10,6 +10,7 @@ import app.nuta.settings.LoudnessNormalization
 import app.nuta.settings.YouTubeClientProfile
 import app.nuta.settings.AudioSource
 import app.nuta.settings.DataSource
+import app.nuta.settings.AppTheme
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -34,6 +35,7 @@ class AndroidPlaybackSettingsStore(private val preferences: SharedPreferences) :
             .putBoolean("playerCollapsed", value.playerCollapsed)
             .putInt("cacheSizeMb", value.cacheSizeMb)
             .putBoolean("cassetteBackground", value.cassetteBackground)
+            .putString("theme", value.theme.name)
             .apply()
         state.value = value
     }
@@ -53,6 +55,7 @@ class AndroidPlaybackSettingsStore(private val preferences: SharedPreferences) :
         playerCollapsed = preferences.getBoolean("playerCollapsed", false),
         cacheSizeMb = preferences.getInt("cacheSizeMb", 150).coerceIn(25, 500),
         cassetteBackground = preferences.getBoolean("cassetteBackground", true),
+        theme = enumValue(preferences.getString("theme", null), AppTheme.FOREST),
     )
 
     private inline fun <reified T : Enum<T>> enumValue(value: String?, fallback: T): T =

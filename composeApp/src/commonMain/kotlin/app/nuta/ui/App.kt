@@ -33,7 +33,6 @@ import androidx.compose.material.OutlinedButton
 import androidx.compose.material.OutlinedTextField
 import androidx.compose.material.Surface
 import androidx.compose.material.Text
-import androidx.compose.material.darkColors
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -66,6 +65,9 @@ import app.nuta.ui.screens.PlaylistsScreen
 import app.nuta.ui.screens.QueueScreen
 import app.nuta.ui.screens.SearchScreen
 import app.nuta.ui.screens.SettingsScreen
+import app.nuta.ui.theme.LocalNutaPalette
+import app.nuta.ui.theme.ProvideNutaPalette
+import app.nuta.ui.theme.toPalette
 import app.nuta.core.models.Artist
 import app.nuta.core.models.Destination
 import app.nuta.core.models.PlayerStatus
@@ -76,17 +78,6 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
-
-private val NutaColors = darkColors(
-    primary = Color(0xFF8BE9A8),
-    primaryVariant = Color(0xFF54C57A),
-    secondary = Color(0xFF9BA8FF),
-    background = Color(0xFF101418),
-    surface = Color(0xFF182027),
-    onPrimary = Color(0xFF08130D),
-    onBackground = Color(0xFFE8EDF2),
-    onSurface = Color(0xFFE8EDF2),
-)
 
 internal data class SearchViewState(
     val query: String = "",
@@ -164,10 +155,13 @@ internal fun rememberPrefetchHandler(tracks: List<Track>, container: AppContaine
 fun NutaApp(container: AppContainer) {
     val settings by container.playbackSettings.settings.collectAsState()
     val density = LocalDensity.current
+    val palette = settings.theme.toPalette()
     CompositionLocalProvider(LocalDensity provides Density(density.density, settings.fontScale)) {
-    MaterialTheme(colors = NutaColors) {
-        NutaAppContent(container)
-    }
+        ProvideNutaPalette(palette) {
+            MaterialTheme(colors = palette.toColors()) {
+                NutaAppContent(container)
+            }
+        }
     }
 }
 
@@ -417,7 +411,7 @@ private fun NutaAppContent(container: AppContainer) {
                         loading = false
                         container.logger.debug("Navigation", "destination_changed", "Zmieniono ekran", fields = mapOf("destination" to it.name))
                     }
-                    if (!compact) Divider(Modifier.fillMaxHeight().width(1.dp), color = Color(0xFF2A343D))
+                    if (!compact) Divider(Modifier.fillMaxHeight().width(1.dp), color = LocalNutaPalette.current.divider)
                     Box(Modifier.weight(1f).fillMaxHeight().padding(if (compact) 12.dp else 24.dp)) {
                         if (playbackSettings.cassetteBackground) {
                             CassetteBackground(
@@ -474,7 +468,7 @@ private fun NutaAppContent(container: AppContainer) {
                 }
                 if (compact) {
                     if (showPlayerBar) {
-                        Divider(color = Color(0xFF2A343D))
+                        Divider(color = LocalNutaPalette.current.divider)
                         CompactPlayerBar(playerState, container, similarModeActive, { similarModeActive = it }, openQueue, displayedTrackLiked, favoriteLoading, toggleCurrentTrackLiked, playbackSettings.playerCollapsed, setCollapsed)
                     }
                     BottomNavigation(destination) {
@@ -484,7 +478,7 @@ private fun NutaAppContent(container: AppContainer) {
                         loading = false
                     }
                 } else if (showPlayerBar) {
-                    Divider(color = Color(0xFF2A343D))
+                    Divider(color = LocalNutaPalette.current.divider)
                     PlayerBar(
                         state = playerState,
                         container = container,
@@ -603,18 +597,19 @@ private fun AddToPlaylistDialog(
         text = {
             Column {
                 if (playlists.isEmpty()) {
-                    Text(stringResource(Res.string.no_playlists), color = Color(0xFF94A2AD), fontSize = 13.sp)
+                    Text(stringResource(Res.string.no_playlists), color = LocalNutaPalette.current.muted, fontSize = 13.sp)
                 } else {
                     ScrollableLazyColumn(Modifier.fillMaxWidth().height(260.dp)) {
                         items(playlists, key = { it.id }) { playlist ->
+                            val palette = LocalNutaPalette.current
                             Row(
                                 Modifier.fillMaxWidth()
-                                    .background(if (selected?.id == playlist.id) Color(0xFF203129) else Color.Transparent, RoundedCornerShape(8.dp))
+                                    .background(if (selected?.id == playlist.id) palette.activeHighlight else Color.Transparent, RoundedCornerShape(8.dp))
                                     .clickable { selected = playlist }
                                     .padding(horizontal = 10.dp, vertical = 10.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
-                                Text(if (selected?.id == playlist.id) "●" else "○", color = if (selected?.id == playlist.id) MaterialTheme.colors.primary else Color(0xFF7D8B95), modifier = Modifier.width(24.dp))
+                                Text(if (selected?.id == playlist.id) "●" else "○", color = if (selected?.id == playlist.id) MaterialTheme.colors.primary else palette.muted, modifier = Modifier.width(24.dp))
                                 Text(playlist.name, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             }
                         }
@@ -639,13 +634,14 @@ private fun AddToPlaylistDialog(
 
 @Composable
 private fun TopBar(compact: Boolean) {
+    val palette = LocalNutaPalette.current
     Row(
-        Modifier.fillMaxWidth().height(56.dp).background(Color(0xFF131A20)).padding(horizontal = 20.dp),
+        Modifier.fillMaxWidth().height(56.dp).background(palette.chrome).padding(horizontal = 20.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text("Nuta", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colors.primary)
         Spacer(Modifier.width(12.dp))
-        if (!compact) Text(stringResource(Res.string.app_tagline), color = Color(0xFF8D9BA6), fontSize = 13.sp)
+        if (!compact) Text(stringResource(Res.string.app_tagline), color = palette.muted, fontSize = 13.sp)
         Spacer(Modifier.weight(1f))
         Text(
             "v${BuildInfo.VERSION_NAME} · ${BuildInfo.GIT_SHA}",
@@ -658,6 +654,7 @@ private fun TopBar(compact: Boolean) {
 
 @Composable
 private fun BottomNavigation(selected: Destination, onSelect: (Destination) -> Unit) {
+    val palette = LocalNutaPalette.current
     val labels = mapOf(
         Destination.HOME to stringResource(Res.string.nav_home),
         Destination.PLAYLISTS to stringResource(Res.string.nav_playlists),
@@ -666,17 +663,17 @@ private fun BottomNavigation(selected: Destination, onSelect: (Destination) -> U
         Destination.QUEUE to stringResource(Res.string.nav_queue),
         Destination.SETTINGS to stringResource(Res.string.nav_settings_short),
     )
-    Row(Modifier.fillMaxWidth().height(58.dp).background(Color(0xFF131A20)).padding(horizontal = 4.dp)) {
+    Row(Modifier.fillMaxWidth().height(58.dp).background(palette.chrome).padding(horizontal = 4.dp)) {
         Destination.entries.filter { it != Destination.DIAGNOSTICS }.forEach { item ->
             val active = item == selected
             Box(
                 Modifier.weight(1f).fillMaxHeight().clickable { onSelect(item) }
-                    .background(if (active) Color(0xFF24332B) else Color.Transparent),
+                    .background(if (active) palette.activeHighlight else Color.Transparent),
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
                     labels.getValue(item),
-                    color = if (active) MaterialTheme.colors.primary else Color(0xFFC5CFD7),
+                    color = if (active) MaterialTheme.colors.primary else palette.onBackground,
                     fontSize = 10.sp,
                     fontWeight = if (active) FontWeight.Bold else FontWeight.Normal,
                     maxLines = 1,
@@ -691,23 +688,24 @@ private fun BottomNavigation(selected: Destination, onSelect: (Destination) -> U
 
 @Composable
 private fun Sidebar(selected: Destination, onSelect: (Destination) -> Unit) {
-    Column(Modifier.width(190.dp).fillMaxHeight().background(Color(0xFF131A20)).padding(16.dp)) {
-        Text(stringResource(Res.string.sidebar_navigation), color = Color(0xFF788792), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+    val palette = LocalNutaPalette.current
+    Column(Modifier.width(190.dp).fillMaxHeight().background(palette.chrome).padding(16.dp)) {
+        Text(stringResource(Res.string.sidebar_navigation), color = palette.muted, fontSize = 11.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(12.dp))
         Destination.entries.forEach { item ->
             val active = item == selected
             Box(
                 Modifier.fillMaxWidth()
-                    .background(if (active) Color(0xFF24332B) else Color.Transparent, RoundedCornerShape(8.dp))
+                    .background(if (active) palette.activeHighlight else Color.Transparent, RoundedCornerShape(8.dp))
                     .clickable { onSelect(item) }
                     .padding(horizontal = 12.dp, vertical = 11.dp),
             ) {
-                Text(destinationLabel(item), color = if (active) MaterialTheme.colors.primary else Color(0xFFC5CFD7), fontWeight = if (active) FontWeight.Bold else FontWeight.Normal)
+                Text(destinationLabel(item), color = if (active) MaterialTheme.colors.primary else palette.onBackground, fontWeight = if (active) FontWeight.Bold else FontWeight.Normal)
             }
             Spacer(Modifier.height(4.dp))
         }
         Spacer(Modifier.weight(1f))
-        Text(stringResource(Res.string.sidebar_phase), color = Color(0xFF66737D), fontSize = 11.sp)
+        Text(stringResource(Res.string.sidebar_phase), color = palette.onMuted, fontSize = 11.sp)
     }
 }
 

@@ -24,6 +24,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.nuta.core.models.Artist
 import app.nuta.core.models.Playlist
+import app.nuta.ui.theme.LocalNutaPalette
 import app.nuta.resources.*
 import org.jetbrains.compose.resources.pluralStringResource
 
@@ -34,9 +35,10 @@ import org.jetbrains.compose.resources.pluralStringResource
  */
 @Composable
 internal fun StatCard(label: String, value: String, modifier: Modifier, compact: Boolean = false) {
+    val palette = LocalNutaPalette.current
     Card(modifier, backgroundColor = MaterialTheme.colors.surface, shape = RoundedCornerShape(12.dp)) {
         Column(Modifier.padding(if (compact) 12.dp else 20.dp)) {
-            Text(label, color = Color(0xFF8D9BA6), fontSize = 13.sp)
+            Text(label, color = palette.muted, fontSize = 13.sp)
             Spacer(Modifier.height(8.dp))
             Text(value, fontSize = if (compact) 20.sp else 25.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
@@ -45,6 +47,7 @@ internal fun StatCard(label: String, value: String, modifier: Modifier, compact:
 
 @Composable
 internal fun PlaylistCard(playlist: Playlist, onClick: () -> Unit) {
+    val palette = LocalNutaPalette.current
     BoxWithConstraints(Modifier.fillMaxWidth()) {
     val compact = maxWidth < 520.dp
     Card(
@@ -57,9 +60,9 @@ internal fun PlaylistCard(playlist: Playlist, onClick: () -> Unit) {
             Spacer(Modifier.width(14.dp))
             Column(Modifier.weight(1f)) {
                 Text(playlist.name, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                Text(playlist.description, color = Color(0xFF94A2AD), fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(playlist.description, color = palette.muted, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
-            if (!compact) Text(pluralStringResource(Res.plurals.track_count, playlist.tracks.size, playlist.tracks.size), color = Color(0xFF7F8E99), fontSize = 12.sp)
+            if (!compact) Text(pluralStringResource(Res.plurals.track_count, playlist.tracks.size, playlist.tracks.size), color = palette.muted, fontSize = 12.sp)
         }
     }
     }
