@@ -83,6 +83,8 @@
     <string name="prefetch_title">Prefetch (eksperymentalne)</string>
     <string name="prefetch_desc">Rozwiązuj strumień dla widocznych utworów z wyprzedzeniem, żeby play startował natychmiast. Zużywa więcej danych i baterii.</string>
     <string name="option_enabled">Włączone</string>
+    <string name="cassette_background_title">Tło: kaseta</string>
+    <string name="cassette_background_desc">Przygaszona kaseta magnetofonowa pod treścią. Szpule kręcą się podczas odtwarzania, a taśma przewija się wraz z utworem.</string>
     <string name="loudness_title">Wyrównaj głośność</string>
     <string name="loudness_desc">Domyślnie wyłączone; korekcja może zmienić dynamikę utworu</string>
     <string name="loudness_off">Wyłączone</string>

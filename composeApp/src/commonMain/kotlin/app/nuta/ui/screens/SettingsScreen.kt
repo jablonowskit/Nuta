@@ -183,6 +183,14 @@ internal fun SettingsScreen(container: AppContainer) {
             }
         }
         item {
+            SettingsGroup(stringResource(Res.string.cassette_background_title), stringResource(Res.string.cassette_background_desc)) {
+                SettingOptions(
+                    options = listOf(false to stringResource(Res.string.loudness_off), true to stringResource(Res.string.option_enabled)),
+                    selected = settings.cassetteBackground,
+                ) { container.playbackSettings.update(settings.copy(cassetteBackground = it)) }
+            }
+        }
+        item {
             var cacheBytes by remember { mutableStateOf<Long?>(null) }
             var clearedJustNow by remember { mutableStateOf(false) }
             var refreshTrigger by remember { mutableStateOf(0) }

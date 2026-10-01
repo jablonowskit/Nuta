@@ -55,13 +55,15 @@ data class YouTubePlaybackSettings(
     val playerCollapsed: Boolean = false,
     /** Limit cache'u zbuforowanych strumieni audio (MB). Zmiana działa dopiero po restarcie aplikacji. */
     val cacheSizeMb: Int = 150,
+    val cassetteBackground: Boolean = true,
 ) {
     override fun toString(): String = "YouTubePlaybackSettings(" +
         "fontScale=$fontScale, quality=$quality, codec=$codec, bufferSize=$bufferSize, " +
         "loudnessNormalization=$loudnessNormalization, youtubeClientProfile=$youtubeClientProfile, " +
         "audioSource=$audioSource, dataSource=$dataSource, listenBrainzUsername=$listenBrainzUsername, " +
         "listenBrainzApiToken=${if (listenBrainzApiToken.isBlank()) "" else "[REDACTED]"}, " +
-        "prefetchEnabled=$prefetchEnabled, playerCollapsed=$playerCollapsed, cacheSizeMb=$cacheSizeMb)"
+        "prefetchEnabled=$prefetchEnabled, playerCollapsed=$playerCollapsed, cacheSizeMb=$cacheSizeMb, " +
+        "cassetteBackground=$cassetteBackground)"
 }
 
 interface PlaybackSettingsStore {
