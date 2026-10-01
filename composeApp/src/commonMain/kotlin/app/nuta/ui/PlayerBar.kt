@@ -57,9 +57,9 @@ private fun CompactTransportRow(
     onOpenQueue: () -> Unit,
     similarModeActive: Boolean,
     onSimilarModeChange: (Boolean) -> Unit,
-    // Zwinięty pasek nie ma osobnego wiersza na "♬+" (patrz CompactPlayerBar) — tam ten
-    // przycisk musi wjechać do transportu. Rozwinięty ma go już niżej przy sliderze pozycji,
-    // więc tu wystarczy jedna kopia, żeby uniknąć duplikatu.
+    // Zwinięty i rozwinięty pasek trzymają "♬+" w tym samym rzędzie co transport
+    // (prev/play/next/like/shuffle). Wcześniej w rozwiniętym trybie żył osobno przy
+    // sliderze pozycji — wyglądało jak osobna linia kontrolek.
     showSimilarButton: Boolean = true,
 ) {
     val scope = rememberCoroutineScope()
@@ -157,9 +157,7 @@ internal fun CompactPlayerBar(
     collapsed: Boolean,
     onCollapsedChange: (Boolean) -> Unit,
 ) {
-    val scope = rememberCoroutineScope()
     val track = state.currentTrack
-    var radioLoading by remember { mutableStateOf(false) }
     val dragThresholdPx = with(LocalDensity.current) { 24.dp.toPx() }
     var dragAccumulated by remember { mutableStateOf(0f) }
     // Bez stałej wysokości: tytuł i wykonawca mogą zająć do 2 linii każdy (patrz niżej),
@@ -223,7 +221,7 @@ internal fun CompactPlayerBar(
             }
         }
     }
-    CompactTransportRow(state, container, isLiked, favoriteLoading, onToggleLiked, onOpenQueue, similarModeActive, onSimilarModeChange, showSimilarButton = false)
+    CompactTransportRow(state, container, isLiked, favoriteLoading, onToggleLiked, onOpenQueue, similarModeActive, onSimilarModeChange)
     Row(Modifier.fillMaxWidth().height(38.dp), verticalAlignment = Alignment.CenterVertically) {
         Text(formatTime(state.positionMs), color = Color(0xFF8D9BA6), fontSize = 10.sp)
         PositionSlider(
@@ -233,26 +231,6 @@ internal fun CompactPlayerBar(
             modifier = Modifier.weight(1f).padding(horizontal = 2.dp),
         )
         Text(formatTime(state.durationMs), color = Color(0xFF8D9BA6), fontSize = 10.sp)
-        Text(
-            if (radioLoading) "…" else "♬+",
-            color = if (similarModeActive) Color.White else MaterialTheme.colors.primary,
-            modifier = Modifier.padding(start = 8.dp).background(if (similarModeActive) Color(0xFF2F6B45) else Color.Transparent, RoundedCornerShape(6.dp))
-                .clickable(enabled = track != null && !radioLoading) {
-                    if (similarModeActive) onSimilarModeChange(false) else track?.let { seed ->
-                        scope.launch {
-                            radioLoading = true
-                            runCatching { container.spotifyRepository.getTrackRadio(seed) }.onSuccess { recommendations ->
-                                val additions = recommendations.filterNot { candidate -> state.queue.any { it.id == candidate.id } }
-                                if (state.queue.isEmpty()) container.audioPlayer.setQueue(listOf(seed) + additions, 0)
-                                else container.audioPlayer.appendToQueue(additions)
-                                onSimilarModeChange(true); onOpenQueue()
-                            }
-                            radioLoading = false
-                        }
-                    }
-                }.padding(horizontal = 10.dp, vertical = 6.dp),
-            fontWeight = FontWeight.Bold,
-        )
     }
     }
 }
