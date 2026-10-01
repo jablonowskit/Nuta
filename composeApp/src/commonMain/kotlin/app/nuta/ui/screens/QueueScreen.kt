@@ -33,6 +33,7 @@ import app.nuta.ui.Heading
 import app.nuta.ui.ScrollableLazyColumn
 import app.nuta.ui.SectionLabel
 import app.nuta.ui.formatTime
+import app.nuta.ui.theme.LocalNutaPalette
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.stringResource
 import androidx.compose.ui.text.style.TextAlign
@@ -43,6 +44,7 @@ import androidx.compose.foundation.layout.size
 
 @Composable
 internal fun QueueScreen(state: PlayerState, container: AppContainer) {
+    val palette = LocalNutaPalette.current
     val scope = rememberCoroutineScope()
     Column(Modifier.fillMaxSize()) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -74,7 +76,7 @@ internal fun QueueScreen(state: PlayerState, container: AppContainer) {
                         val active = index == state.currentIndex
                         Row(
                             Modifier.fillMaxWidth()
-                                .background(if (active) Color(0xFF203129) else Color.Transparent, RoundedCornerShape(8.dp))
+                                .background(if (active) palette.activeHighlight else Color.Transparent, RoundedCornerShape(8.dp))
                                 .clickable {
                                     scope.launch { container.audioPlayer.playAt(index) }
                                 }
@@ -89,8 +91,8 @@ internal fun QueueScreen(state: PlayerState, container: AppContainer) {
                                     else -> "▶"
                                 },
                                 color = when {
-                                    !active -> Color(0xFF7D8B95)
-                                    state.status == PlayerStatus.ERROR -> Color(0xFFFF7B7B)
+                                    !active -> palette.muted
+                                    state.status == PlayerStatus.ERROR -> palette.danger
                                     else -> MaterialTheme.colors.primary
                                 },
                                 modifier = Modifier.width(38.dp),
@@ -107,19 +109,19 @@ internal fun QueueScreen(state: PlayerState, container: AppContainer) {
                                                 append(" • ${item.album}")
                                             }
                                         },
-                                        color = Color(0xFF8F9CA6),
+                                        color = palette.muted,
                                         fontSize = 12.sp,
                                         maxLines = 2,
                                         overflow = TextOverflow.Ellipsis,
                                         modifier = Modifier.weight(1f),
                                     )
                                     Spacer(Modifier.width(8.dp))
-                                    Text(formatTime(item.durationMs), color = Color(0xFF8F9CA6), fontSize = 12.sp)
+                                    Text(formatTime(item.durationMs), color = palette.muted, fontSize = 12.sp)
                                 }
                             }
                             Text(
                                 "✕",
-                                color = Color(0xFF7D8B95),
+                                color = palette.muted,
                                 modifier = Modifier.size(32.dp).clickable { scope.launch { container.audioPlayer.removeFromQueue(index) } },
                                 textAlign = TextAlign.Center,
                             )

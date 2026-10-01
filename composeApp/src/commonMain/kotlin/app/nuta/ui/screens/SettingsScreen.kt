@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.ButtonDefaults
 import androidx.compose.material.Card
+import androidx.compose.material.MaterialTheme
 import androidx.compose.material.OutlinedButton
 import androidx.compose.material.OutlinedTextField
 import androidx.compose.material.Slider
@@ -34,6 +35,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.nuta.AppContainer
 import app.nuta.resources.*
+import app.nuta.settings.AppTheme
 import app.nuta.settings.AudioSource
 import app.nuta.settings.BufferSize
 import app.nuta.settings.CodecPreference
@@ -44,6 +46,7 @@ import app.nuta.settings.YouTubeClientProfile
 import app.nuta.ui.Heading
 import app.nuta.ui.ScrollableLazyColumn
 import app.nuta.ui.openUrlInBrowser
+import app.nuta.ui.theme.LocalNutaPalette
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.stringResource
 
@@ -183,6 +186,19 @@ internal fun SettingsScreen(container: AppContainer) {
             }
         }
         item {
+            SettingsGroup(stringResource(Res.string.theme_title), stringResource(Res.string.theme_desc)) {
+                SettingOptions(
+                    options = listOf(
+                        AppTheme.FOREST to stringResource(Res.string.theme_forest),
+                        AppTheme.MIDNIGHT to stringResource(Res.string.theme_midnight),
+                        AppTheme.VINYL to stringResource(Res.string.theme_vinyl),
+                        AppTheme.EMBER to stringResource(Res.string.theme_ember),
+                    ),
+                    selected = settings.theme,
+                ) { container.playbackSettings.update(settings.copy(theme = it)) }
+            }
+        }
+        item {
             SettingsGroup(stringResource(Res.string.cassette_background_title), stringResource(Res.string.cassette_background_desc)) {
                 SettingOptions(
                     options = listOf(false to stringResource(Res.string.loudness_off), true to stringResource(Res.string.option_enabled)),
@@ -200,11 +216,12 @@ internal fun SettingsScreen(container: AppContainer) {
                 cacheBytes = null
                 cacheBytes = container.audioPlayer.cacheSizeBytes()
             }
+            val palette = LocalNutaPalette.current
             SettingsGroup(stringResource(Res.string.cache_title), stringResource(Res.string.cache_desc)) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text(
                         cacheBytes?.let(::formatBytes) ?: cacheSizeUnknownLabel,
-                        color = Color(0xFF8D9BA6),
+                        color = palette.muted,
                         modifier = Modifier.weight(1f),
                     )
                     OutlinedButton(onClick = {
@@ -217,7 +234,7 @@ internal fun SettingsScreen(container: AppContainer) {
                 }
                 if (clearedJustNow) {
                     Spacer(Modifier.height(6.dp))
-                    Text(stringResource(Res.string.cache_cleared), color = Color(0xFF8FE9AD), fontSize = 12.sp)
+                    Text(stringResource(Res.string.cache_cleared), color = palette.success, fontSize = 12.sp)
                 }
                 Spacer(Modifier.height(10.dp))
                 Text(stringResource(Res.string.cache_limit_label), fontSize = 12.sp)
@@ -225,19 +242,20 @@ internal fun SettingsScreen(container: AppContainer) {
                     options = listOf(50 to "50 MB", 100 to "100 MB", 150 to "150 MB", 300 to "300 MB"),
                     selected = settings.cacheSizeMb,
                 ) { container.playbackSettings.update(settings.copy(cacheSizeMb = it)) }
-                Text(stringResource(Res.string.cache_limit_restart_note), color = Color(0xFF8D9BA6), fontSize = 11.sp)
+                Text(stringResource(Res.string.cache_limit_restart_note), color = palette.muted, fontSize = 11.sp)
             }
         }
         item {
+            val palette = LocalNutaPalette.current
             Text(
                 stringResource(Res.string.settings_footer),
-                color = Color(0xFF8D9BA6),
+                color = palette.muted,
                 fontSize = 12.sp,
                 modifier = Modifier.padding(vertical = 8.dp),
             )
             Text(
                 "Nuta • by jablonowskit",
-                color = Color(0xFF66737D),
+                color = palette.onMuted,
                 fontSize = 11.sp,
             )
         }
@@ -246,10 +264,11 @@ internal fun SettingsScreen(container: AppContainer) {
 
 @Composable
 private fun SettingsGroup(title: String, description: String, content: @Composable () -> Unit) {
-    Card(backgroundColor = Color(0xFF182027), shape = RoundedCornerShape(10.dp), modifier = Modifier.fillMaxWidth()) {
+    val palette = LocalNutaPalette.current
+    Card(backgroundColor = MaterialTheme.colors.surface, shape = RoundedCornerShape(10.dp), modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(14.dp)) {
             Text(title, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-            Text(description, color = Color(0xFF8D9BA6), fontSize = 12.sp)
+            Text(description, color = palette.muted, fontSize = 12.sp)
             Spacer(Modifier.height(10.dp))
             content()
         }
@@ -258,6 +277,7 @@ private fun SettingsGroup(title: String, description: String, content: @Composab
 
 @Composable
 private fun <T> SettingOptions(options: List<Pair<T, String>>, selected: T, onSelect: (T) -> Unit) {
+    val palette = LocalNutaPalette.current
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         options.forEach { (value, label) ->
             val active = value == selected
@@ -265,8 +285,8 @@ private fun <T> SettingOptions(options: List<Pair<T, String>>, selected: T, onSe
                 onClick = { onSelect(value) },
                 modifier = Modifier.weight(1f),
                 colors = ButtonDefaults.outlinedButtonColors(
-                    backgroundColor = if (active) Color(0xFF2F6B45) else Color.Transparent,
-                    contentColor = if (active) Color.White else Color(0xFFB8C2C9),
+                    backgroundColor = if (active) palette.primaryVariant else Color.Transparent,
+                    contentColor = if (active) Color.White else palette.onBackground,
                 ),
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 4.dp, vertical = 8.dp),
             ) { Text(label, fontSize = 11.sp, maxLines = 1) }

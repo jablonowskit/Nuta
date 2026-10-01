@@ -34,6 +34,9 @@ enum class AudioSource { AUTO, YOUTUBE, SOUNDCLOUD }
  */
 enum class DataSource { SPOTIFY, LISTENBRAINZ }
 
+/** Pełne zestawy kolorystyczne UI (ciemne). FOREST = dotychczasowa zieleń Nuty. */
+enum class AppTheme { FOREST, MIDNIGHT, VINYL, EMBER }
+
 data class YouTubePlaybackSettings(
     val fontScale: Float = 1f,
     val quality: StreamQuality = StreamQuality.BEST,
@@ -56,6 +59,7 @@ data class YouTubePlaybackSettings(
     /** Limit cache'u zbuforowanych strumieni audio (MB). Zmiana działa dopiero po restarcie aplikacji. */
     val cacheSizeMb: Int = 150,
     val cassetteBackground: Boolean = true,
+    val theme: AppTheme = AppTheme.FOREST,
 ) {
     override fun toString(): String = "YouTubePlaybackSettings(" +
         "fontScale=$fontScale, quality=$quality, codec=$codec, bufferSize=$bufferSize, " +
@@ -63,7 +67,7 @@ data class YouTubePlaybackSettings(
         "audioSource=$audioSource, dataSource=$dataSource, listenBrainzUsername=$listenBrainzUsername, " +
         "listenBrainzApiToken=${if (listenBrainzApiToken.isBlank()) "" else "[REDACTED]"}, " +
         "prefetchEnabled=$prefetchEnabled, playerCollapsed=$playerCollapsed, cacheSizeMb=$cacheSizeMb, " +
-        "cassetteBackground=$cassetteBackground)"
+        "cassetteBackground=$cassetteBackground, theme=$theme)"
 }
 
 interface PlaybackSettingsStore {

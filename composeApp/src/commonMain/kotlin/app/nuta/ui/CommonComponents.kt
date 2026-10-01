@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.Card
+import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -20,6 +21,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.nuta.resources.*
+import app.nuta.ui.theme.LocalNutaPalette
 import org.jetbrains.compose.resources.stringResource
 
 /**
@@ -39,31 +41,35 @@ internal fun Cover(seed: String, imageUrl: String? = null, modifier: Modifier = 
 
 @Composable
 internal fun Heading(title: String, subtitle: String? = null) {
+    val palette = LocalNutaPalette.current
     Column {
         Text(title, fontSize = 28.sp, fontWeight = FontWeight.Bold)
         subtitle?.takeIf(String::isNotBlank)?.let {
             Spacer(Modifier.height(4.dp))
-            Text(it, color = Color(0xFF8D9BA6))
+            Text(it, color = palette.muted)
         }
     }
 }
 
 @Composable
 internal fun SectionLabel(text: String) {
-    Text(text, color = Color(0xFF7E8D97), fontSize = 11.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(vertical = 8.dp))
+    val palette = LocalNutaPalette.current
+    Text(text, color = palette.muted, fontSize = 11.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(vertical = 8.dp))
 }
 
 @Composable
 internal fun EmptyState(message: String) {
-    Box(Modifier.fillMaxSize().padding(28.dp), contentAlignment = Alignment.Center) { Text(message, color = Color(0xFF81909A)) }
+    val palette = LocalNutaPalette.current
+    Box(Modifier.fillMaxSize().padding(28.dp), contentAlignment = Alignment.Center) { Text(message, color = palette.muted) }
 }
 
 @Composable
 internal fun ErrorState(message: String) {
-    Card(backgroundColor = Color(0xFF3A2225), modifier = Modifier.fillMaxWidth()) {
+    val palette = LocalNutaPalette.current
+    Card(backgroundColor = MaterialTheme.colors.surface, modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(20.dp)) {
-            Text(stringResource(Res.string.error_title), color = Color(0xFFFFA3A3), fontWeight = FontWeight.Bold)
-            Text(message, color = Color(0xFFE6B9B9))
+            Text(stringResource(Res.string.error_title), color = palette.danger, fontWeight = FontWeight.Bold)
+            Text(message, color = palette.danger)
         }
     }
 }

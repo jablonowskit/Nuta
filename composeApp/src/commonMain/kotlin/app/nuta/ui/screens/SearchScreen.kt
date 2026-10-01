@@ -43,6 +43,7 @@ import app.nuta.ui.SectionLabel
 import app.nuta.ui.TrackPlayButton
 import app.nuta.ui.TrackQueueButton
 import app.nuta.ui.TrackRow
+import app.nuta.ui.theme.LocalNutaPalette
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.stringResource
@@ -62,6 +63,7 @@ internal fun SearchScreen(
     onArtist: (Artist) -> Unit,
     onAddToPlaylist: (Track) -> Unit,
 ) {
+    val palette = LocalNutaPalette.current
     val scope = rememberCoroutineScope()
     val playerState by container.audioPlayer.state.collectAsState()
     val currentState by rememberUpdatedState(state)
@@ -250,7 +252,7 @@ internal fun SearchScreen(
                         Row(Modifier.padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                             CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
                             Spacer(Modifier.width(8.dp))
-                            Text(stringResource(Res.string.playlist_search_loading), color = Color(0xFF8D9BA6), fontSize = 13.sp)
+                            Text(stringResource(Res.string.playlist_search_loading), color = palette.muted, fontSize = 13.sp)
                         }
                     }
                     item { Spacer(Modifier.height(18.dp)) }
@@ -262,7 +264,7 @@ internal fun SearchScreen(
                     item {
                         Text(
                             stringResource(Res.string.playlist_search_unavailable),
-                            color = Color(0xFF8D9BA6),
+                            color = palette.muted,
                             fontSize = 13.sp,
                             modifier = Modifier.padding(vertical = 8.dp),
                         )
