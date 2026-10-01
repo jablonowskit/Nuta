@@ -89,10 +89,9 @@ private fun DrawScope.drawCassette(topLeft: Offset, size: Size, angle: Float, pr
         drawCircle(tapeColor, leftTape, leftCenter)
         drawCircle(tapeColor, rightTape, rightCenter)
     }
-    // Prawdziwa kaseta: szpule kręcą się w przeciwnych kierunkach (jedna oddaje taśmę, druga nawija).
     val reelColor = color.copy(alpha = (color.alpha * 2.2f).coerceIn(0.12f, 0.22f))
     drawReel(leftCenter, hubRadius, angle, reelColor)
-    drawReel(rightCenter, hubRadius, -angle, reelColor)
+    drawReel(rightCenter, hubRadius, angle, reelColor)
 
     val trapezoid = Path().apply {
         moveTo(at(0.2f, 1f).x, at(0.2f, 1f).y)
