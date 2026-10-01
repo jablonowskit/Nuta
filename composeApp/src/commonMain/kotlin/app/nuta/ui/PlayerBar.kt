@@ -157,17 +157,17 @@ internal fun CompactPlayerBar(
     collapsed: Boolean,
     onCollapsedChange: (Boolean) -> Unit,
 ) {
+    val scope = rememberCoroutineScope()
     val track = state.currentTrack
     val dragThresholdPx = with(LocalDensity.current) { 24.dp.toPx() }
     var dragAccumulated by remember { mutableStateOf(0f) }
-    // Bez stałej wysokości: tytuł i wykonawca mogą zająć do 2 linii każdy (patrz niżej),
-    // a przy stałych 164dp/76dp długi tekst nachodziłby na przyciski zamiast rozepchnąć układ.
+    // Bez stałej wysokości w trybie rozwiniętym: tytuł/wykonawca mogą zająć do 2 linii.
     Column(
         Modifier.fillMaxWidth()
             .background(Color(0xFF131A20))
             .pointerInput(collapsed) {
-                // Palec w dół zwija pasek do jednej linii, w górę rozwija. Pasek leży poza
-                // LazyColumn treści, więc gest nie konkuruje ze scrollem listy.
+                // Palec w dół zwija, w górę rozwija. Pasek leży poza LazyColumn treści,
+                // więc gest nie konkuruje ze scrollem listy.
                 detectVerticalDragGestures(
                     onDragStart = { dragAccumulated = 0f },
                     onDragEnd = {
@@ -177,30 +177,92 @@ internal fun CompactPlayerBar(
                     },
                 ) { _, dy -> dragAccumulated += dy }
             }
-            .padding(horizontal = 10.dp, vertical = 5.dp)
             .animateContentSize(),
     ) {
-    // Uchwyt: sygnalizuje, że pasek da się przeciągnąć, i sam działa jako tap-toggle.
+    if (collapsed) {
+        // Mini-player jak Spotify/YT Music: cienki postęp + jedna linia
+        // [okładka | tytuł/artysta | ▶ ⏭]. Reszta kontrolek po przeciągnięciu w górę.
+        val duration = state.durationMs.coerceAtLeast(1).toFloat()
+        val progress = (state.positionMs.toFloat() / duration).coerceIn(0f, 1f)
+        Box(Modifier.fillMaxWidth().height(2.dp).background(Color(0xFF2A343D))) {
+            Box(
+                Modifier.fillMaxWidth(progress).height(2.dp)
+                    .background(MaterialTheme.colors.primary),
+            )
+        }
+        Row(
+            Modifier.fillMaxWidth().height(52.dp).padding(horizontal = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Cover(
+                track?.title ?: "N",
+                track?.imageUrl,
+                Modifier.size(40.dp).clickable { onOpenQueue() },
+            )
+            Column(
+                Modifier.weight(1f).padding(horizontal = 10.dp).clickable { onOpenQueue() },
+            ) {
+                Text(
+                    track?.title ?: stringResource(Res.string.nothing_playing),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    softWrap = false,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 13.sp,
+                )
+                Text(
+                    track?.artists?.joinToString() ?: stringResource(Res.string.choose_track),
+                    color = Color(0xFF8D9BA6),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    softWrap = false,
+                    fontSize = 11.sp,
+                )
+            }
+            Box(Modifier.size(40.dp), contentAlignment = Alignment.Center) {
+                if (state.status == PlayerStatus.LOADING) {
+                    Text("⏳︎", color = MaterialTheme.colors.primary, fontSize = 22.sp)
+                } else {
+                    Box(
+                        Modifier.fillMaxSize().clickable(enabled = track != null) {
+                            scope.launch {
+                                if (state.status == PlayerStatus.PLAYING) container.audioPlayer.pause()
+                                else container.audioPlayer.play()
+                            }
+                        },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            if (state.status == PlayerStatus.PLAYING) "⏸" else "▶",
+                            color = MaterialTheme.colors.primary,
+                            fontSize = 22.sp,
+                        )
+                    }
+                }
+            }
+            Box(
+                Modifier.size(40.dp).clickable(enabled = track != null) {
+                    scope.launch { container.audioPlayer.next() }
+                },
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    "⏭",
+                    color = if (track != null) Color.White else Color(0xFF55616A),
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 20.sp,
+                )
+            }
+        }
+        return@Column
+    }
+    Column(Modifier.padding(horizontal = 10.dp, vertical = 5.dp)) {
+    // Uchwyt tylko w trybie rozwiniętym — w mini i tak widać, że da się przeciągnąć.
     Box(
-        Modifier.fillMaxWidth().height(14.dp).clickable { onCollapsedChange(!collapsed) },
+        Modifier.fillMaxWidth().height(14.dp).clickable { onCollapsedChange(true) },
         contentAlignment = Alignment.Center,
     ) {
         Box(Modifier.width(36.dp).height(4.dp).background(Color(0xFF3A4650), RoundedCornerShape(2.dp)))
-    }
-    if (collapsed) {
-        // Zwinięty pasek to jedna linia: tytuł (skrócony) plus pełny komplet przycisków —
-        // rezygnujemy tylko z wykonawcy, sliderem pozycji i etykiet kodeka/bitrate'u.
-        Text(
-            track?.title ?: stringResource(Res.string.nothing_playing),
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            softWrap = false,
-            fontWeight = FontWeight.Bold,
-            fontSize = 12.sp,
-            modifier = Modifier.fillMaxWidth().clickable { onOpenQueue() },
-        )
-        CompactTransportRow(state, container, isLiked, favoriteLoading, onToggleLiked, onOpenQueue, similarModeActive, onSimilarModeChange)
-        return@Column
     }
     Row(
         Modifier.fillMaxWidth(),
@@ -231,6 +293,7 @@ internal fun CompactPlayerBar(
             modifier = Modifier.weight(1f).padding(horizontal = 2.dp),
         )
         Text(formatTime(state.durationMs), color = Color(0xFF8D9BA6), fontSize = 10.sp)
+    }
     }
     }
 }
