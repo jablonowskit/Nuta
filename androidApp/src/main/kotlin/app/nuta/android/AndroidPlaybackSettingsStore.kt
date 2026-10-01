@@ -33,6 +33,7 @@ class AndroidPlaybackSettingsStore(private val preferences: SharedPreferences) :
             .putBoolean("prefetchEnabled", value.prefetchEnabled)
             .putBoolean("playerCollapsed", value.playerCollapsed)
             .putInt("cacheSizeMb", value.cacheSizeMb)
+            .putBoolean("cassetteBackground", value.cassetteBackground)
             .apply()
         state.value = value
     }
@@ -51,6 +52,7 @@ class AndroidPlaybackSettingsStore(private val preferences: SharedPreferences) :
         prefetchEnabled = preferences.getBoolean("prefetchEnabled", false),
         playerCollapsed = preferences.getBoolean("playerCollapsed", false),
         cacheSizeMb = preferences.getInt("cacheSizeMb", 150).coerceIn(25, 500),
+        cassetteBackground = preferences.getBoolean("cassetteBackground", true),
     )
 
     private inline fun <reified T : Enum<T>> enumValue(value: String?, fallback: T): T =

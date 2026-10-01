@@ -68,6 +68,7 @@ import app.nuta.ui.screens.SearchScreen
 import app.nuta.ui.screens.SettingsScreen
 import app.nuta.core.models.Artist
 import app.nuta.core.models.Destination
+import app.nuta.core.models.PlayerStatus
 import app.nuta.core.models.Playlist
 import app.nuta.core.models.SearchResult
 import app.nuta.core.models.Track
@@ -418,6 +419,13 @@ private fun NutaAppContent(container: AppContainer) {
                     }
                     if (!compact) Divider(Modifier.fillMaxHeight().width(1.dp), color = Color(0xFF2A343D))
                     Box(Modifier.weight(1f).fillMaxHeight().padding(if (compact) 12.dp else 24.dp)) {
+                        if (playbackSettings.cassetteBackground) {
+                            CassetteBackground(
+                                playing = playerState.status == PlayerStatus.PLAYING,
+                                progress = if (playerState.durationMs > 0) playerState.positionMs.toFloat() / playerState.durationMs else 0f,
+                                modifier = Modifier.matchParentSize(),
+                            )
+                        }
                         when {
                             loading -> CircularProgressIndicator(Modifier.align(Alignment.Center))
                             loadError != null -> ErrorState(loadError ?: errorUnknownLabel)
