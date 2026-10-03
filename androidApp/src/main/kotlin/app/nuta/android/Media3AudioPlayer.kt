@@ -25,11 +25,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
 class Media3AudioPlayer(
@@ -45,7 +42,9 @@ class Media3AudioPlayer(
     private var lastPositionSaveMs = 0L
     private val stateFlow = MutableStateFlow(restoreQueue())
     override val state: StateFlow<PlayerState> = stateFlow.asStateFlow()
-    private val loadMutex = Mutex()
+    private val loadLock = Any()
+    private var loadJob: Job? = null
+    private var playbackGeneration = 0L
     private var ticker: Job? = null
     /** Rośnie przy każdym [startTicker]; pozwala starej korutynie rozpoznać, że jest już nieaktualna. */
     private var tickerGeneration = 0
@@ -78,6 +77,15 @@ class Media3AudioPlayer(
                 // przepisywał pozycję oraz zapisywał ją do preferencji, mimo że nic nie grało.
                 if (isPlaying) startTicker() else stopTicker()
                 refreshPlayingState()
+            }
+            override fun onPositionDiscontinuity(
+                oldPosition: Player.PositionInfo,
+                newPosition: Player.PositionInfo,
+                reason: Int,
+            ) {
+                val position = newPosition.positionMs.coerceAtLeast(0)
+                stateFlow.value = stateFlow.value.copy(positionMs = position)
+                savePosition(position)
             }
             override fun onPlayerError(error: PlaybackException) {
                 // musi pójść PRZED odczytem retryingAfterError — inaczej opóźnione zerowanie ze
@@ -137,6 +145,7 @@ class Media3AudioPlayer(
 
     override suspend fun setQueue(tracks: List<Track>, startIndex: Int) {
         require(startIndex in tracks.indices || tracks.isEmpty())
+        cancelLoad()
         pendingResumePositionMs = 0
         withContext(Dispatchers.Main) { player.stop(); player.clearMediaItems() }
         stateFlow.value = PlayerState(queue = tracks, currentIndex = if (tracks.isEmpty()) -1 else startIndex)
@@ -159,6 +168,7 @@ class Media3AudioPlayer(
             index == state.currentIndex -> {
                 val wasPlaying = state.status == PlayerStatus.PLAYING || state.status == PlayerStatus.LOADING
                 val newIndex = index.coerceAtMost(newQueue.lastIndex)
+                cancelLoad()
                 pendingResumePositionMs = 0
                 withContext(Dispatchers.Main) { player.stop(); player.clearMediaItems() }
                 stateFlow.value = PlayerState(queue = newQueue, currentIndex = newIndex)
@@ -174,6 +184,7 @@ class Media3AudioPlayer(
     }
 
     override suspend fun clearQueue() {
+        cancelLoad()
         pendingResumePositionMs = 0
         ticker?.cancel()
         withContext(Dispatchers.Main) { player.stop(); player.clearMediaItems() }
@@ -267,50 +278,88 @@ class Media3AudioPlayer(
     override suspend fun play() {
         val track = stateFlow.value.currentTrack ?: return
         if (stateFlow.value.status == PlayerStatus.PAUSED) { withContext(Dispatchers.Main) { player.play() }; return }
-        // NonCancellable: play() bywa wywoływane w scope ekranu, który je zainicjował (np.
-        // rememberCoroutineScope() na SearchScreen). Bez tego, ręczne przejście na inną
-        // zakładkę zaraz po kliknięciu "odtwórz" anulowało trwające rozwiązywanie streamu
-        // w trakcie — CancellationException trafiał w runCatching poniżej i był mylnie
-        // pokazywany jako PlayerStatus.ERROR, mimo że to nie była prawdziwa awaria.
-        withContext(NonCancellable) {
-            loadMutex.withLock {
-                // wznowienie po restarcie: pierwszy start przywróconego utworu zaczyna od zapisanej pozycji
-                val resumeFromMs = pendingResumePositionMs.takeIf { it > 0 && it < track.durationMs }
-                pendingResumePositionMs = 0
-                stateFlow.value = stateFlow.value.copy(status = PlayerStatus.LOADING, positionMs = resumeFromMs ?: 0, errorMessage = null, streamBitrate = null, streamCodec = null)
-                runCatching { resolveForPlayback(track) }.onSuccess { resolution ->
-                    val url = resolution.stream.url.use { it }
-                    stateFlow.value = stateFlow.value.copy(
-                        streamBitrate = resolution.stream.bitrate,
-                        streamCodec = resolution.stream.codec,
-                    ).withResolvedDuration(track.id, resolution.match.candidate.durationMs)
-                    withContext(Dispatchers.Main) {
-                        player.setMediaItem(MediaItem.Builder()
-                            .setUri(url)
-                            .setMediaMetadata(MediaMetadata.Builder()
-                                .setTitle(track.title)
-                                .setArtist(track.artists.joinToString())
-                                .setAlbumTitle(track.album)
-                                .build())
-                            .build())
-                        player.prepare()
-                        if (resumeFromMs != null) player.seekTo(resumeFromMs)
-                        player.play()
-                    }
-                    logger.info("Media3Player", "playback_prepared", "Przekazano strumień YouTube do Media3", fields = mapOf(
-                        "codec" to resolution.stream.codec,
-                        "mimeType" to resolution.stream.mimeType,
-                        "bitrate" to resolution.stream.bitrate.toString(),
-                    ))
-                }.onFailure { error ->
-                    stateFlow.value = stateFlow.value.copy(status = PlayerStatus.ERROR, errorMessage = error.message)
-                    logger.error("Media3Player", "resolution_failed", "Nie udało się przygotować strumienia YouTube", throwable = error)
-                }
+        val job = synchronized(loadLock) {
+            val generation = ++playbackGeneration
+            loadJob?.cancel()
+            scope.launch { loadTrack(track, generation) }.also { loadJob = it }
+        }
+        job.join()
+    }
+
+    private suspend fun loadTrack(track: Track, generation: Long) {
+        try {
+            val savedPosition = pendingResumePositionMs
+            val resumeFromMs = savedPosition.takeIf { it > 0 && (track.durationMs <= 0 || it < track.durationMs) }
+            pendingResumePositionMs = 0
+            if (!isCurrentLoad(generation, track.id)) return
+            stateFlow.value = stateFlow.value.copy(
+                status = PlayerStatus.LOADING,
+                positionMs = resumeFromMs ?: 0,
+                errorMessage = null,
+                streamBitrate = null,
+                streamCodec = null,
+            )
+            val resolution = resolveForPlayback(track)
+            if (!isCurrentLoad(generation, track.id)) return
+            val url = resolution.stream.url.use { it }
+            stateFlow.value = stateFlow.value.copy(
+                streamBitrate = resolution.stream.bitrate,
+                streamCodec = resolution.stream.codec,
+            ).withResolvedDuration(track.id, resolution.match.candidate.durationMs)
+            withContext(Dispatchers.Main) {
+                if (!isCurrentLoad(generation, track.id)) return@withContext
+                player.setMediaItem(MediaItem.Builder()
+                    .setUri(url)
+                    .setMediaMetadata(MediaMetadata.Builder()
+                        .setTitle(track.title)
+                        .setArtist(track.artists.joinToString())
+                        .setAlbumTitle(track.album)
+                        .build())
+                    .build())
+                player.prepare()
+                if (resumeFromMs != null) player.seekTo(resumeFromMs)
+                player.play()
             }
+            logger.info("Media3Player", "playback_prepared", "Przekazano strumień YouTube do Media3", fields = mapOf(
+                "codec" to resolution.stream.codec,
+                "mimeType" to resolution.stream.mimeType,
+                "bitrate" to resolution.stream.bitrate.toString(),
+            ))
+        } catch (_: CancellationException) {
+            // Zmiana kolejki/utworu świadomie anuluje resolve; to nie jest błąd odtwarzania.
+        } catch (error: Throwable) {
+            if (!isCurrentLoad(generation, track.id)) return
+            stateFlow.value = stateFlow.value.copy(status = PlayerStatus.ERROR, errorMessage = error.message)
+            logger.error("Media3Player", "resolution_failed", "Nie udało się przygotować strumienia YouTube", throwable = error)
         }
     }
-    override suspend fun pause() = withContext(Dispatchers.Main) { player.pause(); savePosition(player.currentPosition) }
-    override suspend fun stop() { stopTicker(); withContext(Dispatchers.Main) { player.stop() }; savePosition(0); stateFlow.value = stateFlow.value.copy(status = PlayerStatus.IDLE, positionMs = 0) }
+
+    private fun isCurrentLoad(generation: Long, trackId: String): Boolean =
+        synchronized(loadLock) {
+            generation == playbackGeneration && stateFlow.value.currentTrack?.id == trackId
+        }
+
+    private fun cancelLoad() {
+        synchronized(loadLock) {
+            playbackGeneration++
+            loadJob?.cancel()
+            loadJob = null
+        }
+    }
+
+    override suspend fun pause() = withContext(Dispatchers.Main) {
+        player.pause()
+        val position = player.currentPosition.coerceAtLeast(0)
+        stateFlow.value = stateFlow.value.copy(positionMs = position)
+        savePosition(position)
+    }
+    override suspend fun stop() {
+        cancelLoad()
+        stopTicker()
+        withContext(Dispatchers.Main) { player.stop() }
+        savePosition(0)
+        stateFlow.value = stateFlow.value.copy(status = PlayerStatus.IDLE, positionMs = 0)
+    }
     override suspend fun seekTo(positionMs: Long) {
         // durationMs bywa 0, gdy katalog źródła nie podał długości utworu (np. wynik
         // MusicBrainz z length=null, utwór z lb-radio bez pola duration) — przycinanie do
@@ -318,6 +367,8 @@ class Media3AudioPlayer(
         val duration = stateFlow.value.durationMs
         val target = if (duration > 0) positionMs.coerceIn(0, duration) else positionMs.coerceAtLeast(0)
         withContext(Dispatchers.Main) { player.seekTo(target) }
+        stateFlow.value = stateFlow.value.copy(positionMs = target)
+        savePosition(target)
     }
     override suspend fun next() = move(stateFlow.value.currentIndex + 1)
     override suspend fun previous() = move(stateFlow.value.currentIndex - 1)
@@ -326,6 +377,7 @@ class Media3AudioPlayer(
 
     private suspend fun move(index: Int) {
         if (index !in stateFlow.value.queue.indices) return
+        cancelLoad()
         pendingResumePositionMs = 0
         stateFlow.value = stateFlow.value.copy(currentIndex = index, status = PlayerStatus.IDLE, positionMs = 0, errorMessage = null, streamBitrate = null, streamCodec = null)
         saveQueue()
@@ -357,7 +409,13 @@ class Media3AudioPlayer(
             positionMs = if (index >= 0) pendingResumePositionMs else 0L,
         )
     }
-    private suspend fun advanceAfterEnd() { val next = stateFlow.value.currentIndex + 1; if (next in stateFlow.value.queue.indices) move(next) else stateFlow.value = stateFlow.value.copy(status = PlayerStatus.ENDED) }
+    private suspend fun advanceAfterEnd() {
+        val next = stateFlow.value.currentIndex + 1
+        if (next in stateFlow.value.queue.indices) move(next) else {
+            savePosition(stateFlow.value.positionMs)
+            stateFlow.value = stateFlow.value.copy(status = PlayerStatus.ENDED)
+        }
+    }
     /** Kończy ticker i unieważnia go, żeby korutyna w locie nie dokonała już zapisu. */
     private fun stopTicker() {
         ticker?.cancel()

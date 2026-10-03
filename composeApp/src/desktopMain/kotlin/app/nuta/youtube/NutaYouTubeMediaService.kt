@@ -125,11 +125,6 @@ class NutaYouTubeMediaService(
             ?: Regex("\"visitorData\":\"([^\"]+)\"").find(watchHtml)?.groupValues?.get(1)
         val profiles = listOf(
             PlayerProfile("WEB", clientVersion, "1", UserAgent, emptyMap()),
-            PlayerProfile(
-                "ANDROID_VR", "1.65.10", "28",
-                "com.google.android.apps.youtube.vr.oculus/1.65.10 (Linux; U; Android 12L; eureka-user Build/SQ3A.220605.009.A1) gzip",
-                mapOf("deviceMake" to "Oculus", "deviceModel" to "Quest 3", "androidSdkVersion" to 32, "osName" to "Android", "osVersion" to "12L"),
-            ),
             PlayerProfile("WEB_EMBEDDED_PLAYER", clientVersion, "56", UserAgent, emptyMap(), embedded = true),
         )
         var root: JsonObject? = null

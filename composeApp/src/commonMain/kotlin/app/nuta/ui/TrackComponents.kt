@@ -98,6 +98,7 @@ internal fun TrackRow(
 @Composable
 private fun TrackActionButton(label: String, confirmLabel: String, fontSize: TextUnit, onClick: () -> Unit) {
     var confirming by remember { mutableStateOf(false) }
+    val palette = app.nuta.ui.theme.LocalNutaPalette.current
     LaunchedEffect(confirming) {
         if (confirming) { delay(700); confirming = false }
     }
@@ -110,7 +111,7 @@ private fun TrackActionButton(label: String, confirmLabel: String, fontSize: Tex
         Text(
             if (confirming) confirmLabel else label,
             fontSize = fontSize,
-            color = if (confirming) Color(0xFF0B1116) else MaterialTheme.colors.primary,
+            color = if (confirming) palette.onPrimary else MaterialTheme.colors.primary,
             fontWeight = FontWeight.Bold,
         )
     }

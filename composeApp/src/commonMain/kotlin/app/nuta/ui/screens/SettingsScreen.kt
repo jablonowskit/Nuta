@@ -61,7 +61,7 @@ internal fun SettingsScreen(container: AppContainer) {
                     Text("${(settings.fontScale * 100).toInt()}%", modifier = Modifier.width(48.dp))
                     Slider(
                         value = settings.fontScale,
-                        onValueChange = { container.playbackSettings.update(settings.copy(fontScale = it.coerceIn(0.5f, 1f))) },
+                        onValueChange = { value -> container.playbackSettings.update { it.copy(fontScale = value.coerceIn(0.5f, 1f)) } },
                         valueRange = 0.5f..1f,
                         steps = 4,
                         modifier = Modifier.weight(1f),
@@ -79,7 +79,7 @@ internal fun SettingsScreen(container: AppContainer) {
                         StreamQuality.BEST to stringResource(Res.string.quality_best),
                     ),
                     selected = settings.quality,
-                ) { container.playbackSettings.update(settings.copy(quality = it)) }
+                ) { value -> container.playbackSettings.update { it.copy(quality = value) } }
             }
         }
         item {
@@ -87,7 +87,7 @@ internal fun SettingsScreen(container: AppContainer) {
                 SettingOptions(
                     options = listOf(CodecPreference.AUTO to stringResource(Res.string.option_auto), CodecPreference.AAC to "AAC", CodecPreference.OPUS to "Opus"),
                     selected = settings.codec,
-                ) { container.playbackSettings.update(settings.copy(codec = it)) }
+                ) { value -> container.playbackSettings.update { it.copy(codec = value) } }
             }
         }
         item {
@@ -95,7 +95,7 @@ internal fun SettingsScreen(container: AppContainer) {
                 SettingOptions(
                     options = listOf(BufferSize.SMALL to stringResource(Res.string.buffer_small), BufferSize.STANDARD to stringResource(Res.string.option_standard), BufferSize.LARGE to stringResource(Res.string.buffer_large)),
                     selected = settings.bufferSize,
-                ) { container.playbackSettings.update(settings.copy(bufferSize = it)) }
+                ) { value -> container.playbackSettings.update { it.copy(bufferSize = value) } }
             }
         }
         item {
@@ -107,7 +107,7 @@ internal fun SettingsScreen(container: AppContainer) {
                         LoudnessNormalization.NORMAL to stringResource(Res.string.loudness_normal),
                     ),
                     selected = settings.loudnessNormalization,
-                ) { container.playbackSettings.update(settings.copy(loudnessNormalization = it)) }
+                ) { value -> container.playbackSettings.update { it.copy(loudnessNormalization = value) } }
             }
         }
         item {
@@ -122,7 +122,7 @@ internal fun SettingsScreen(container: AppContainer) {
                         AudioSource.SOUNDCLOUD to "SoundCloud",
                     ),
                     selected = settings.audioSource,
-                ) { container.playbackSettings.update(settings.copy(audioSource = it)) }
+                ) { value -> container.playbackSettings.update { it.copy(audioSource = value) } }
             }
         }
         item {
@@ -136,12 +136,12 @@ internal fun SettingsScreen(container: AppContainer) {
                         DataSource.LISTENBRAINZ to "ListenBrainz",
                     ),
                     selected = settings.dataSource,
-                ) { container.playbackSettings.update(settings.copy(dataSource = it)) }
+                ) { value -> container.playbackSettings.update { it.copy(dataSource = value) } }
                 if (settings.dataSource == DataSource.LISTENBRAINZ) {
                     Spacer(Modifier.height(10.dp))
                     OutlinedTextField(
                         value = settings.listenBrainzUsername,
-                        onValueChange = { container.playbackSettings.update(settings.copy(listenBrainzUsername = it)) },
+                        onValueChange = { value -> container.playbackSettings.update { it.copy(listenBrainzUsername = value) } },
                         label = { Text("Nazwa użytkownika ListenBrainz") },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
@@ -149,7 +149,7 @@ internal fun SettingsScreen(container: AppContainer) {
                     Spacer(Modifier.height(10.dp))
                     OutlinedTextField(
                         value = settings.listenBrainzApiToken,
-                        onValueChange = { container.playbackSettings.update(settings.copy(listenBrainzApiToken = it)) },
+                        onValueChange = { value -> container.playbackSettings.update { it.copy(listenBrainzApiToken = value) } },
                         label = { Text("Token API ListenBrainz") },
                         singleLine = true,
                         visualTransformation = PasswordVisualTransformation(),
@@ -165,16 +165,15 @@ internal fun SettingsScreen(container: AppContainer) {
         item {
             SettingsGroup(
                 "Profil klienta YouTube",
-                "Który klient próbujemy przy rozwiązywaniu strumienia audio. YouTube regularnie blokuje różne profile w różnym tempie — AUTO próbuje ich po kolei, wybór konkretnego wymusza tylko ten jeden (przydatne do diagnozowania).",
+                "Profil używany do rozwiązywania strumienia YouTube. AUTO wybiera aktualnie wspierany profil VISIONOS; przełączenie na SoundCloud realizuje ustawienie Źródło audio = AUTO.",
             ) {
                 SettingOptions(
                     options = listOf(
                         YouTubeClientProfile.AUTO to "AUTO",
                         YouTubeClientProfile.VISIONOS to "VISIONOS",
-                        YouTubeClientProfile.ANDROID_VR to "ANDROID_VR",
                     ),
                     selected = settings.youtubeClientProfile,
-                ) { container.playbackSettings.update(settings.copy(youtubeClientProfile = it)) }
+                ) { value -> container.playbackSettings.update { it.copy(youtubeClientProfile = value) } }
             }
         }
         item {
@@ -182,7 +181,7 @@ internal fun SettingsScreen(container: AppContainer) {
                 SettingOptions(
                     options = listOf(false to stringResource(Res.string.loudness_off), true to stringResource(Res.string.option_enabled)),
                     selected = settings.prefetchEnabled,
-                ) { container.playbackSettings.update(settings.copy(prefetchEnabled = it)) }
+                ) { value -> container.playbackSettings.update { it.copy(prefetchEnabled = value) } }
             }
         }
         item {
@@ -195,7 +194,7 @@ internal fun SettingsScreen(container: AppContainer) {
                         AppTheme.EMBER to stringResource(Res.string.theme_ember),
                     ),
                     selected = settings.theme,
-                ) { container.playbackSettings.update(settings.copy(theme = it)) }
+                ) { value -> container.playbackSettings.update { it.copy(theme = value) } }
             }
         }
         item {
@@ -203,7 +202,7 @@ internal fun SettingsScreen(container: AppContainer) {
                 SettingOptions(
                     options = listOf(false to stringResource(Res.string.loudness_off), true to stringResource(Res.string.option_enabled)),
                     selected = settings.cassetteBackground,
-                ) { container.playbackSettings.update(settings.copy(cassetteBackground = it)) }
+                ) { value -> container.playbackSettings.update { it.copy(cassetteBackground = value) } }
             }
         }
         item {
@@ -241,7 +240,7 @@ internal fun SettingsScreen(container: AppContainer) {
                 SettingOptions(
                     options = listOf(50 to "50 MB", 100 to "100 MB", 150 to "150 MB", 300 to "300 MB"),
                     selected = settings.cacheSizeMb,
-                ) { container.playbackSettings.update(settings.copy(cacheSizeMb = it)) }
+                ) { value -> container.playbackSettings.update { it.copy(cacheSizeMb = value) } }
                 Text(stringResource(Res.string.cache_limit_restart_note), color = palette.muted, fontSize = 11.sp)
             }
         }

@@ -16,7 +16,6 @@ import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -31,7 +30,8 @@ import org.jetbrains.compose.resources.stringResource
  */
 @Composable
 internal fun Cover(seed: String, imageUrl: String? = null, modifier: Modifier = Modifier.size(54.dp)) {
-    val colors = listOf(Color(0xFF375B4A), Color(0xFF404A75), Color(0xFF704858), Color(0xFF685C38))
+    val palette = LocalNutaPalette.current
+    val colors = listOf(palette.primaryVariant, palette.secondary, palette.activeHighlight, palette.divider)
     val color = colors[(seed.hashCode() and Int.MAX_VALUE) % colors.size]
     Box(modifier.background(color, RoundedCornerShape(8.dp)), contentAlignment = Alignment.Center) {
         Text(seed.take(1).uppercase(), fontWeight = FontWeight.Bold, fontSize = 20.sp)

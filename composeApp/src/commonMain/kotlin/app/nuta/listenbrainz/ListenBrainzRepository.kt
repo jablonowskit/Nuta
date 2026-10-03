@@ -43,6 +43,8 @@ class ListenBrainzRepository(
 ) : SpotifyRepository {
     private val json = Json { ignoreUnknownKeys = true }
     private var cachedRecommendations: List<Track>? = null
+    private var cachedLikedUser: String? = null
+    private var cachedLikedTracks: List<Track>? = null
 
     private fun username() = settingsStore.settings.value.listenBrainzUsername
     private fun apiToken() = settingsStore.settings.value.listenBrainzApiToken
@@ -73,18 +75,16 @@ class ListenBrainzRepository(
             getPlaylists()
             return cachedRecommendations ?: emptyList()
         }
-        val trackList = runCatching {
+        val trackList = try {
             val response = httpGet("https://api.listenbrainz.org/1/playlist/$playlistId")
-            if (response.isBlank()) return@runCatching null
+            check(response.isNotBlank()) { "ListenBrainz zwrócił pustą playlistę" }
             json.parseToJsonElement(response).jsonObject["playlist"]?.jsonObject?.get("track") as? JsonArray
-        }.getOrElse { error ->
-            // Patrz analogiczny komentarz w searchPlaylists — anulowanie (użytkownik wyszedł
-            // z playlisty przed jej doładowaniem) nie może zamienić się w ciche emptyList(),
-            // bo UI pokazałoby wtedy "pusta playlista" zamiast przerwać ładowanie.
+                ?: error("Odpowiedź ListenBrainz nie zawiera listy utworów")
+        } catch (error: Throwable) {
             if (error is CancellationException) throw error
             logger.warn("ListenBrainz", "playlist_tracks_failed", "Nie udało się pobrać playlisty ListenBrainz", fields = mapOf("playlistId" to playlistId, "reason" to (error.message ?: "unknown")))
-            null
-        } ?: return emptyList()
+            throw error
+        }
         return trackList.mapNotNull(::trackFromJspf)
     }
 
@@ -112,16 +112,20 @@ class ListenBrainzRepository(
         // Twardy limit stron — niespójny total_count z API (albo strona, która stale wraca
         // niepusta) zapętliłby pobieranie na zawsze.
         while (pageIndex++ < MAX_FEEDBACK_PAGES) {
-            val response = runCatching {
+            val response = try {
                 httpGet("https://api.listenbrainz.org/1/feedback/user/$user/get-feedback?score=1&metadata=true&count=100&offset=$offset")
-            }.getOrElse { error ->
-                logger.info("ListenBrainz", "no_feedback", "Brak polubień ListenBrainz lub nieznany użytkownik", fields = mapOf("reason" to (error.message ?: "unknown")))
-                null
-            } ?: break
-            val page = parseFeedbackPage(response) ?: break
+            } catch (error: Throwable) {
+                if (error is CancellationException) throw error
+                logger.warn("ListenBrainz", "feedback_failed", "Nie udało się pobrać polubień ListenBrainz", fields = mapOf("reason" to (error.message ?: "unknown")))
+                throw error
+            }
+            val page = parseFeedbackPage(response) ?: error("Nieprawidłowa odpowiedź polubień ListenBrainz")
             inline += page.entries
             offset += page.entriesOnPage
-            if (page.entriesOnPage == 0 || offset >= (page.totalCount ?: inline.size)) break
+            if (page.entriesOnPage == 0 ||
+                page.totalCount?.let { offset >= it } == true ||
+                (page.totalCount == null && page.entriesOnPage < FEEDBACK_PAGE_SIZE)
+            ) break
         }
         val durationByMbid = lookupMetadata(inline.filter { it.hasMbid }.map(FeedbackEntry::id)).associate { it.id to it.durationMs }
         return inline.map {
@@ -133,10 +137,17 @@ class ListenBrainzRepository(
                 durationMs = durationByMbid[it.id] ?: 0L,
                 artistMbid = it.artistMbid,
             )
+        }.also {
+            cachedLikedUser = user
+            cachedLikedTracks = it
         }
     }
 
-    override suspend fun isTrackLiked(trackId: String): Boolean = getLikedTracks().any { it.id == trackId }
+    override suspend fun isTrackLiked(trackId: String): Boolean {
+        val user = username()
+        val liked = cachedLikedTracks.takeIf { cachedLikedUser == user } ?: getLikedTracks()
+        return liked.any { it.id == trackId }
+    }
 
     override suspend fun setTrackLiked(track: Track, liked: Boolean) {
         val mbid = resolveMbid(track)
@@ -147,6 +158,13 @@ class ListenBrainzRepository(
             "score" to JsonPrimitive(if (liked) 1 else 0),
         )).toString()
         httpPost("https://api.listenbrainz.org/1/feedback/recording-feedback", headers = mapOf("Authorization" to "Token $token"), body = body)
+        if (cachedLikedUser == username()) {
+            cachedLikedTracks = if (liked) {
+                cachedLikedTracks.orEmpty().filterNot { it.id == mbid } + track.copy(id = mbid)
+            } else {
+                cachedLikedTracks.orEmpty().filterNot { it.id == mbid || it.id == track.id }
+            }
+        }
         logger.info("ListenBrainz", "feedback_set", "Zapisano polubienie ListenBrainz", fields = mapOf("trackId" to mbid, "liked" to liked.toString()))
     }
 
@@ -156,7 +174,12 @@ class ListenBrainzRepository(
     private suspend fun resolveMbid(track: Track): String? {
         if (MbidRegex.matches(track.id)) return track.id
         val query = "${track.title} ${track.artists.firstOrNull().orEmpty()}".trim()
-        val found = musicBrainz.search(query).tracks.firstOrNull()?.id
+        val expectedTitle = normalizeMetadata(track.title)
+        val expectedArtist = normalizeMetadata(track.artists.firstOrNull().orEmpty())
+        val found = musicBrainz.search(query).tracks.firstOrNull { candidate ->
+            normalizeMetadata(candidate.title) == expectedTitle &&
+                candidate.artists.any { normalizeMetadata(it) == expectedArtist }
+        }?.id
         if (found != null) {
             logger.info(
                 "ListenBrainz", "mbid_resolved_via_search",
@@ -166,6 +189,9 @@ class ListenBrainzRepository(
         }
         return found
     }
+
+    private fun normalizeMetadata(value: String): String =
+        value.lowercase().filter(Char::isLetterOrDigit)
 
     /**
      * Utwory i wykonawcy z MusicBrainz (ListenBrainz nie ma własnego wyszukiwania katalogu),
@@ -263,18 +289,20 @@ class ListenBrainzRepository(
             return emptyList()
         }
         val prompt = URLEncoder.encode("artist:($artistMbid)", "UTF-8")
-        val trackList = runCatching {
+        val trackList = try {
             val response = httpGet(
                 "https://api.listenbrainz.org/1/explore/lb-radio?prompt=$prompt&mode=easy",
                 headers = mapOf("Authorization" to "Token $token"),
             )
-            if (response.isBlank()) return@runCatching null
+            check(response.isNotBlank()) { "ListenBrainz zwrócił pustą odpowiedź radia" }
             json.parseToJsonElement(response).jsonObject["payload"]?.jsonObject
                 ?.get("jspf")?.jsonObject?.get("playlist")?.jsonObject?.get("track") as? JsonArray
-        }.getOrElse { error ->
+                ?: error("Odpowiedź radia ListenBrainz nie zawiera utworów")
+        } catch (error: Throwable) {
+            if (error is CancellationException) throw error
             logger.warn("ListenBrainz", "lb_radio_failed", "Nie udało się pobrać lb-radio", fields = mapOf("reason" to (error.message ?: "unknown")))
-            null
-        } ?: return emptyList()
+            throw error
+        }
         return trackList.mapNotNull(::trackFromJspf).take(limit)
     }
 
@@ -298,14 +326,18 @@ class ListenBrainzRepository(
 
     override suspend fun addTracksToPlaylist(playlistId: String, tracks: List<Track>) {
         if (tracks.isEmpty()) return
+        val unresolved = mutableListOf<Track>()
         val mbids = tracks.mapNotNull { track ->
             val mbid = resolveMbid(track)
             if (mbid == null) {
+                unresolved += track
                 logger.warn("ListenBrainz", "mbid_resolution_failed", "Pominięto utwór bez odpowiednika w MusicBrainz", fields = mapOf("trackId" to track.id, "title" to track.title))
             }
             mbid
         }
-        if (mbids.isEmpty()) return
+        check(unresolved.isEmpty()) {
+            "Nie znaleziono odpowiedników MusicBrainz dla ${unresolved.size} z ${tracks.size} utworów; playlista nie została zmieniona"
+        }
         val token = requireToken()
         val body = JsonObject(mapOf(
             "playlist" to JsonObject(mapOf(
@@ -326,8 +358,9 @@ class ListenBrainzRepository(
             val root = json.parseToJsonElement(response).jsonObject
             root["payload"]?.jsonObject?.get("mbids") as? JsonArray ?: root["mbids"] as? JsonArray
         }.getOrElse { error ->
+            if (error is CancellationException) throw error
             logger.info("ListenBrainz", "no_recommendations_model", "Brak wyliczonego modelu rekomendacji ListenBrainz", fields = mapOf("reason" to (error.message ?: "unknown")))
-            null
+            if (error.message?.contains("HTTP 404") == true) null else throw error
         } ?: return emptyList()
         val mbids = mbidsArray.mapNotNull { it.jsonObject["recording_mbid"]?.jsonPrimitive?.contentOrNull }
         return lookupMetadata(mbids)
@@ -367,11 +400,13 @@ class ListenBrainzRepository(
 
     private suspend fun fetchPlaylistsJson(user: String, url: String): JsonArray? = runCatching {
         val response = httpGet(url)
-        if (response.isBlank()) return@runCatching null
+        check(response.isNotBlank()) { "ListenBrainz zwrócił pustą odpowiedź playlist" }
         json.parseToJsonElement(response).jsonObject["playlists"] as? JsonArray
+            ?: error("Odpowiedź ListenBrainz nie zawiera listy playlist")
     }.getOrElse { error ->
+        if (error is CancellationException) throw error
         logger.warn("ListenBrainz", "playlists_unavailable", "Nie udało się pobrać playlist ListenBrainz", fields = mapOf("user" to user, "reason" to (error.message ?: "unknown")))
-        null
+        throw error
     }
 
     /** Batch lookup metadanych po MBID nagrania — kształt odpowiedzi ListenBrainz różni się od
@@ -381,12 +416,13 @@ class ListenBrainzRepository(
         if (mbids.isEmpty()) return emptyList()
         val tracks = mutableListOf<Track>()
         mbids.distinct().chunked(50).forEach { chunk ->
-            val response = runCatching {
+            val response = try {
                 httpGet("https://api.listenbrainz.org/1/metadata/recording/?recording_mbids=${chunk.joinToString(",")}&inc=artist")
-            }.getOrElse { error ->
+            } catch (error: Throwable) {
+                if (error is CancellationException) throw error
                 logger.warn("ListenBrainz", "metadata_lookup_failed", "Nie udało się dociągnąć metadanych nagrań", fields = mapOf("reason" to (error.message ?: "unknown")))
-                null
-            } ?: return@forEach
+                throw error
+            }
             tracks += parseMetadataLookup(response, chunk)
         }
         return tracks
@@ -416,6 +452,7 @@ class ListenBrainzRepository(
         const val SyntheticRecommendationsId = "listenbrainz-recommendations"
         /** 100 wpisów na stronę — 200 stron to 20 000 polubień, znacznie powyżej realnych bibliotek. */
         const val MAX_FEEDBACK_PAGES = 200
+        const val FEEDBACK_PAGE_SIZE = 100
 
         /** Timeout dla `playlist/search` — zweryfikowane curlem 19.09.2026: gdy ten endpoint
             odpowiada, robi to w 1-2 s; długie oczekiwanie oznacza martwe połączenie. */

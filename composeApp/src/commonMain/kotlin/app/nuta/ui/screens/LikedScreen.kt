@@ -43,6 +43,7 @@ internal fun LikedScreen(
     playerState: PlayerState,
     container: AppContainer,
     onAddToPlaylist: (Track) -> Unit,
+    onRetry: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
     Column(Modifier.fillMaxSize()) {
@@ -50,7 +51,13 @@ internal fun LikedScreen(
         Spacer(Modifier.height(16.dp))
         when {
             loading -> CircularProgressIndicator(Modifier.align(Alignment.CenterHorizontally))
-            error != null -> ErrorState(error)
+            error != null -> {
+                ErrorState(error)
+                Spacer(Modifier.height(10.dp))
+                Button(onClick = onRetry, modifier = Modifier.align(Alignment.CenterHorizontally)) {
+                    Text("Ponów")
+                }
+            }
             tracks.isEmpty() -> EmptyState(stringResource(Res.string.liked_empty))
             else -> {
                 Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {

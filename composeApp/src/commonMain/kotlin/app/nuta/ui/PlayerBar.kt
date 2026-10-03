@@ -6,6 +6,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -67,19 +68,22 @@ private fun CompactTransportRow(
     val scope = rememberCoroutineScope()
     val track = state.currentTrack
     var radioLoading by remember { mutableStateOf(false) }
-    Box(Modifier.fillMaxWidth().height(40.dp)) {
+    var radioError by remember { mutableStateOf<String?>(null) }
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        val buttonSize = if (maxWidth < 360.dp) 36.dp else 40.dp
+        Column(Modifier.fillMaxWidth()) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
             // Box(contentAlignment = Center) zamiast samego textAlign na Text — textAlign centruje
             // tylko poziomo. Różne glify (⏸ vs ⏮ vs ♡) mają różne metryki czcionki (ascent/descent),
             // więc bez jawnego wyśrodkowania w Boxie każdy z nich "siadał" na innej wysokości mimo
             // identycznego Modifier.size(40.dp) na samym Tekście.
-            Box(Modifier.size(40.dp).clickable(enabled = track != null) { scope.launch { container.audioPlayer.previous() } }, contentAlignment = Alignment.Center) {
+            Box(Modifier.size(buttonSize).clickable(enabled = track != null) { scope.launch { container.audioPlayer.previous() } }, contentAlignment = Alignment.Center) {
                 Text("⏮", color = if (track != null) Color.White else palette.onMuted, fontWeight = FontWeight.Bold, fontSize = 30.sp)
             }
-            Box(Modifier.size(40.dp).clickable(enabled = track != null) { scope.launch { container.audioPlayer.seekTo((state.positionMs - 10_000).coerceAtLeast(0)) } }, contentAlignment = Alignment.Center) {
+            Box(Modifier.size(buttonSize).clickable(enabled = track != null) { scope.launch { container.audioPlayer.seekTo((state.positionMs - 10_000).coerceAtLeast(0)) } }, contentAlignment = Alignment.Center) {
                 Text("⏪︎", color = if (track != null) Color.White else palette.onMuted, fontSize = 28.sp)
             }
-            Box(Modifier.size(40.dp), contentAlignment = Alignment.Center) {
+            Box(Modifier.size(buttonSize), contentAlignment = Alignment.Center) {
                 if (state.status == PlayerStatus.LOADING) {
                     Text("⏳︎", color = MaterialTheme.colors.primary, fontSize = 30.sp)
                 } else {
@@ -88,13 +92,18 @@ private fun CompactTransportRow(
                     }
                 }
             }
-            Box(Modifier.size(40.dp).clickable(enabled = track != null) { scope.launch { container.audioPlayer.seekTo((state.positionMs + 10_000).coerceAtMost(state.durationMs)) } }, contentAlignment = Alignment.Center) {
+            Box(Modifier.size(buttonSize).clickable(enabled = track != null) {
+                scope.launch {
+                    val target = state.positionMs + 10_000
+                    container.audioPlayer.seekTo(if (state.durationMs > 0) target.coerceAtMost(state.durationMs) else target)
+                }
+            }, contentAlignment = Alignment.Center) {
                 Text("⏩︎", color = if (track != null) Color.White else palette.onMuted, fontSize = 28.sp)
             }
-            Box(Modifier.size(40.dp).clickable(enabled = track != null) { scope.launch { container.audioPlayer.next() } }, contentAlignment = Alignment.Center) {
+            Box(Modifier.size(buttonSize).clickable(enabled = track != null) { scope.launch { container.audioPlayer.next() } }, contentAlignment = Alignment.Center) {
                 Text("⏭", color = if (track != null) Color.White else palette.onMuted, fontWeight = FontWeight.Bold, fontSize = 30.sp)
             }
-            Box(Modifier.size(40.dp).clickable(enabled = track != null && !favoriteLoading) { onToggleLiked() }, contentAlignment = Alignment.Center) {
+            Box(Modifier.size(buttonSize).clickable(enabled = track != null && !favoriteLoading) { onToggleLiked() }, contentAlignment = Alignment.Center) {
                 Text(
                     if (favoriteLoading) "…" else if (isLiked) "♥" else "♡",
                     color = if (isLiked) Color(0xFFFF4D67) else if (track != null) Color.White else palette.onMuted,
@@ -102,7 +111,7 @@ private fun CompactTransportRow(
                 )
             }
             Box(
-                Modifier.size(40.dp)
+                Modifier.size(buttonSize)
                     .background(if (state.shuffleEnabled) palette.primaryVariant else Color.Transparent, RoundedCornerShape(6.dp))
                     .clickable(enabled = state.queue.size > 1) { scope.launch { container.audioPlayer.shuffleUpcoming(); onOpenQueue() } },
                 contentAlignment = Alignment.Center,
@@ -116,19 +125,25 @@ private fun CompactTransportRow(
             }
             if (showSimilarButton) {
                 Box(
-                    Modifier.size(40.dp)
+                    Modifier.size(buttonSize)
                         .background(if (similarModeActive) palette.primaryVariant else Color.Transparent, RoundedCornerShape(6.dp))
                         .clickable(enabled = track != null && !radioLoading) {
                             if (similarModeActive) onSimilarModeChange(false) else track?.let { seed ->
                                 scope.launch {
                                     radioLoading = true
-                                    runCatching { container.spotifyRepository.getTrackRadio(seed) }.onSuccess { recommendations ->
+                                    radioError = null
+                                    try {
+                                        val recommendations = container.spotifyRepository.getTrackRadio(seed)
                                         val additions = recommendations.filterNot { candidate -> state.queue.any { it.id == candidate.id } }
                                         if (state.queue.isEmpty()) container.audioPlayer.setQueue(listOf(seed) + additions, 0)
                                         else container.audioPlayer.appendToQueue(additions)
-                                        onSimilarModeChange(true); onOpenQueue()
+                                        onSimilarModeChange(true)
+                                        onOpenQueue()
+                                    } catch (error: Throwable) {
+                                        radioError = error.message ?: "Nie udało się pobrać podobnych utworów"
+                                    } finally {
+                                        radioLoading = false
                                     }
-                                    radioLoading = false
                                 }
                             }
                         },
@@ -142,6 +157,10 @@ private fun CompactTransportRow(
                     )
                 }
             }
+        }
+        radioError?.let {
+            Text(it, color = palette.danger, fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
         }
     }
 }
@@ -185,8 +204,9 @@ internal fun CompactPlayerBar(
     if (collapsed) {
         // Mini-player jak Spotify/YT Music: cienki postęp + jedna linia
         // [okładka | tytuł/artysta | ▶ ⏭]. Reszta kontrolek po przeciągnięciu w górę.
-        val duration = state.durationMs.coerceAtLeast(1).toFloat()
-        val progress = (state.positionMs.toFloat() / duration).coerceIn(0f, 1f)
+        val progress = if (state.durationMs > 0) {
+            (state.positionMs.toFloat() / state.durationMs.toFloat()).coerceIn(0f, 1f)
+        } else 0f
         Box(Modifier.fillMaxWidth().height(2.dp).background(palette.divider)) {
             Box(
                 Modifier.fillMaxWidth(progress).height(2.dp)
@@ -200,11 +220,11 @@ internal fun CompactPlayerBar(
             Cover(
                 track?.title ?: "N",
                 track?.imageUrl,
-                Modifier.size(40.dp).clickable { onOpenQueue() },
+                Modifier.size(40.dp).clickable { onCollapsedChange(false) },
             )
             // weight(1f) zabiera całą wolną szerokość — po prawej zostają tylko dwa małe przyciski.
             Column(
-                Modifier.weight(1f).padding(start = 10.dp, end = 4.dp).clickable { onOpenQueue() },
+                Modifier.weight(1f).padding(start = 10.dp, end = 4.dp).clickable { onCollapsedChange(false) },
             ) {
                 Text(
                     track?.title ?: stringResource(Res.string.nothing_playing),
@@ -321,6 +341,10 @@ private fun PositionSlider(
     // docelową wartość aż do momentu, gdy faktycznie do niej dojedzie — inaczej uchwyt mrugnąłby
     // z powrotem na poprzednie miejsce.
     var pendingSeekMs by remember { mutableStateOf<Long?>(null) }
+    LaunchedEffect(state.currentTrack?.id) {
+        scrubbingMs = null
+        pendingSeekMs = null
+    }
     LaunchedEffect(state.positionMs, pendingSeekMs) {
         val pending = pendingSeekMs ?: return@LaunchedEffect
         if (kotlin.math.abs(state.positionMs - pending) < SeekSettledToleranceMs) pendingSeekMs = null
@@ -339,7 +363,7 @@ private fun PositionSlider(
             }
         },
         valueRange = 0f..durationMs,
-        enabled = enabled,
+        enabled = enabled && state.durationMs > 0,
         modifier = modifier,
     )
 }
@@ -478,8 +502,8 @@ internal fun PlayerBar(
                 scope.launch {
                     radioLoading = true
                     radioMessage = null
-                    runCatching { container.spotifyRepository.getTrackRadio(seed) }
-                        .onSuccess { recommendations ->
+                    try {
+                            val recommendations = container.spotifyRepository.getTrackRadio(seed)
                             val queue = recommendations
                             val additions = recommendations.filterNot { candidate -> state.queue.any { it.id == candidate.id } }
                             if (state.queue.isEmpty()) container.audioPlayer.setQueue(listOf(seed) + additions, 0)
@@ -488,12 +512,14 @@ internal fun PlayerBar(
                             radioMessageIsError = false
                             onSimilarModeChange(true)
                             onOpenQueue()
-                        }
-                        .onFailure {
-                            radioMessage = "$radioFailedPrefix ${it.message ?: unknownErrorLabel}"
-                            radioMessageIsError = true
-                        }
-                    radioLoading = false
+                    } catch (error: kotlinx.coroutines.CancellationException) {
+                        throw error
+                    } catch (error: Throwable) {
+                        radioMessage = "$radioFailedPrefix ${error.message ?: unknownErrorLabel}"
+                        radioMessageIsError = true
+                    } finally {
+                        radioLoading = false
+                    }
                 }
             },
             enabled = track != null && !radioLoading,

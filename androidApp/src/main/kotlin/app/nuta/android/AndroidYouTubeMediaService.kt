@@ -92,12 +92,8 @@ class AndroidYouTubeMediaService(
 
     private suspend fun resolveStream(videoId: String): AudioStreamSource {
         val watch = request("https://www.youtube.com/watch?v=$videoId&hl=en&gl=US")
-        val key = Regex("\"INNERTUBE_API_KEY\":\"([^\"]+)\"").find(watch)?.groupValues?.get(1) ?: error("Brak klucza YouTube")
         val visitor = Regex("\"VISITOR_DATA\":\"([^\"]+)\"").find(watch)?.groupValues?.get(1)
-        // Curl-owy test wszystkich 6 profili z 22.08.2026 (docs/sabr-blocker/)
-        // pokazał, że TYLKO VISIONOS i ANDROID_VR dają cokolwiek użyteczne — WEB/TVHTML5 nie
-        // przechodzą nawet playability, a ANDROID/IOS mają playability OK, ale tylko SABR (bez
-        // url). Usunięte jako bezsensowne, zamiast zaśmiecać listę profilami, które i tak zawodzą.
+        // Curl-owy test profili wykazał, że jedyną użyteczną ścieżką pozostaje VISIONOS.
         val forcedProfile = settingsStore.settings.value.youtubeClientProfile
         // ANDROID_VR jest potwierdzone martwe na poziomie CDN (403 na KAŻDYM żądaniu bajtów,
         // niezależnie od Range/UA/IP — zweryfikowane 22.08.2026, patrz proposal.md) — mimo że
@@ -108,30 +104,7 @@ class AndroidYouTubeMediaService(
             resolveViaVisionOs(videoId, visitor, watch)?.let { return it }
             error("YouTube playability: VISIONOS_FAILED")
         }
-        val allProfiles = listOf(Profile("ANDROID_VR", "1.65.10", "28", VR_AGENT))
-        val profiles = allProfiles.filter { it.name == forcedProfile.name }
-        var last = "UNKNOWN"
-        for (profile in profiles) {
-            val client = mutableMapOf<String, JsonElement>("clientName" to JsonPrimitive(profile.name), "clientVersion" to JsonPrimitive(profile.version), "hl" to JsonPrimitive("en"), "gl" to JsonPrimitive("US"))
-            visitor?.let { client["visitorData"] = JsonPrimitive(it) }
-            client["androidSdkVersion"] = JsonPrimitive(32)
-            client["osName"] = JsonPrimitive("Android")
-            client["osVersion"] = JsonPrimitive("12L")
-            val body = JsonObject(mapOf("videoId" to JsonPrimitive(videoId), "contentCheckOk" to JsonPrimitive(true), "racyCheckOk" to JsonPrimitive(true),
-                "context" to JsonObject(mapOf("client" to JsonObject(client))))).toString()
-            val root = json.parseToJsonElement(request("https://www.youtube.com/youtubei/v1/player?key=$key", body, profile.agent,
-                mapOf("X-YouTube-Client-Name" to profile.id, "X-YouTube-Client-Version" to profile.version) + (visitor?.let { mapOf("X-Goog-Visitor-Id" to it) } ?: emptyMap()))).jsonObject
-            last = root["playabilityStatus"]?.jsonObject?.get("status")?.jsonPrimitive?.contentOrNull ?: "UNKNOWN"
-            if (last != "OK") continue
-            val formats = root["streamingData"]?.jsonObject?.get("adaptiveFormats") as? JsonArray ?: continue
-            val audioItems = formats.map(JsonElement::jsonObject).filter { it["mimeType"]?.jsonPrimitive?.contentOrNull?.startsWith("audio/") == true }
-            val resolved = runCatching { resolveFormats(audioItems, watch) }.getOrElse {
-                logger.warn("AndroidYouTube", "cipher_resolve_failed", "Nie udało się rozwiązać sygnatur/n dla profilu", fields = mapOf("profile" to profile.name, "reason" to (it.message ?: "unknown")))
-                emptyList()
-            }
-            selectFormat(resolved)?.let { return it }
-        }
-        error("YouTube playability: $last")
+        error("YouTube playability: VISIONOS_FAILED")
     }
 
     /**
@@ -290,14 +263,12 @@ class AndroidYouTubeMediaService(
     private fun text(value: JsonObject?): String? = value?.get("simpleText")?.jsonPrimitive?.contentOrNull ?: (value?.get("runs") as? JsonArray)?.joinToString("") { it.jsonObject["text"]?.jsonPrimitive?.contentOrNull.orEmpty() }
     private fun duration(value: String): Long? = value.split(':').mapNotNull(String::toLongOrNull).takeIf(List<Long>::isNotEmpty)?.fold(0L) { total, part -> total * 60 + part }?.times(1_000)
     private fun extractObjects(source: String, marker: String): List<String> { val out=mutableListOf<String>(); var from=0; while(out.size<40){val m=source.indexOf(marker,from);if(m<0)break;val start=source.indexOf('{',m+marker.length);if(start<0)break;var depth=0;var quoted=false;var escaped=false;var end=-1;for(i in start until source.length){val c=source[i];if(quoted){if(escaped)escaped=false else if(c=='\\')escaped=true else if(c=='\"')quoted=false}else if(c=='\"')quoted=true else if(c=='{')depth++ else if(c=='}'&&--depth==0){end=i+1;break}};if(end<0)break;out+=source.substring(start,end);from=end};return out }
-    private data class Profile(val name: String, val version: String, val id: String, val agent: String)
     companion object {
         /** Do zwykłych żądań stron (watch page, search) — nie do rozwiązywania strumienia audio. */
         private const val USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/128.0 Safari/537.36"
         /** Musi być zgodny z User-Agent, którym PlaybackService realnie ściąga bajty audio (Media3
             DefaultHttpDataSource) — Google CDN odrzuca (HTTP 403) pobranie bajtów, jeśli UA żądania
             danych nie zgadza się z UA klienta, dla którego URL został podpisany. */
-        const val VR_AGENT = "com.google.android.apps.youtube.vr.oculus/1.65.10 (Linux; U; Android 12L) gzip"
         const val VISIONOS_AGENT = "com.google.visionos.youtube/1.04(RealityDevice17,1; U; CPU visionOS 26_6_0 like Mac OS X; US)"
         private const val VISIONOS_TOKEN_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
     }
