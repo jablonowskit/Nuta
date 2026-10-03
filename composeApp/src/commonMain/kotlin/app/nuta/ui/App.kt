@@ -266,7 +266,10 @@ private fun NutaAppContent(container: AppContainer) {
             if (!savedPlaylistsLoaded) scope.launch {
                 runCatching { container.spotifyRepository.getSavedPlaylists() }
                     .onSuccess { savedPlaylists = it; savedPlaylistsLoaded = true }
-                    .onFailure { playlistActionError = it.message ?: unknownErrorLabel }
+                    .onFailure { error ->
+                        if (error is CancellationException) throw error
+                        playlistActionError = error.message ?: unknownErrorLabel
+                    }
             }
         }
 
@@ -284,7 +287,13 @@ private fun NutaAppContent(container: AppContainer) {
             container.logger.info("Application", "app_started", "Uruchomiono Nuta Linux GUI")
             runCatching { container.spotifyRepository.getPlaylists() }
                 .onSuccess { playlists = it }
-                .onFailure { loadError = it.message }
+                .onFailure { error ->
+                    // Jak przy ulubionych/wyszukiwaniu: anulowanie LaunchedEffect przy zmianie
+                    // źródła/ekranu nie jest błędem sieci — inaczej w UI ląduje
+                    // „The coroutine scope left the composition" (zrzut 2026-10-03).
+                    if (error is CancellationException) throw error
+                    loadError = error.message
+                }
             loading = false
         }
 
@@ -292,9 +301,10 @@ private fun NutaAppContent(container: AppContainer) {
             if (destination != Destination.PLAYLISTS || savedPlaylistsLoaded) return@LaunchedEffect
             runCatching { container.spotifyRepository.getSavedPlaylists() }
                 .onSuccess { savedPlaylists = it; savedPlaylistsLoaded = true }
-                .onFailure {
-                    loadError = "$savedPlaylistsFailedPrefix ${it.message ?: unknownErrorLabel}"
-                    container.logger.warn("SpotifyLibrary", "saved_playlists_failed", "Nie udało się pobrać zapisanych playlist", fields = mapOf("reason" to (it.message ?: "unknown")))
+                .onFailure { error ->
+                    if (error is CancellationException) throw error
+                    loadError = "$savedPlaylistsFailedPrefix ${error.message ?: unknownErrorLabel}"
+                    container.logger.warn("SpotifyLibrary", "saved_playlists_failed", "Nie udało się pobrać zapisanych playlist", fields = mapOf("reason" to (error.message ?: "unknown")))
                 }
         }
 

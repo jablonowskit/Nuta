@@ -33,7 +33,7 @@
         <item quantity="one">%1$d track</item>
         <item quantity="other">%1$d tracks</item>
     </plurals>
-    <string name="saved_playlists_failed_prefix">Could not load saved Spotify playlists:</string>
+    <string name="saved_playlists_failed_prefix">Could not load saved playlists:</string>
     <string name="create_playlist_title">New playlist</string>
     <string name="playlist_name_label">Name</string>
     <string name="playlist_description_label">Description</string>
