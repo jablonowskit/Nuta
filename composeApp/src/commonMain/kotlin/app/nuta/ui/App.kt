@@ -489,7 +489,7 @@ private fun NutaAppContent(container: AppContainer) {
                 // Na zakładce Kolejka pokazujemy go nawet bez utworu (stan „Nic nie gra”).
                 val showPlayerBar = destination == Destination.QUEUE || playerState.currentTrack != null
                 val setCollapsed: (Boolean) -> Unit = {
-                    container.playbackSettings.update(playbackSettings.copy(playerCollapsed = it))
+                    container.playbackSettings.update { current -> current.copy(playerCollapsed = it) }
                 }
                 if (compact) {
                     if (showPlayerBar) {
