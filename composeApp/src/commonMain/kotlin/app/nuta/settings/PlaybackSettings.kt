@@ -43,7 +43,7 @@ data class YouTubePlaybackSettings(
     val loudnessNormalization: LoudnessNormalization = LoudnessNormalization.OFF,
     val youtubeClientProfile: YouTubeClientProfile = YouTubeClientProfile.AUTO,
     val audioSource: AudioSource = AudioSource.YOUTUBE,
-    val dataSource: DataSource = DataSource.SPOTIFY,
+    val dataSource: DataSource = DataSource.LISTENBRAINZ,
     val listenBrainzUsername: String = "",
     /**
      * Sekret — nigdy nie loguj tego pola wprost. Domyślny toString() data class jest
