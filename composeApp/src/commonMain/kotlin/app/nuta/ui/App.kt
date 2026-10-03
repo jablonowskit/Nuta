@@ -74,6 +74,7 @@ import app.nuta.core.models.PlayerStatus
 import app.nuta.core.models.Playlist
 import app.nuta.core.models.SearchResult
 import app.nuta.core.models.Track
+import app.nuta.settings.DataSource
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -202,12 +203,46 @@ private fun NutaAppContent(container: AppContainer) {
         var addToPlaylistTrack by remember { mutableStateOf<Track?>(null) }
         var playlistActionLoading by remember { mutableStateOf(false) }
         var playlistActionError by remember { mutableStateOf<String?>(null) }
+        var listenBrainzAuthWarning by remember { mutableStateOf<String?>(null) }
         val scope = rememberCoroutineScope()
         val displayedTrackLiked = currentTrackLiked || playerState.currentTrack?.id?.let { id -> likedTracks.any { it.id == id } } == true
         val savedPlaylistsFailedPrefix = stringResource(Res.string.saved_playlists_failed_prefix)
         val unknownErrorLabel = stringResource(Res.string.unknown_error)
         val likedFetchFailedLabel = stringResource(Res.string.liked_fetch_failed)
         val errorUnknownLabel = stringResource(Res.string.error_unknown)
+        val listenBrainzTokenInvalidLabel = stringResource(Res.string.listenbrainz_token_invalid)
+        val listenBrainzTokenUnreadableLabel = stringResource(Res.string.listenbrainz_token_unreadable)
+
+        LaunchedEffect(container.networkResumed) {
+            container.networkResumed.collect {
+                loadRetryGeneration++
+                if (likedLoaded) likedRetryGeneration++
+            }
+        }
+
+        LaunchedEffect(
+            playbackSettings.dataSource,
+            playbackSettings.listenBrainzApiToken,
+            playbackSettings.listenBrainzUsername,
+            container.listenBrainzTokenUnreadable,
+        ) {
+            if (playbackSettings.dataSource != DataSource.LISTENBRAINZ) {
+                listenBrainzAuthWarning = null
+                return@LaunchedEffect
+            }
+            if (container.listenBrainzTokenUnreadable) {
+                listenBrainzAuthWarning = listenBrainzTokenUnreadableLabel
+                return@LaunchedEffect
+            }
+            if (playbackSettings.listenBrainzApiToken.isBlank()) {
+                listenBrainzAuthWarning = if (playbackSettings.listenBrainzUsername.isNotBlank()) {
+                    listenBrainzTokenUnreadableLabel
+                } else null
+                return@LaunchedEffect
+            }
+            val valid = runCatching { container.spotifyRepository.validateSession() }.getOrNull()
+            listenBrainzAuthWarning = if (valid == false) listenBrainzTokenInvalidLabel else null
+        }
 
         fun selectPlaylist(playlist: Playlist) {
             scope.launch {
@@ -284,7 +319,7 @@ private fun NutaAppContent(container: AppContainer) {
         LaunchedEffect(container.spotifyRepository, playbackSettings.dataSource, loadRetryGeneration) {
             loadError = null
             loading = true
-            container.logger.info("Application", "app_started", "Uruchomiono Nuta Linux GUI")
+            container.logger.info("Application", "app_started", "Uruchomiono Nuta")
             runCatching { container.spotifyRepository.getPlaylists() }
                 .onSuccess { playlists = it }
                 .onFailure { error ->
@@ -292,6 +327,9 @@ private fun NutaAppContent(container: AppContainer) {
                     // źródła/ekranu nie jest błędem sieci — inaczej w UI ląduje
                     // „The coroutine scope left the composition" (zrzut 2026-10-03).
                     if (error is CancellationException) throw error
+                    if (error.message?.contains("Sesja Spotify wygasła", ignoreCase = true) == true) {
+                        container.onSpotifySessionInvalid()
+                    }
                     loadError = error.message
                 }
             loading = false
@@ -484,7 +522,7 @@ private fun NutaAppContent(container: AppContainer) {
                                     onAddToPlaylist = ::openAddToPlaylistDialog,
                                 )
                                 Destination.QUEUE -> QueueScreen(playerState, container)
-                                Destination.SETTINGS -> SettingsScreen(container)
+                                Destination.SETTINGS -> SettingsScreen(container, authWarning = listenBrainzAuthWarning)
                                 Destination.DIAGNOSTICS -> DiagnosticsScreen(container)
                             }
                         }

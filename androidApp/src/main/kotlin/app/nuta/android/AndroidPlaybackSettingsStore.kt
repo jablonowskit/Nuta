@@ -23,6 +23,10 @@ class AndroidPlaybackSettingsStore(
     private val state = MutableStateFlow(read())
     override val settings: StateFlow<YouTubePlaybackSettings> = state.asStateFlow()
 
+    /** Token był zapisany zaszyfrowany, ale Keystore nie odszyfrował — Settings pokazuje komunikat. */
+    val listenBrainzTokenUnreadable: Boolean
+        get() = (credentials as? AndroidCredentialStore)?.lastDecryptFailed == true
+
     override fun update(value: YouTubePlaybackSettings) {
         val validated = value.copy(
             fontScale = value.fontScale.coerceIn(0.5f, 1f),

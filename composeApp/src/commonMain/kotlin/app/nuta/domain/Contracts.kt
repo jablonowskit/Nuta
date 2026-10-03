@@ -16,6 +16,11 @@ interface SpotifyRepository {
     suspend fun getLikedTracks(): List<Track>
     /** Ostatnia znana lista ulubionych bez sięgania do sieci — do natychmiastowego stanu serduszka po starcie. */
     suspend fun getCachedLikedTracks(): List<Track> = emptyList()
+    /**
+     * Walidacja sesji źródła danych. `null` = nie dotyczy (np. Spotify sprawdza inaczej),
+     * `true`/`false` = wynik (ListenBrainz `/validate-token`).
+     */
+    suspend fun validateSession(): Boolean? = null
     suspend fun isTrackLiked(trackId: String): Boolean
     suspend fun setTrackLiked(track: Track, liked: Boolean)
     suspend fun search(query: String): SearchResult

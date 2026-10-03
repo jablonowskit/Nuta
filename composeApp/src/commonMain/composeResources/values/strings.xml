@@ -129,4 +129,7 @@
     <string name="error_unknown">Unknown error</string>
     <string name="unknown_error">unknown error</string>
     <string name="playback_connect_failed">Could not connect to the playback service</string>
+    <string name="retry">Retry</string>
+    <string name="listenbrainz_token_invalid">ListenBrainz token is invalid — enter it again in Settings</string>
+    <string name="listenbrainz_token_unreadable">Could not read the saved token — enter it again</string>
 </resources>
