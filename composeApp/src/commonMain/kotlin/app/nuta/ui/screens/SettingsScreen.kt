@@ -132,8 +132,8 @@ internal fun SettingsScreen(container: AppContainer) {
             ) {
                 SettingOptions(
                     options = listOf(
-                        DataSource.SPOTIFY to "Spotify",
                         DataSource.LISTENBRAINZ to "ListenBrainz",
+                        DataSource.SPOTIFY to "Spotify",
                     ),
                     selected = settings.dataSource,
                 ) { value -> container.playbackSettings.update { it.copy(dataSource = value) } }
