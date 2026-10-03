@@ -62,50 +62,54 @@ class Media3AudioPlayer(
      */
     private val prefetchCache = LinkedHashMap<String, Deferred<YouTubeResolution>>()
     private val prefetchLock = Any()
+    private var released = false
+    private val playerListener = object : Player.Listener {
+        override fun onPlaybackStateChanged(playbackState: Int) {
+            when (playbackState) {
+                Player.STATE_ENDED -> scope.launch { advanceAfterEnd() }
+                else -> refreshPlayingState()
+            }
+        }
+        override fun onIsPlayingChanged(isPlaying: Boolean) {
+            // Zatrzymanie tickera na pauzie/stopie: wcześniej biegał dalej i co pół sekundy
+            // przepisywał pozycję oraz zapisywał ją do preferencji, mimo że nic nie grało.
+            if (isPlaying) startTicker() else stopTicker()
+            refreshPlayingState()
+        }
+        override fun onPositionDiscontinuity(
+            oldPosition: Player.PositionInfo,
+            newPosition: Player.PositionInfo,
+            reason: Int,
+        ) {
+            val position = newPosition.positionMs.coerceAtLeast(0)
+            stateFlow.value = stateFlow.value.copy(positionMs = position)
+            savePosition(position)
+        }
+        override fun onPlayerError(error: PlaybackException) {
+            // musi pójść PRZED odczytem retryingAfterError — inaczej opóźnione zerowanie ze
+            // stabilityJob (zaplanowane, gdy dźwięk na chwilę ruszył) mogło wskoczyć między
+            // start błędu a ten odczyt i zresetować flagę tuż przed jej użyciem
+            cancelStabilityJob()
+            stateFlow.value = stateFlow.value.copy(status = PlayerStatus.ERROR, errorMessage = error.errorCodeName)
+            if (!retryingAfterError && stateFlow.value.currentTrack != null) {
+                retryingAfterError = true
+                scope.launch {
+                    delay(250)
+                    withContext(Dispatchers.Main) { player.stop(); player.clearMediaItems() }
+                    play()
+                }
+            }
+            logger.error("Media3Player", "playback_failed", "Media3 zgłosił błąd odtwarzania", throwable = error)
+        }
+    }
+    private var bridgeQueueJob: Job? = null
+    private var bridgeBufferingJob: Job? = null
 
     init {
-        player.addListener(object : Player.Listener {
-            override fun onPlaybackStateChanged(playbackState: Int) {
-                when (playbackState) {
-                    Player.STATE_ENDED -> scope.launch { advanceAfterEnd() }
-                    else -> refreshPlayingState()
-                }
-            }
-            override fun onIsPlayingChanged(isPlaying: Boolean) {
-                // Zatrzymanie tickera na pauzie/stopie: wcześniej biegał dalej i co pół sekundy
-                // przepisywał pozycję oraz zapisywał ją do preferencji, mimo że nic nie grało.
-                if (isPlaying) startTicker() else stopTicker()
-                refreshPlayingState()
-            }
-            override fun onPositionDiscontinuity(
-                oldPosition: Player.PositionInfo,
-                newPosition: Player.PositionInfo,
-                reason: Int,
-            ) {
-                val position = newPosition.positionMs.coerceAtLeast(0)
-                stateFlow.value = stateFlow.value.copy(positionMs = position)
-                savePosition(position)
-            }
-            override fun onPlayerError(error: PlaybackException) {
-                // musi pójść PRZED odczytem retryingAfterError — inaczej opóźnione zerowanie ze
-                // stabilityJob (zaplanowane, gdy dźwięk na chwilę ruszył) mogło wskoczyć między
-                // start błędu a ten odczyt i zresetować flagę tuż przed jej użyciem
-                cancelStabilityJob()
-                stateFlow.value = stateFlow.value.copy(status = PlayerStatus.ERROR, errorMessage = error.errorCodeName)
-                if (!retryingAfterError && stateFlow.value.currentTrack != null) {
-                    retryingAfterError = true
-                    scope.launch {
-                        delay(250)
-                        withContext(Dispatchers.Main) { player.stop(); player.clearMediaItems() }
-                        play()
-                    }
-                }
-                logger.error("Media3Player", "playback_failed", "Media3 zgłosił błąd odtwarzania", throwable = error)
-            }
-        })
+        player.addListener(playerListener)
         PlaybackQueueBridge.onNext = { scope.launch { next() } }
         PlaybackQueueBridge.onPrevious = { scope.launch { previous() } }
-        scope.launch {
+        bridgeQueueJob = scope.launch {
             stateFlow.collect { state ->
                 PlaybackQueueBridge.hasNext.value = state.currentIndex + 1 in state.queue.indices
                 PlaybackQueueBridge.hasPrevious.value = state.currentIndex - 1 in state.queue.indices
@@ -114,7 +118,76 @@ class Media3AudioPlayer(
         // jedyne źródło prawdy o LOADING/PLAYING/PAUSED: reaguje zarówno na eventy playera jak i na
         // prawdziwy stan buforowania z serwisu, niezależnie od kolejności ich napłynięcia.
         // MediaController wymaga wywołań z głównego wątku — stąd Dispatchers.Main tutaj.
-        scope.launch(Dispatchers.Main) { PlaybackQueueBridge.buffering.collect { refreshPlayingState() } }
+        bridgeBufferingJob = scope.launch(Dispatchers.Main) {
+            PlaybackQueueBridge.buffering.collect { refreshPlayingState() }
+        }
+        // Po reconnect MediaController ExoPlayer w serwisie może już grać — bez sync UI zostaje
+        // przy IDLE/pozycji z prefs, mimo że dźwięk leci (przegląd reconnect 2026-10-03).
+        scope.launch(Dispatchers.Main) { syncFromPlayer() }
+    }
+
+    /**
+     * Zwalnia listenery i korutyny tego wrappera. Nie zwalnia samego [player] (żyje w serwisie).
+     * Wołane przed podmianą przy reconnect, żeby nie zbierać listenerów.
+     */
+    fun release() {
+        if (released) return
+        released = true
+        cancelLoad()
+        stopTicker()
+        cancelStabilityJob()
+        bridgeQueueJob?.cancel()
+        bridgeBufferingJob?.cancel()
+        synchronized(prefetchLock) {
+            prefetchCache.values.forEach { it.cancel() }
+            prefetchCache.clear()
+        }
+        player.removeListener(playerListener)
+        // AppServices woła release() PRZED utworzeniem nowego playera, więc bridge jest jeszcze nasz.
+        PlaybackQueueBridge.onNext = null
+        PlaybackQueueBridge.onPrevious = null
+    }
+
+    /** Dopasowuje stateFlow do aktualnego ExoPlayera (po reconnect / cold start z żywą sesją). */
+    private fun syncFromPlayer() {
+        if (released) return
+        val mediaId = player.currentMediaItem?.mediaId?.takeIf { it.isNotBlank() }
+        val position = player.currentPosition.coerceAtLeast(0)
+        val state = stateFlow.value
+        val index = when {
+            mediaId != null -> state.queue.indexOfFirst { it.id == mediaId }.takeIf { it >= 0 }
+            else -> null
+        } ?: state.currentIndex
+        if (index !in state.queue.indices && player.mediaItemCount == 0) return
+        val status = when {
+            PlaybackQueueBridge.buffering.value -> PlayerStatus.LOADING
+            player.isPlaying -> PlayerStatus.PLAYING
+            player.playbackState == Player.STATE_READY -> PlayerStatus.PAUSED
+            player.playbackState == Player.STATE_ENDED -> PlayerStatus.ENDED
+            player.mediaItemCount > 0 -> PlayerStatus.LOADING
+            else -> state.status
+        }
+        if (player.isPlaying) {
+            pendingResumePositionMs = 0
+            startTicker()
+        }
+        stateFlow.value = state.copy(
+            currentIndex = if (index in state.queue.indices) index else state.currentIndex,
+            positionMs = if (player.mediaItemCount > 0) position else state.positionMs,
+            status = status,
+            errorMessage = null,
+        )
+        if (player.mediaItemCount > 0) savePosition(position)
+        logger.info(
+            "Media3Player",
+            "synced_from_player",
+            "Zsynchronizowano stan UI z ExoPlayerem",
+            fields = mapOf(
+                "status" to status.name,
+                "positionMs" to position.toString(),
+                "mediaId" to (mediaId ?: ""),
+            ),
+        )
     }
 
     /** Jedyne miejsce, które ustawia LOADING/PLAYING/PAUSED — unika wyścigu między eventami playera a bridge.buffering. */

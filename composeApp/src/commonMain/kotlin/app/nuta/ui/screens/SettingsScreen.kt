@@ -51,10 +51,23 @@ import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.stringResource
 
 @Composable
-internal fun SettingsScreen(container: AppContainer) {
+internal fun SettingsScreen(container: AppContainer, authWarning: String? = null) {
     val settings by container.playbackSettings.settings.collectAsState()
+    val palette = LocalNutaPalette.current
     ScrollableLazyColumn(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item { Heading(stringResource(Res.string.settings_title), stringResource(Res.string.settings_subtitle)) }
+        if (!authWarning.isNullOrBlank()) {
+            item {
+                Card(backgroundColor = MaterialTheme.colors.surface, modifier = Modifier.fillMaxWidth()) {
+                    Text(
+                        authWarning,
+                        color = palette.danger,
+                        modifier = Modifier.padding(16.dp),
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
+            }
+        }
         item {
             SettingsGroup(stringResource(Res.string.font_size_title), stringResource(Res.string.font_size_desc)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {

@@ -4,6 +4,7 @@ import android.content.SharedPreferences
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.util.Base64
+import android.util.Log
 import app.nuta.settings.CredentialStore
 import java.security.KeyStore
 import javax.crypto.Cipher
@@ -15,20 +16,33 @@ import javax.crypto.spec.GCMParameterSpec
 class AndroidCredentialStore(
     private val preferences: SharedPreferences,
 ) : CredentialStore {
-    override fun load(key: String): String? = runCatching {
+    /** True, gdy w prefs był blob, ale deszyfrowanie się nie udało (Keystore / uszkodzone dane). */
+    @Volatile
+    var lastDecryptFailed: Boolean = false
+        private set
+
+    override fun load(key: String): String? {
+        lastDecryptFailed = false
         val encoded = preferences.getString(key, null) ?: return null
-        val payload = Base64.decode(encoded, Base64.NO_WRAP)
-        require(payload.size > IvSize)
-        val cipher = Cipher.getInstance(Transformation)
-        cipher.init(Cipher.DECRYPT_MODE, secretKey(), GCMParameterSpec(TagBits, payload, 0, IvSize))
-        String(cipher.doFinal(payload, IvSize, payload.size - IvSize), Charsets.UTF_8)
-    }.getOrNull()
+        return runCatching {
+            val payload = Base64.decode(encoded, Base64.NO_WRAP)
+            require(payload.size > IvSize)
+            val cipher = Cipher.getInstance(Transformation)
+            cipher.init(Cipher.DECRYPT_MODE, secretKey(), GCMParameterSpec(TagBits, payload, 0, IvSize))
+            String(cipher.doFinal(payload, IvSize, payload.size - IvSize), Charsets.UTF_8)
+        }.getOrElse { error ->
+            lastDecryptFailed = true
+            Log.w("NutaCredentials", "Nie udało się odszyfrować sekretu ($key)", error)
+            null
+        }
+    }
 
     override fun save(key: String, value: String) {
         if (value.isBlank()) {
             clear(key)
             return
         }
+        lastDecryptFailed = false
         val cipher = Cipher.getInstance(Transformation)
         cipher.init(Cipher.ENCRYPT_MODE, secretKey())
         val encrypted = cipher.doFinal(value.toByteArray(Charsets.UTF_8))
@@ -37,6 +51,7 @@ class AndroidCredentialStore(
     }
 
     override fun clear(key: String) {
+        lastDecryptFailed = false
         preferences.edit().remove(key).apply()
     }
 

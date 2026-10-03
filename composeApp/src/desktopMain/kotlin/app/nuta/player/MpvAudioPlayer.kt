@@ -38,8 +38,9 @@ class MpvAudioPlayer(
     private val youtube: YouTubeMediaService,
     private val logger: NutaLogger,
     private val settingsStore: PlaybackSettingsStore,
+    private val queueStore: FilePlaybackQueueStore = FilePlaybackQueueStore(),
 ) : AudioPlayer {
-    private val _state = MutableStateFlow(PlayerState())
+    private val _state = MutableStateFlow(queueStore.load())
     override val state: StateFlow<PlayerState> = _state.asStateFlow()
     private val loadMutex = Mutex()
     private val socketPath = Path.of("/tmp", "nuta-mpv-${UUID.randomUUID()}.sock")
@@ -47,6 +48,7 @@ class MpvAudioPlayer(
     private var ticker: Job? = null
     private var processLogReader: Job? = null
     private var commandId = 0L
+    private var lastPositionSaveMs = 0L
     // Rośnie przy każdej zmianie utworu/zatrzymaniu. Automatyczne przejście na koniec
     // utworu porównuje swój znacznik po zdobyciu loadMutex, żeby nie nadpisać wyboru
     // użytkownika, który w tym samym momencie kliknął next/stop.
@@ -59,6 +61,22 @@ class MpvAudioPlayer(
                 if (process?.isAlive == true) runCatching { sendCommand("set_property", "af", loudnormFilter(settings.loudnessNormalization)) }
             }
         }
+        if (_state.value.queue.isNotEmpty()) {
+            logger.info(
+                "MpvPlayer",
+                "queue_restored",
+                "Przywrócono kolejkę z dysku",
+                fields = mapOf(
+                    "count" to _state.value.queue.size.toString(),
+                    "index" to _state.value.currentIndex.toString(),
+                ),
+            )
+        }
+    }
+
+    private fun persistQueue() {
+        runCatching { queueStore.save(_state.value) }
+            .onFailure { logger.warn("MpvPlayer", "queue_save_failed", "Nie zapisano kolejki", fields = mapOf("reason" to (it.message ?: "unknown"))) }
     }
 
     override suspend fun setQueue(tracks: List<Track>, startIndex: Int) {
@@ -67,12 +85,14 @@ class MpvAudioPlayer(
             stopPlaybackLocked()
             _state.value = PlayerState(queue = tracks, currentIndex = if (tracks.isEmpty()) -1 else startIndex)
         }
+        persistQueue()
         logger.info("MpvPlayer", "queue_set", "Ustawiono kolejkę playera", fields = mapOf("count" to tracks.size.toString()))
     }
 
     override suspend fun appendToQueue(tracks: List<Track>) {
         if (tracks.isEmpty()) return
         _state.value = _state.value.copy(queue = _state.value.queue + tracks)
+        persistQueue()
         logger.info("MpvPlayer", "queue_appended", "Dopisano utwory do kolejki", fields = mapOf("count" to tracks.size.toString(), "queueSize" to _state.value.queue.size.toString()))
     }
 
@@ -80,6 +100,7 @@ class MpvAudioPlayer(
         val state = _state.value
         if (state.currentIndex !in state.queue.indices) return
         _state.value = state.copy(queue = state.queue.take(state.currentIndex + 1) + state.queue.drop(state.currentIndex + 1).shuffled(), shuffleEnabled = true)
+        persistQueue()
         logger.info("MpvAudioPlayer", "queue_shuffled", "Przetasowano pozostałe utwory kolejki")
     }
 
@@ -102,6 +123,7 @@ class MpvAudioPlayer(
                 _state.value = state.copy(queue = newQueue)
             }
         }
+        persistQueue()
         logger.info("MpvPlayer", "queue_item_removed", "Usunięto utwór z kolejki")
     }
 
@@ -174,6 +196,7 @@ class MpvAudioPlayer(
     private suspend fun clearQueueLocked() {
         stopPlaybackLocked()
         _state.value = PlayerState()
+        persistQueue()
         logger.info("MpvPlayer", "queue_cleared", "Wyczyszczono kolejkę")
     }
 
@@ -185,6 +208,7 @@ class MpvAudioPlayer(
         val bounded = if (duration > 0) positionMs.coerceIn(0, duration) else positionMs.coerceAtLeast(0)
         sendCommand("seek", bounded / 1_000.0, "absolute", "exact")
         _state.value = _state.value.copy(positionMs = bounded)
+        persistQueue()
     }
 
     override suspend fun next() = moveTo(_state.value.currentIndex + 1)
@@ -196,6 +220,7 @@ class MpvAudioPlayer(
         if (index !in _state.value.queue.indices) return@withLock
         stopPlaybackLocked()
         _state.value = _state.value.copy(currentIndex = index, status = PlayerStatus.IDLE, positionMs = 0, errorMessage = null)
+        persistQueue()
         loadCurrentLocked()
     }
 
@@ -297,7 +322,14 @@ class MpvAudioPlayer(
                     // scrobbler widział pozycję z POPRZEDNIEGO utworu — ten sam błąd, który na
                     // Androidzie dał błędny wpis w ListenBrainz (patrz Media3AudioPlayer.startTicker).
                     if (generation != playbackGeneration) return@launch
-                    if (position != null) _state.value = _state.value.copy(positionMs = position.coerceAtLeast(0))
+                    if (position != null) {
+                        _state.value = _state.value.copy(positionMs = position.coerceAtLeast(0))
+                        val now = System.currentTimeMillis()
+                        if (now - lastPositionSaveMs > 5_000) {
+                            lastPositionSaveMs = now
+                            persistQueue()
+                        }
+                    }
                     // Odpowiednik ACTION_AUDIO_BECOMING_NOISY z Androida: gdy zniknie
                     // urządzenie wyjściowe (Bluetooth/słuchawki), mpv zwalnia AO i dalej
                     // "odtwarza" w ciszę. Pauzujemy, zamiast gubić pozycję w utworze.
