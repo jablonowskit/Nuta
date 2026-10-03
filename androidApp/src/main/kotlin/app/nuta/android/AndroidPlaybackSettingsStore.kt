@@ -58,7 +58,7 @@ class AndroidPlaybackSettingsStore(
         loudnessNormalization = enumValue(preferences.getString("loudnessNormalization", null), LoudnessNormalization.OFF),
         youtubeClientProfile = enumValue(preferences.getString("youtubeClientProfile", null), YouTubeClientProfile.AUTO),
         audioSource = enumValue(preferences.getString("audioSource", null), AudioSource.YOUTUBE),
-        dataSource = enumValue(preferences.getString("dataSource", null), DataSource.SPOTIFY),
+        dataSource = enumValue(preferences.getString("dataSource", null), DataSource.LISTENBRAINZ),
         listenBrainzUsername = preferences.getString("listenBrainzUsername", "") ?: "",
         listenBrainzApiToken = readTokenAndMigrate(),
         prefetchEnabled = preferences.getBoolean("prefetchEnabled", false),
