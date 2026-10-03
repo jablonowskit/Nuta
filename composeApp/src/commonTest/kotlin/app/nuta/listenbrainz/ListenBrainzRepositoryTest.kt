@@ -140,6 +140,17 @@ class ListenBrainzRepositoryTest {
     }
 
     @Test
+    fun feedbackPageWithoutTotalCountKeepsPageSizeForPagination() {
+        val page = ListenBrainzRepository.parseFeedbackPage(
+            """{"feedback":[{"recording_mbid":"11111111-1111-1111-1111-111111111111","track_metadata":{"track_name":"A","artist_name":"B"}}]}""",
+        )
+        requireNotNull(page)
+        assertNull(page.totalCount)
+        assertEquals(1, page.entriesOnPage)
+        assertEquals(1, page.entries.size)
+    }
+
+    @Test
     fun blankOrMalformedBodyStopsPagination() {
         // Zwrócenie null przerywa pętlę paginacji; wcześniej pusta odpowiedź (204) powodowała
         // wyjątek "unexpected end of the input" przy rotacji ekranu.

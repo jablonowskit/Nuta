@@ -18,7 +18,10 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
 import java.time.Instant
 
 /**
@@ -30,6 +33,7 @@ object AppServices {
     @Volatile private var started = false
     /** Anulowany i tworzony od nowa przy każdym połączeniu — patrz connectController. */
     @Volatile private var scrobblerScope: CoroutineScope? = null
+    @Volatile private var reconnectJob: Job? = null
 
     lateinit var logger: MemoryLogger
         private set
@@ -49,12 +53,16 @@ object AppServices {
         started = true
         initPlatformBrowser(context)
         logger = MemoryLogger(now = { Instant.now().toString() }, initialLevel = LogLevel.DEBUG, jsonSink = { line -> Log.d("NutaLog", line) })
-        playbackSettings = AndroidPlaybackSettingsStore(context.getSharedPreferences("playback-settings", Context.MODE_PRIVATE))
+        val credentials = AndroidCredentialStore(context.getSharedPreferences("credentials-encrypted", Context.MODE_PRIVATE))
+        playbackSettings = AndroidPlaybackSettingsStore(
+            context.getSharedPreferences("playback-settings", Context.MODE_PRIVATE),
+            credentials,
+        )
         val youTube = AndroidYouTubeMediaService(logger, playbackSettings, context.applicationContext)
         val soundCloud = AndroidSoundCloudMediaService(logger, playbackSettings)
         youtubeMediaService = SourceSelectingMediaService(playbackSettings, youTube, soundCloud, logger)
         listenBrainzRepository = ListenBrainzRepository(playbackSettings, MusicBrainzRepository(logger), logger)
-        connectController(context.applicationContext)
+        connectController(context.applicationContext, attempt = 0)
     }
 
     /**
@@ -64,7 +72,7 @@ object AppServices {
      * pokazywało stan sprzed rozłączenia — bez żadnego komunikatu. Po rozłączeniu zwalniamy
      * kontroler i łączymy się ponownie, żeby odtwarzanie dało się wznowić bez restartu apki.
      */
-    private fun connectController(context: Context) {
+    private fun connectController(context: Context, attempt: Int) {
         val sessionToken = SessionToken(context, ComponentName(context, PlaybackService::class.java))
         val future = MediaController.Builder(context, sessionToken)
             .setListener(object : MediaController.Listener {
@@ -72,7 +80,7 @@ object AppServices {
                     logger.warn("Playback", "controller_disconnected", "Usługa odtwarzania rozłączona — łączę ponownie")
                     controller.release()
                     audioPlayer.value = null
-                    connectController(context)
+                    scheduleReconnect(context, attempt = 0)
                 }
             })
             .buildAsync()
@@ -80,6 +88,8 @@ object AppServices {
             runCatching { future.get() }
                 .onSuccess { controller ->
                     playerConnectFailed.value = false
+                    reconnectJob?.cancel()
+                    reconnectJob = null
                     val player = Media3AudioPlayer(controller, scope, youtubeMediaService, logger, context.getSharedPreferences("playback-queue", Context.MODE_PRIVATE), playbackSettings)
                     audioPlayer.value = player
                     // Scrobbler sam sprawdza dataSource przy każdym utworze, więc podłączamy go
@@ -93,9 +103,27 @@ object AppServices {
                     ListenBrainzScrobbler(playbackSettings, logger).attach(player, attachScope)
                 }
                 .onFailure { error ->
-                    playerConnectFailed.value = true
                     logger.error("Playback", "controller_connect_failed", "Nie udało się połączyć z usługą odtwarzania", throwable = error)
+                    if (attempt < MAX_CONNECT_ATTEMPTS - 1) {
+                        scheduleReconnect(context, attempt + 1)
+                    } else {
+                        playerConnectFailed.value = true
+                    }
                 }
         }, ContextCompat.getMainExecutor(context))
     }
+
+    @Synchronized
+    private fun scheduleReconnect(context: Context, attempt: Int) {
+        if (reconnectJob?.isActive == true) return
+        reconnectJob = scope.launch {
+            if (attempt > 0) delay((CONNECT_RETRY_BASE_MS * (1L shl (attempt - 1))).coerceAtMost(CONNECT_RETRY_MAX_MS))
+            reconnectJob = null
+            connectController(context, attempt)
+        }
+    }
+
+    private const val MAX_CONNECT_ATTEMPTS = 5
+    private const val CONNECT_RETRY_BASE_MS = 500L
+    private const val CONNECT_RETRY_MAX_MS = 8_000L
 }

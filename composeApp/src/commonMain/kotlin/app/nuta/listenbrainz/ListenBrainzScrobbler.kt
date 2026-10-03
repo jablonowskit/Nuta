@@ -8,6 +8,8 @@ import app.nuta.net.httpPost
 import app.nuta.settings.DataSource
 import app.nuta.settings.PlaybackSettingsStore
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonArray
@@ -42,10 +44,13 @@ class ListenBrainzScrobbler(
     private val logger: NutaLogger,
     /** Wstrzykiwalny zegar — pozwala testom sprawdzić wyliczanie `listened_at` bez czekania. */
     private val nowMs: () -> Long = System::currentTimeMillis,
+    private val submitRequest: suspend (String, Map<String, String>, String) -> String =
+        { url, headers, body -> httpPost(url, headers = headers, body = body) },
 ) {
     /** Utwór, dla którego już zgłosiliśmy trwałe odsłuchanie — chroni przed duplikatami przy
         każdym tyknięciu pozycji oraz przy pauzie/wznowieniu tego samego utworu. */
     private var scrobbledKey: String? = null
+    private var pendingScrobbleKey: String? = null
 
     /** Utwór, dla którego zgłosiliśmy już „słucham teraz" — żeby nie powtarzać tego co sekundę. */
     private var nowPlayingKey: String? = null
@@ -79,15 +84,24 @@ class ListenBrainzScrobbler(
                     // na zawsze i drugie odsłuchanie przepadłoby.
                     if (key == scrobbledKey && state.positionMs < RestartPositionMs) {
                         scrobbledKey = null
+                        pendingScrobbleKey = null
                         nowPlayingKey = null
                     }
                     if (key != scrobbledKey && key != nowPlayingKey && state.status == PlayerStatus.PLAYING) {
                         nowPlayingKey = key
                         submitPlayingNow(track)
                     }
-                    if (key != scrobbledKey && ListenThreshold.isReached(state.positionMs, state.durationMs)) {
-                        scrobbledKey = key
-                        submitListen(track, state.positionMs, state.durationMs)
+                    if (key != scrobbledKey && key != pendingScrobbleKey && ListenThreshold.isReached(state.positionMs, state.durationMs)) {
+                        pendingScrobbleKey = key
+                        val positionMs = state.positionMs
+                        val durationMs = state.durationMs
+                        launch {
+                            val submitted = submitListen(track, positionMs, durationMs)
+                            if (pendingScrobbleKey == key) {
+                                if (submitted) scrobbledKey = key
+                                pendingScrobbleKey = null
+                            }
+                        }
                     }
                 }
         }
@@ -104,39 +118,51 @@ class ListenBrainzScrobbler(
         )
     }
 
-    private suspend fun submitListen(track: Track, positionMs: Long, durationMs: Long) {
+    private suspend fun submitListen(track: Track, positionMs: Long, durationMs: Long): Boolean {
         // `listened_at` to moment ROZPOCZĘCIA odsłuchania, nie zgłoszenia — odejmujemy to, co
         // faktycznie zdążyło polecieć, żeby historia nie przesuwała się o próg (do 4 minut).
         val startedAtSeconds = (nowMs() - positionMs) / 1000
-        post(
+        return post(
             event = "listen",
             body = requestBody(listenType = "single", track = track, listenedAt = startedAtSeconds, durationMs = durationMs),
             track = track,
         )
     }
 
-    private suspend fun post(event: String, body: String, track: Track) {
+    private suspend fun post(event: String, body: String, track: Track): Boolean {
         val settings = settingsStore.settings.value
         val token = settings.listenBrainzApiToken
-        if (token.isBlank()) return
-        runCatching {
-            httpPost(
-                SubmitListensUrl,
-                headers = mapOf("Authorization" to "Token $token", "Content-Type" to "application/json"),
-                body = body,
-            )
-        }.onSuccess {
-            logger.info(
-                "ListenBrainz", "scrobble_$event", "Zgłoszono odsłuchanie do ListenBrainz",
-                fields = mapOf("title" to track.title, "artist" to track.artists.firstOrNull().orEmpty()),
-            )
-        }.onFailure { error ->
-            // Celowo tylko ostrzeżenie: utracony scrobbel nie może zatrzymać odtwarzania.
-            logger.warn(
-                "ListenBrainz", "scrobble_failed", "Nie udało się zgłosić odsłuchania do ListenBrainz",
-                fields = mapOf("event" to event, "title" to track.title, "reason" to (error.message ?: "unknown")),
-            )
+        if (token.isBlank()) return false
+        repeat(MaxAttempts) { attempt ->
+            try {
+                submitRequest(
+                    SubmitListensUrl,
+                    mapOf("Authorization" to "Token $token", "Content-Type" to "application/json"),
+                    body,
+                )
+                logger.info(
+                    "ListenBrainz", "scrobble_$event", "Zgłoszono odsłuchanie do ListenBrainz",
+                    fields = mapOf("title" to track.title, "artist" to track.artists.firstOrNull().orEmpty()),
+                )
+                return true
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Throwable) {
+                val retryable = error.message?.let { message ->
+                    message.contains("HTTP 5") || message.contains("timed out", ignoreCase = true) ||
+                        message.contains("timeout", ignoreCase = true)
+                } ?: true
+                if (!retryable || attempt == MaxAttempts - 1) {
+                    logger.warn(
+                        "ListenBrainz", "scrobble_failed", "Nie udało się zgłosić odsłuchania do ListenBrainz",
+                        fields = mapOf("event" to event, "title" to track.title, "reason" to (error.message ?: "unknown")),
+                    )
+                    return false
+                }
+                delay(RetryBaseMs * (1L shl attempt))
+            }
         }
+        return false
     }
 
     private fun requestBody(listenType: String, track: Track, listenedAt: Long?, durationMs: Long): String {
@@ -170,6 +196,8 @@ class ListenBrainzScrobbler(
         /** Poniżej 3 s od początku uznajemy, że utwór wystartował od nowa (a nie że użytkownik
             przewinął w tył pod koniec) — margines na niedokładność raportowanej pozycji. */
         const val RestartPositionMs = 3_000L
+        const val MaxAttempts = 3
+        const val RetryBaseMs = 500L
         val MbidRegex = Regex("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
     }
 }

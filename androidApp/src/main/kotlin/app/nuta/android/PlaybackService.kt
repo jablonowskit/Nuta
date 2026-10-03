@@ -37,7 +37,7 @@ class PlaybackService : MediaSessionService() {
     override fun onCreate() {
         super.onCreate()
         AppServices.start(this)
-        val settingsStore = AndroidPlaybackSettingsStore(getSharedPreferences("playback-settings", MODE_PRIVATE))
+        val settingsStore = AppServices.playbackSettings
         val upstreamFactory = ClientAwareDataSourceFactory(DefaultHttpDataSource.Factory().setAllowCrossProtocolRedirects(true), AppServices.logger)
         // SimpleCache skanuje przy tworzeniu indeks na dysku (do cacheSizeMb, domyślnie 150 MB),
         // a onCreate() usługi pierwszoplanowej ma na Androidzie 12+ twardy limit 5 s na
@@ -129,12 +129,7 @@ class PlaybackService : MediaSessionService() {
     /**
      * Google CDN odrzuca (HTTP 403) pobranie bajtów audio, jeśli User-Agent żądania danych nie
      * zgadza się z UA klienta, dla którego URL został podpisany — a różne profile YouTube
-     * (VISIONOS/ANDROID_VR, wybierane przez ustawienie w Settings albo fallback AUTO) dają URL-e
-     * podpisane dla różnych klientów w tej samej sesji odtwarzania. Zamiast pamiętać, który profil
-     * aktualnie "wygrał" (osobny stan do synchronizowania z resolverem), UA wybieramy na podstawie
-     * parametru "c=" wpisanego w sam URL strumienia przez Google — widoczny wprost w każdym
-     * podpisanym linku (np. "&c=ANDROID_VR&" albo "&c=VISIONOS&"), więc zawsze zgodny z tym, co
-     * faktycznie podpisało dany URL, niezależnie od ustawień.
+     * Profil VISIONOS wymaga zgodnego User-Agent przy pobieraniu podpisanego URL-a.
      *
      * Druga, ważniejsza sprawa: lokalny węzeł CDN (Google Global Cache) u tego ISP akceptuje
      * OGRANICZONE zakresy bajtów ("Range: bytes=X-Y"), ale odrzuca (HTTP 403) KONTYNUACJĘ otwartym
@@ -158,11 +153,7 @@ class PlaybackService : MediaSessionService() {
                     // UA-spoofing dotyczy tylko YouTube (googlevideo.com wymaga zgodności UA z
                     // klientem, dla którego URL został podpisany) — inne źródła (np. SoundCloud CDN)
                     // dostają domyślny UA skonfigurowany na DefaultHttpDataSource.Factory.
-                    val youtubeAgent = when {
-                        "c=ANDROID_VR" in url -> AndroidYouTubeMediaService.VR_AGENT
-                        "googlevideo.com" in url -> AndroidYouTubeMediaService.VISIONOS_AGENT
-                        else -> null
-                    }
+                    val youtubeAgent = AndroidYouTubeMediaService.VISIONOS_AGENT.takeIf { "googlevideo.com" in url }
                     youtubeAgent?.let { inner.setRequestProperty("User-Agent", it) }
                     val contentLength = Regex("[?&]clen=(\\d+)").find(url)?.groupValues?.get(1)?.toLongOrNull()
                     // Tylko prawdziwe kontynuacje (position > 0) dostają wymuszony górny limit z "clen".

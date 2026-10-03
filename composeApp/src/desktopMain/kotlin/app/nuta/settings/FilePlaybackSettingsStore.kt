@@ -20,6 +20,7 @@ import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import java.nio.file.Files
 import java.nio.file.Path
+import java.nio.file.StandardCopyOption
 import java.nio.file.StandardOpenOption
 import java.nio.file.attribute.PosixFilePermission
 
@@ -50,31 +51,39 @@ import java.nio.file.attribute.PosixFilePermission
 class FilePlaybackSettingsStore(
     private val scope: CoroutineScope,
     private val logger: NutaLogger,
+    private val file: Path = defaultSettingsFile(),
+    private val credentials: CredentialStore = DesktopCredentialStore(
+        file.resolveSibling("credentials.properties"),
+        logger,
+    ),
 ) : PlaybackSettingsStore {
-    private val file: Path = run {
-        val sessionDir = System.getenv("NUTA_SESSION_DIR")
-        val dir = if (!sessionDir.isNullOrBlank()) {
-            Path.of(sessionDir).parent ?: Path.of(sessionDir)
-        } else {
-            Path.of(System.getProperty("user.home"), ".local", "share", "nuta")
-        }
-        dir.resolve("playback-settings.json")
-    }
-
     private val state = MutableStateFlow(load())
     override val settings: StateFlow<YouTubePlaybackSettings> = state.asStateFlow()
 
     private var pendingSave: Job? = null
+    private val saveLock = Any()
+
+    init {
+        // Natychmiast usuwa legacy plaintext token z JSON-a po udanej migracji do CredentialStore.
+        save(state.value)
+    }
 
     override fun update(value: YouTubePlaybackSettings) {
-        state.value = value
+        state.value = value.validated()
         // Nowa zmiana anuluje poprzednie oczekujące zapisanie — tylko ostatni stan po serii
         // szybkich zmian (np. wpisywanie tokenu znak po znaku) trafia na dysk, nie każdy z nich.
         pendingSave?.cancel()
         pendingSave = scope.launch {
             delay(SaveDebounceMs)
-            save(value)
+            save(state.value)
         }
+    }
+
+    /** Zapisuje najnowszy stan synchronicznie; wywoływane przed anulowaniem scope aplikacji. */
+    fun flush() {
+        pendingSave?.cancel()
+        pendingSave = null
+        save(state.value)
     }
 
     private fun load(): YouTubePlaybackSettings = runCatching {
@@ -91,13 +100,13 @@ class FilePlaybackSettingsStore(
             audioSource = root["audioSource"]?.jsonPrimitive?.contentOrNull?.let(::enumOrNull) ?: defaults.audioSource,
             dataSource = root["dataSource"]?.jsonPrimitive?.contentOrNull?.let(::enumOrNull) ?: defaults.dataSource,
             listenBrainzUsername = root["listenBrainzUsername"]?.jsonPrimitive?.contentOrNull ?: defaults.listenBrainzUsername,
-            listenBrainzApiToken = root["listenBrainzApiToken"]?.jsonPrimitive?.contentOrNull ?: defaults.listenBrainzApiToken,
+            listenBrainzApiToken = loadTokenAndMigrate(root["listenBrainzApiToken"]?.jsonPrimitive?.contentOrNull),
             prefetchEnabled = root["prefetchEnabled"]?.jsonPrimitive?.boolean ?: defaults.prefetchEnabled,
             playerCollapsed = root["playerCollapsed"]?.jsonPrimitive?.boolean ?: defaults.playerCollapsed,
             cacheSizeMb = root["cacheSizeMb"]?.jsonPrimitive?.int ?: defaults.cacheSizeMb,
             cassetteBackground = root["cassetteBackground"]?.jsonPrimitive?.boolean ?: defaults.cassetteBackground,
             theme = root["theme"]?.jsonPrimitive?.contentOrNull?.let(::enumOrNull) ?: defaults.theme,
-        ).also {
+        ).validated().also {
             logger.info("PlaybackSettings", "settings_loaded", "Odtworzono ustawienia odtwarzania z dysku", fields = mapOf("path" to file.toString()))
         }
     }.getOrElse { error ->
@@ -107,8 +116,10 @@ class FilePlaybackSettingsStore(
         YouTubePlaybackSettings()
     }
 
-    private fun save(value: YouTubePlaybackSettings) {
+    private fun save(value: YouTubePlaybackSettings) = synchronized(saveLock) {
         runCatching {
+            if (value.listenBrainzApiToken.isBlank()) credentials.clear(ListenBrainzTokenKey)
+            else credentials.save(ListenBrainzTokenKey, value.listenBrainzApiToken)
             Files.createDirectories(file.parent)
             val payload = buildJsonObject {
                 put("fontScale", value.fontScale)
@@ -120,14 +131,25 @@ class FilePlaybackSettingsStore(
                 put("audioSource", value.audioSource.name)
                 put("dataSource", value.dataSource.name)
                 put("listenBrainzUsername", value.listenBrainzUsername)
-                put("listenBrainzApiToken", value.listenBrainzApiToken)
                 put("prefetchEnabled", value.prefetchEnabled)
                 put("playerCollapsed", value.playerCollapsed)
                 put("cacheSizeMb", value.cacheSizeMb)
                 put("cassetteBackground", value.cassetteBackground)
                 put("theme", value.theme.name)
             }.toString()
-            Files.writeString(file, payload, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING)
+            val temporary = file.resolveSibling("${file.fileName}.tmp")
+            Files.writeString(
+                temporary,
+                payload,
+                StandardOpenOption.CREATE,
+                StandardOpenOption.TRUNCATE_EXISTING,
+                StandardOpenOption.WRITE,
+            )
+            runCatching {
+                Files.move(temporary, file, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
+            }.getOrElse {
+                Files.move(temporary, file, StandardCopyOption.REPLACE_EXISTING)
+            }
             runCatching {
                 Files.setPosixFilePermissions(file, setOf(PosixFilePermission.OWNER_READ, PosixFilePermission.OWNER_WRITE))
             }
@@ -138,6 +160,17 @@ class FilePlaybackSettingsStore(
         }
     }
 
+    private fun YouTubePlaybackSettings.validated() = copy(
+        fontScale = fontScale.coerceIn(0.5f, 1f),
+        cacheSizeMb = cacheSizeMb.coerceIn(25, 500),
+    )
+
+    private fun loadTokenAndMigrate(legacy: String?): String {
+        credentials.load(ListenBrainzTokenKey)?.let { return it }
+        if (!legacy.isNullOrBlank()) credentials.save(ListenBrainzTokenKey, legacy)
+        return legacy.orEmpty()
+    }
+
     private inline fun <reified T : Enum<T>> enumOrNull(name: String): T? =
         runCatching { enumValueOf<T>(name) }.getOrNull()
 
@@ -145,5 +178,16 @@ class FilePlaybackSettingsStore(
         /** Zapis dopiero po chwili ciszy — bez tego wpisywanie tokenu znak po znaku odpalałoby
             zapis pliku przy każdym naciśnięciu klawisza. */
         const val SaveDebounceMs = 500L
+        const val ListenBrainzTokenKey = "listenbrainz.api-token"
+
+        fun defaultSettingsFile(): Path {
+            val sessionDir = System.getenv("NUTA_SESSION_DIR")
+            val dir = if (!sessionDir.isNullOrBlank()) {
+                Path.of(sessionDir).parent ?: Path.of(sessionDir)
+            } else {
+                Path.of(System.getProperty("user.home"), ".local", "share", "nuta")
+            }
+            return dir.resolve("playback-settings.json")
+        }
     }
 }

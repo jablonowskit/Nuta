@@ -79,6 +79,7 @@ fun main() {
         Window(
             onCloseRequest = {
                 logger.info("Application", "app_stopped", "Zamknięto Nuta Linux GUI")
+                playbackSettings.flush()
                 scope.cancel()
                 exitApplication()
             },

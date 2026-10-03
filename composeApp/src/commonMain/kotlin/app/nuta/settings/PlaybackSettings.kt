@@ -10,12 +10,10 @@ enum class BufferSize { SMALL, STANDARD, LARGE }
 enum class LoudnessNormalization { OFF, GENTLE, NORMAL }
 /**
  * Który profil klienta InnerTube resolver ma próbować przy rozwiązywaniu strumienia YouTube.
- * AUTO = VISIONOS jako pierwszy, potem ANDROID_VR jako fallback (jedyne dwa profile, które wg
- * testów z 22.08.2026 dają cokolwiek użyteczne — WEB/ANDROID/IOS/TVHTML5 usunięte jako bezsensowne,
- * patrz docs/sabr-blocker/). Wybór konkretnego klienta próbuje TYLKO tego
- * jednego, bez fallbacku — przydatne do ręcznego diagnozowania, który profil akurat działa.
+ * AUTO i VISIONOS używają obecnie tego samego, jedynego działającego profilu. Fallback między
+ * serwisami audio należy do [AudioSource.AUTO], nie do profili klienta YouTube.
  */
-enum class YouTubeClientProfile { AUTO, VISIONOS, ANDROID_VR }
+enum class YouTubeClientProfile { AUTO, VISIONOS }
 
 /**
  * Skąd rozwiązywać strumień audio dla utworu. AUTO próbuje YouTube, a przy błędzie
@@ -73,6 +71,16 @@ data class YouTubePlaybackSettings(
 interface PlaybackSettingsStore {
     val settings: StateFlow<YouTubePlaybackSettings>
     fun update(value: YouTubePlaybackSettings)
+    fun update(transform: (YouTubePlaybackSettings) -> YouTubePlaybackSettings) {
+        update(transform(settings.value))
+    }
+}
+
+/** Trwały magazyn sekretów; implementacje platformowe szyfrują dane poza plikiem ustawień. */
+interface CredentialStore {
+    fun load(key: String): String?
+    fun save(key: String, value: String)
+    fun clear(key: String)
 }
 
 class InMemoryPlaybackSettingsStore(

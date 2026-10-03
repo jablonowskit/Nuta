@@ -85,7 +85,7 @@ class MainActivity : ComponentActivity() {
                         AppServices.listenBrainzRepository,
                     )
                 }
-                val container = remember(repository) {
+                val container = remember(repository, activePlayer) {
                     AppContainer(spotifyRepository = repository, audioPlayer = activePlayer, logger = logger, youtubeMediaService = youtubeMediaService, playbackSettings = playbackSettings)
                 }
                 NutaApp(container)
