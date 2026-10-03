@@ -32,6 +32,7 @@ import app.nuta.resources.*
 import app.nuta.ui.EmptyState
 import app.nuta.ui.Heading
 import app.nuta.ui.ScrollableLazyColumn
+import app.nuta.ui.theme.LocalNutaPalette
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.stringResource
 
@@ -40,15 +41,16 @@ internal fun DiagnosticsScreen(container: AppContainer) {
     val events by container.logger.events.collectAsState()
     val level by container.logger.minimumLevel.collectAsState()
     val scope = rememberCoroutineScope()
+    val palette = LocalNutaPalette.current
     Column(Modifier.fillMaxSize()) {
         Heading(stringResource(Res.string.diagnostics_title), stringResource(Res.string.diagnostics_subtitle))
         Spacer(Modifier.height(14.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(stringResource(Res.string.log_level), color = Color(0xFF9AA7B0))
+            Text(stringResource(Res.string.log_level), color = palette.muted)
             listOf(LogLevel.INFO, LogLevel.DEBUG, LogLevel.TRACE).forEach { item ->
                 OutlinedButton(
                     onClick = { container.logger.setMinimumLevel(item) },
-                    colors = ButtonDefaults.outlinedButtonColors(backgroundColor = if (level == item) Color(0xFF263A30) else Color.Transparent),
+                    colors = ButtonDefaults.outlinedButtonColors(backgroundColor = if (level == item) palette.activeHighlight else Color.Transparent),
                 ) { Text(item.name) }
             }
             Spacer(Modifier.weight(1f))
@@ -56,7 +58,7 @@ internal fun DiagnosticsScreen(container: AppContainer) {
             OutlinedButton(onClick = container.logger::clear) { Text(stringResource(Res.string.clear)) }
         }
         Spacer(Modifier.height(14.dp))
-        Card(Modifier.fillMaxWidth().weight(1f), backgroundColor = Color(0xFF0C1013), shape = RoundedCornerShape(10.dp)) {
+        Card(Modifier.fillMaxWidth().weight(1f), backgroundColor = palette.chrome, shape = RoundedCornerShape(10.dp)) {
             if (events.isEmpty()) EmptyState(stringResource(Res.string.no_events)) else ScrollableLazyColumn(Modifier.padding(10.dp).fillMaxSize(), reverseLayout = true) {
                 items(events.reversed()) { LogRow(it) }
             }
@@ -66,6 +68,7 @@ internal fun DiagnosticsScreen(container: AppContainer) {
 
 @Composable
 private fun LogRow(item: LogEvent) {
+    val palette = LocalNutaPalette.current
     val color = when (item.level) {
         LogLevel.ERROR -> Color(0xFFFF7B7B)
         LogLevel.WARN -> Color(0xFFFFD37B)
@@ -76,10 +79,10 @@ private fun LogRow(item: LogEvent) {
     Column(Modifier.fillMaxWidth().padding(vertical = 5.dp)) {
         Row {
             Text(item.level.name.padEnd(5), color = color, fontSize = 11.sp, fontWeight = FontWeight.Bold, modifier = Modifier.width(55.dp))
-            Text(item.module, color = Color(0xFFC4CED5), fontSize = 11.sp, modifier = Modifier.width(150.dp))
-            Text(item.event, color = Color(0xFF93A1AB), fontSize = 11.sp)
+            Text(item.module, color = palette.onBackground, fontSize = 11.sp, modifier = Modifier.width(150.dp))
+            Text(item.event, color = palette.muted, fontSize = 11.sp)
         }
-        Text(item.message, color = Color(0xFFD5DCE1), fontSize = 12.sp)
-        if (item.fields.isNotEmpty()) Text(item.fields.entries.joinToString("  ") { "${it.key}=${it.value}" }, color = Color(0xFF6F7F89), fontSize = 10.sp)
+        Text(item.message, color = palette.onBackground, fontSize = 12.sp)
+        if (item.fields.isNotEmpty()) Text(item.fields.entries.joinToString("  ") { "${it.key}=${it.value}" }, color = palette.onMuted, fontSize = 10.sp)
     }
 }

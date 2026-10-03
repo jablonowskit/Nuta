@@ -292,11 +292,12 @@ internal fun SearchScreen(
 
 @Composable
 private fun SearchScopeCheckbox(label: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
+    val palette = LocalNutaPalette.current
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier.clickable { onCheckedChange(!checked) },
     ) {
         Checkbox(checked = checked, onCheckedChange = onCheckedChange)
-        Text(label, fontSize = 12.sp, color = Color(0xFFD5DCE1))
+        Text(label, fontSize = 12.sp, color = palette.onBackground)
     }
 }

@@ -105,7 +105,7 @@ class SpotifyAndroidRepository(
             }
             offset += items.size
             val total = page["totalCount"]?.asText()?.toIntOrNull() ?: offset
-            hasNext = items.isNotEmpty() && offset < total && result.size < 500
+            hasNext = items.isNotEmpty() && offset < total
         } while (hasNext)
         return result.distinctBy(Track::id).also(::writeLikedCache)
     }
@@ -298,9 +298,9 @@ class SpotifyAndroidRepository(
                         "SpotifyAndroid",
                         "graphql_rejected",
                         "Spotify odrzuciło zapytanie GraphQL",
-                        fields = mapOf("statusCode" to status.toString(), "response" to response.take(300)),
+                        fields = mapOf("statusCode" to status.toString(), "operation" to operation),
                     )
-                    error("Spotify GraphQL HTTP $status: ${response.take(120)}")
+                    error("Spotify GraphQL HTTP $status ($operation)")
                 }
                 val parsed = json.parseToJsonElement(response)
                 val graphqlErrors = parsed.asObject()?.get("errors") as? JsonArray
@@ -310,7 +310,7 @@ class SpotifyAndroidRepository(
                         "SpotifyAndroid",
                         "graphql_error",
                         "Spotify zwróciło błąd GraphQL mimo HTTP 200",
-                        fields = mapOf("operation" to operation, "message" to message, "response" to response.take(300)),
+                        fields = mapOf("operation" to operation, "errorCode" to message.take(80)),
                     )
                     error("Spotify GraphQL error ($operation): $message")
                 }

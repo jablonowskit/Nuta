@@ -185,10 +185,12 @@ private fun NutaAppContent(container: AppContainer) {
         var savedPlaylistsLoaded by remember { mutableStateOf(false) }
         var loading by remember { mutableStateOf(true) }
         var loadError by remember { mutableStateOf<String?>(null) }
+        var loadRetryGeneration by remember { mutableStateOf(0) }
         var searchState by remember { mutableStateOf(SearchViewState()) }
         var likedTracks by remember { mutableStateOf<List<Track>>(emptyList()) }
         var likedLoading by remember { mutableStateOf(false) }
         var likedLoaded by remember { mutableStateOf(false) }
+        var likedRetryGeneration by remember { mutableStateOf(0) }
         var likedError by remember { mutableStateOf<String?>(null) }
         var similarModeActive by remember { mutableStateOf(false) }
         var similarModeLoading by remember { mutableStateOf(false) }
@@ -276,7 +278,9 @@ private fun NutaAppContent(container: AppContainer) {
             selectedPlaylist = null
         }
 
-        LaunchedEffect(container.spotifyRepository, playbackSettings.dataSource) {
+        LaunchedEffect(container.spotifyRepository, playbackSettings.dataSource, loadRetryGeneration) {
+            loadError = null
+            loading = true
             container.logger.info("Application", "app_started", "Uruchomiono Nuta Linux GUI")
             runCatching { container.spotifyRepository.getPlaylists() }
                 .onSuccess { playlists = it }
@@ -284,7 +288,7 @@ private fun NutaAppContent(container: AppContainer) {
             loading = false
         }
 
-        LaunchedEffect(destination, container.spotifyRepository, playbackSettings.dataSource) {
+        LaunchedEffect(destination, container.spotifyRepository, playbackSettings.dataSource, loadRetryGeneration) {
             if (destination != Destination.PLAYLISTS || savedPlaylistsLoaded) return@LaunchedEffect
             runCatching { container.spotifyRepository.getSavedPlaylists() }
                 .onSuccess { savedPlaylists = it; savedPlaylistsLoaded = true }
@@ -300,23 +304,26 @@ private fun NutaAppContent(container: AppContainer) {
             if (remaining > 3) return@LaunchedEffect
             val seed = playerState.currentTrack ?: return@LaunchedEffect
             similarModeLoading = true
-            runCatching { container.spotifyRepository.getTrackRadio(seed) }
-                .onSuccess { recommendations ->
+            try {
+                val recommendations = container.spotifyRepository.getTrackRadio(seed)
                     val knownIds = playerState.queue.mapTo(mutableSetOf(), Track::id)
-                    val uniqueAdditions = recommendations.shuffled().filter { knownIds.add(it.id) }
-                    val additions = uniqueAdditions.ifEmpty {
-                        recommendations.shuffled().filterNot { it.id == seed.id }
-                    }
+                    val additions = recommendations.shuffled().filter { knownIds.add(it.id) }
                     container.audioPlayer.appendToQueue(additions)
                     container.logger.info(
                         "SpotifyRadio", "continuous_queue_extended", "Automatycznie rozszerzono kolejkę podobnych utworów",
                         fields = mapOf("added" to additions.size.toString()),
                     )
-                }
-                .onFailure {
-                    container.logger.warn("SpotifyRadio", "continuous_queue_failed", "Nie udało się rozszerzyć kolejki podobnych utworów", fields = mapOf("reason" to (it::class.simpleName ?: "unknown")))
-                }
-            similarModeLoading = false
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Throwable) {
+                container.logger.warn("SpotifyRadio", "continuous_queue_failed", "Nie udało się rozszerzyć kolejki podobnych utworów", fields = mapOf("reason" to (error::class.simpleName ?: "unknown")))
+            } finally {
+                similarModeLoading = false
+            }
+        }
+
+        LaunchedEffect(playerState.queue.isEmpty()) {
+            if (playerState.queue.isEmpty()) similarModeActive = false
         }
 
         LaunchedEffect(container.spotifyRepository) {
@@ -330,7 +337,7 @@ private fun NutaAppContent(container: AppContainer) {
             likedLoaded = false
             likedTracks = emptyList()
         }
-        LaunchedEffect(destination, container.spotifyRepository, playbackSettings.dataSource) {
+        LaunchedEffect(destination, container.spotifyRepository, playbackSettings.dataSource, likedRetryGeneration) {
             if (destination != Destination.PLAYLISTS && destination != Destination.LIKED || likedLoaded || likedLoading) return@LaunchedEffect
             likedLoading = true
             likedError = null
@@ -422,7 +429,14 @@ private fun NutaAppContent(container: AppContainer) {
                         }
                         when {
                             loading -> CircularProgressIndicator(Modifier.align(Alignment.Center))
-                            loadError != null -> ErrorState(loadError ?: errorUnknownLabel)
+                            loadError != null -> Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                ErrorState(loadError ?: errorUnknownLabel)
+                                Spacer(Modifier.height(10.dp))
+                                Button(onClick = {
+                                    savedPlaylistsLoaded = false
+                                    loadRetryGeneration++
+                                }) { Text("Ponów") }
+                            }
                             selectedPlaylist != null -> PlaylistDetails(
                                 selectedPlaylist!!,
                                 playerState,
@@ -439,7 +453,18 @@ private fun NutaAppContent(container: AppContainer) {
                                     onSelectPlaylist = ::selectPlaylist,
                                 )
                                 Destination.PLAYLISTS -> PlaylistsScreen(savedPlaylists, ::selectPlaylist, onCreatePlaylist = { createPlaylistDialogOpen = true })
-                                Destination.LIKED -> LikedScreen(likedTracks, likedLoading, likedError, playerState, container, onAddToPlaylist = ::openAddToPlaylistDialog)
+                                Destination.LIKED -> LikedScreen(
+                                    likedTracks,
+                                    likedLoading,
+                                    likedError,
+                                    playerState,
+                                    container,
+                                    onAddToPlaylist = ::openAddToPlaylistDialog,
+                                    onRetry = {
+                                        likedLoaded = false
+                                        likedRetryGeneration++
+                                    },
+                                )
                                 Destination.SEARCH -> SearchScreen(
                                     container = container,
                                     state = searchState,

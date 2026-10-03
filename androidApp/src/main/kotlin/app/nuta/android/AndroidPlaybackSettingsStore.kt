@@ -11,33 +11,43 @@ import app.nuta.settings.YouTubeClientProfile
 import app.nuta.settings.AudioSource
 import app.nuta.settings.DataSource
 import app.nuta.settings.AppTheme
+import app.nuta.settings.CredentialStore
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
-class AndroidPlaybackSettingsStore(private val preferences: SharedPreferences) : PlaybackSettingsStore {
+class AndroidPlaybackSettingsStore(
+    private val preferences: SharedPreferences,
+    private val credentials: CredentialStore,
+) : PlaybackSettingsStore {
     private val state = MutableStateFlow(read())
     override val settings: StateFlow<YouTubePlaybackSettings> = state.asStateFlow()
 
     override fun update(value: YouTubePlaybackSettings) {
+        val validated = value.copy(
+            fontScale = value.fontScale.coerceIn(0.5f, 1f),
+            cacheSizeMb = value.cacheSizeMb.coerceIn(25, 500),
+        )
         preferences.edit()
-            .putFloat("fontScale", value.fontScale)
-            .putString("youtubeQuality", value.quality.name)
-            .putString("youtubeCodec", value.codec.name)
-            .putString("youtubeBuffer", value.bufferSize.name)
-            .putString("loudnessNormalization", value.loudnessNormalization.name)
-            .putString("youtubeClientProfile", value.youtubeClientProfile.name)
-            .putString("audioSource", value.audioSource.name)
-            .putString("dataSource", value.dataSource.name)
-            .putString("listenBrainzUsername", value.listenBrainzUsername)
-            .putString("listenBrainzApiToken", value.listenBrainzApiToken)
-            .putBoolean("prefetchEnabled", value.prefetchEnabled)
-            .putBoolean("playerCollapsed", value.playerCollapsed)
-            .putInt("cacheSizeMb", value.cacheSizeMb)
-            .putBoolean("cassetteBackground", value.cassetteBackground)
-            .putString("theme", value.theme.name)
+            .putFloat("fontScale", validated.fontScale)
+            .putString("youtubeQuality", validated.quality.name)
+            .putString("youtubeCodec", validated.codec.name)
+            .putString("youtubeBuffer", validated.bufferSize.name)
+            .putString("loudnessNormalization", validated.loudnessNormalization.name)
+            .putString("youtubeClientProfile", validated.youtubeClientProfile.name)
+            .putString("audioSource", validated.audioSource.name)
+            .putString("dataSource", validated.dataSource.name)
+            .putString("listenBrainzUsername", validated.listenBrainzUsername)
+            .putBoolean("prefetchEnabled", validated.prefetchEnabled)
+            .putBoolean("playerCollapsed", validated.playerCollapsed)
+            .putInt("cacheSizeMb", validated.cacheSizeMb)
+            .putBoolean("cassetteBackground", validated.cassetteBackground)
+            .putString("theme", validated.theme.name)
+            .remove("listenBrainzApiToken")
             .apply()
-        state.value = value
+        if (validated.listenBrainzApiToken.isBlank()) credentials.clear(ListenBrainzTokenKey)
+        else credentials.save(ListenBrainzTokenKey, validated.listenBrainzApiToken)
+        state.value = validated
     }
 
     private fun read() = YouTubePlaybackSettings(
@@ -50,7 +60,7 @@ class AndroidPlaybackSettingsStore(private val preferences: SharedPreferences) :
         audioSource = enumValue(preferences.getString("audioSource", null), AudioSource.YOUTUBE),
         dataSource = enumValue(preferences.getString("dataSource", null), DataSource.SPOTIFY),
         listenBrainzUsername = preferences.getString("listenBrainzUsername", "") ?: "",
-        listenBrainzApiToken = preferences.getString("listenBrainzApiToken", "") ?: "",
+        listenBrainzApiToken = readTokenAndMigrate(),
         prefetchEnabled = preferences.getBoolean("prefetchEnabled", false),
         playerCollapsed = preferences.getBoolean("playerCollapsed", false),
         cacheSizeMb = preferences.getInt("cacheSizeMb", 150).coerceIn(25, 500),
@@ -60,4 +70,18 @@ class AndroidPlaybackSettingsStore(private val preferences: SharedPreferences) :
 
     private inline fun <reified T : Enum<T>> enumValue(value: String?, fallback: T): T =
         value?.let { runCatching { enumValueOf<T>(it) }.getOrNull() } ?: fallback
+
+    private fun readTokenAndMigrate(): String {
+        credentials.load(ListenBrainzTokenKey)?.let { return it }
+        val legacy = preferences.getString("listenBrainzApiToken", "").orEmpty()
+        if (legacy.isNotBlank()) {
+            credentials.save(ListenBrainzTokenKey, legacy)
+            preferences.edit().remove("listenBrainzApiToken").apply()
+        }
+        return legacy
+    }
+
+    private companion object {
+        const val ListenBrainzTokenKey = "listenbrainz.api-token"
+    }
 }

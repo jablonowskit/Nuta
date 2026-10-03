@@ -121,15 +121,28 @@ class SpotifyWebSearchRepository(
             offset += items.size
             val total = page["totalCount"]?.jsonPrimitive?.content?.toIntOrNull() ?: offset
             val hasNext = offset < total && items.isNotEmpty()
-        } while (hasNext && tracks.size < 500)
+        } while (hasNext)
         val result = tracks.distinctBy(Track::id)
         logger.info("SpotifyLiked", "liked_completed", "Pobrano ulubione utwory Spotify", operationId, mapOf("count" to result.size.toString()))
         return result
     }
 
     override suspend fun isTrackLiked(trackId: String): Boolean {
-        val response = libraryRequest("GET", "contains", trackId)
-        return (response as? JsonArray)?.firstOrNull()?.jsonPrimitive?.content?.toBooleanStrictOrNull() ?: false
+        val token = validToken()
+        val body = JsonObject(mapOf(
+            "variables" to JsonObject(mapOf(
+                "uris" to JsonArray(listOf(JsonPrimitive("spotify:track:$trackId"))),
+            )),
+            "operationName" to JsonPrimitive("areEntitiesInLibrary"),
+            "extensions" to JsonObject(mapOf("persistedQuery" to JsonObject(mapOf(
+                "version" to JsonPrimitive(1),
+                "sha256Hash" to JsonPrimitive(AreEntitiesInLibraryHash),
+            )))),
+        )).toString()
+        val root = postJson("https://api-partner.spotify.com/pathfinder/v2/query", body, token)
+        val lookup = root.jsonObject["data"]?.jsonObject?.get("lookup") as? JsonArray
+        return lookup?.firstOrNull()?.jsonObject?.get("data")?.jsonObject?.get("saved")
+            ?.jsonPrimitive?.content?.toBooleanStrictOrNull() ?: false
     }
 
     override suspend fun setTrackLiked(track: Track, liked: Boolean) {
@@ -426,6 +439,7 @@ class SpotifyWebSearchRepository(
         private const val HomeHash = "76243c78b0e20ecdbe41b794dec8cbe73f75e585b0a7201b8d2e84578412847a"
         private const val PlaylistContentsHash = "a65e12194ed5fc443a1cdebed5fabe33ca5b07b987185d63c72483867ad13cb4"
         private const val LibraryTracksHash = "087278b20b743578a6262c2b0b4bcd20d879c503cc359a2285baf083ef944240"
+        private const val AreEntitiesInLibraryHash = "134337999233cc6fdd6b1e6dbf94841409f04a946c5c7b744b09ba0dfe5a85ed"
         private const val BrowserUserAgent = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/128.0 Safari/537.36"
     }
 }
