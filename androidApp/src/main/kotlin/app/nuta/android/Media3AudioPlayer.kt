@@ -3,7 +3,6 @@ package app.nuta.android
 import android.content.SharedPreferences
 import android.util.Base64
 import androidx.media3.common.MediaItem
-import androidx.media3.common.MediaMetadata
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import app.nuta.core.logging.NutaLogger
@@ -299,6 +298,12 @@ class Media3AudioPlayer(
                 streamBitrate = null,
                 streamCodec = null,
             )
+            // Chip Samsunga czyta MediaItem z sesji, a resolve YouTube trwa sekundy — bez tej
+            // podmiany w pasku zostaje poprzedni utwór (ZZ Top przy Limahlu, 2026-10-03).
+            withContext(Dispatchers.Main) {
+                if (!isCurrentLoad(generation, track.id)) return@withContext
+                publishSessionMetadata(track)
+            }
             val resolution = resolveForPlayback(track)
             if (!isCurrentLoad(generation, track.id)) return
             val url = resolution.stream.url.use { it }
@@ -309,12 +314,9 @@ class Media3AudioPlayer(
             withContext(Dispatchers.Main) {
                 if (!isCurrentLoad(generation, track.id)) return@withContext
                 player.setMediaItem(MediaItem.Builder()
+                    .setMediaId(track.id)
                     .setUri(url)
-                    .setMediaMetadata(MediaMetadata.Builder()
-                        .setTitle(track.title)
-                        .setArtist(track.artists.joinToString())
-                        .setAlbumTitle(track.album)
-                        .build())
+                    .setMediaMetadata(NotificationArtwork.metadata(track))
                     .build())
                 player.prepare()
                 if (resumeFromMs != null) player.seekTo(resumeFromMs)
@@ -338,6 +340,18 @@ class Media3AudioPlayer(
         synchronized(loadLock) {
             generation == playbackGeneration && stateFlow.value.currentTrack?.id == trackId
         }
+
+    /** Podmienia tylko metadane bieżącego itemu — strumień zostaje, chip w pasku już się zmienia. */
+    private fun publishSessionMetadata(track: Track) {
+        val metadata = NotificationArtwork.metadata(track)
+        if (player.mediaItemCount > 0) {
+            val index = player.currentMediaItemIndex.coerceAtLeast(0)
+            val current = player.getMediaItemAt(index)
+            player.replaceMediaItem(index, current.buildUpon().setMediaId(track.id).setMediaMetadata(metadata).build())
+        } else {
+            player.setMediaItem(MediaItem.Builder().setMediaId(track.id).setMediaMetadata(metadata).build())
+        }
+    }
 
     private fun cancelLoad() {
         synchronized(loadLock) {
