@@ -131,4 +131,7 @@
     <string name="error_unknown">Nieznany błąd</string>
     <string name="unknown_error">nieznany błąd</string>
     <string name="playback_connect_failed">Nie udało się połączyć z usługą odtwarzania</string>
+    <string name="retry">Ponów</string>
+    <string name="listenbrainz_token_invalid">Token ListenBrainz jest nieprawidłowy — wpisz go ponownie w Ustawieniach</string>
+    <string name="listenbrainz_token_unreadable">Nie udało się odczytać zapisanego tokenu — wpisz go ponownie</string>
 </resources>

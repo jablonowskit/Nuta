@@ -28,6 +28,7 @@ class SpotifyAndroidRepository(
     private val token: SpotifyWebToken,
     private val logger: NutaLogger,
     private val cache: SharedPreferences,
+    private val onSessionInvalid: () -> Unit = {},
 ) : SpotifyRepository {
     private val json = Json { ignoreUnknownKeys = true }
 
@@ -241,7 +242,7 @@ class SpotifyAndroidRepository(
         ?: error("Nie udało się ustalić identyfikatora użytkownika Spotify")
 
     private suspend fun restRequest(method: String, url: String, body: String?): JsonElement {
-        check(token.expiresAtMs > System.currentTimeMillis() + 30_000) { "Sesja Spotify wygasła. Zaloguj się ponownie." }
+        check(token.expiresAtMs > System.currentTimeMillis() + TokenExpiryMarginMs) { "Sesja Spotify wygasła. Zaloguj się ponownie." }
         return withContext(Dispatchers.IO) {
             val connection = URL(url).openConnection() as HttpURLConnection
             try {
@@ -258,6 +259,10 @@ class SpotifyAndroidRepository(
                 val status = connection.responseCode
                 val response = (if (status in 200..299) connection.inputStream else connection.errorStream)
                     ?.bufferedReader()?.use { it.readText() }.orEmpty()
+                if (status == 401 || status == 403) {
+                    onSessionInvalid()
+                    error("Sesja Spotify wygasła. Zaloguj się ponownie.")
+                }
                 require(status in 200..299) { "Spotify REST HTTP $status" }
                 if (response.isBlank()) JsonObject(emptyMap()) else json.parseToJsonElement(response)
             } finally {
@@ -267,7 +272,7 @@ class SpotifyAndroidRepository(
     }
 
     private suspend fun query(operation: String, hash: String, variables: JsonObject): JsonElement {
-        check(token.expiresAtMs > System.currentTimeMillis() + 30_000) { "Sesja Spotify wygasła. Zaloguj się ponownie." }
+        check(token.expiresAtMs > System.currentTimeMillis() + TokenExpiryMarginMs) { "Sesja Spotify wygasła. Zaloguj się ponownie." }
         val body = JsonObject(mapOf(
             "variables" to variables,
             "operationName" to JsonPrimitive(operation),
@@ -293,6 +298,10 @@ class SpotifyAndroidRepository(
                 val status = connection.responseCode
                 val response = (if (status in 200..299) connection.inputStream else connection.errorStream)
                     ?.bufferedReader()?.use { it.readText() }.orEmpty()
+                if (status == 401 || status == 403) {
+                    onSessionInvalid()
+                    error("Sesja Spotify wygasła. Zaloguj się ponownie.")
+                }
                 if (status !in 200..299) {
                     logger.warn(
                         "SpotifyAndroid",
@@ -385,6 +394,8 @@ class SpotifyAndroidRepository(
     private fun JsonElement.asText() = (this as? JsonPrimitive)?.contentOrNull
 
     companion object {
+        /** Ten sam margines co MainActivity — API i UI zgadzają się co do „zaraz wygaśnie”. */
+        const val TokenExpiryMarginMs = 60_000L
         private const val SEARCH_HASH = "bc1ca2fcd0ba1013a0fc88e6cc4f190af501851e3dafd3e1ef85840297694428"
         private const val HOME_HASH = "76243c78b0e20ecdbe41b794dec8cbe73f75e585b0a7201b8d2e84578412847a"
         private const val PLAYLIST_HASH = "a65e12194ed5fc443a1cdebed5fabe33ca5b07b987185d63c72483867ad13cb4"

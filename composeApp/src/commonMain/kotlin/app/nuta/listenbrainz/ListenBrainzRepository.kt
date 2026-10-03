@@ -5,6 +5,8 @@ import app.nuta.core.models.Artist
 import app.nuta.core.models.Playlist
 import app.nuta.core.models.SearchResult
 import app.nuta.core.models.Track
+import app.nuta.data.EmptyLikedTracksCache
+import app.nuta.data.LikedTracksCache
 import app.nuta.domain.SpotifyRepository
 import app.nuta.musicbrainz.MusicBrainzRepository
 import app.nuta.net.httpGet
@@ -23,6 +25,7 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -40,6 +43,7 @@ class ListenBrainzRepository(
     private val settingsStore: PlaybackSettingsStore,
     private val musicBrainz: MusicBrainzRepository,
     private val logger: NutaLogger,
+    private val likedCache: LikedTracksCache = EmptyLikedTracksCache,
 ) : SpotifyRepository {
     private val json = Json { ignoreUnknownKeys = true }
     private var cachedRecommendations: List<Track>? = null
@@ -53,6 +57,37 @@ class ListenBrainzRepository(
         val token = apiToken()
         check(token.isNotBlank()) { "Skonfiguruj token ListenBrainz w Ustawieniach" }
         return token
+    }
+
+    /**
+     * `GET /1/validate-token` z nagłówkiem Authorization (wyższy rate limit niż ?token=).
+     * Zweryfikowane w docs ListenBrainz; kształt odpowiedzi: `valid` bool.
+     */
+    override suspend fun validateSession(): Boolean {
+        val token = apiToken()
+        if (token.isBlank()) return false
+        return runCatching {
+            val response = httpGet(
+                "https://api.listenbrainz.org/1/validate-token",
+                headers = mapOf("Authorization" to "Token $token"),
+            )
+            json.parseToJsonElement(response).jsonObject["valid"]?.jsonPrimitive?.booleanOrNull == true
+        }.getOrElse { error ->
+            if (error is CancellationException) throw error
+            logger.warn("ListenBrainz", "validate_token_failed", "Nie udało się zweryfikować tokenu", fields = mapOf("reason" to (error.message ?: "unknown")))
+            false
+        }
+    }
+
+    override suspend fun getCachedLikedTracks(): List<Track> {
+        val memory = cachedLikedTracks.takeIf { cachedLikedUser == username() }
+        if (memory != null) return memory
+        val disk = likedCache.load()
+        if (disk.isNotEmpty()) {
+            cachedLikedUser = username()
+            cachedLikedTracks = disk
+        }
+        return disk
     }
 
     override suspend fun getPlaylists(): List<Playlist> {
@@ -140,6 +175,7 @@ class ListenBrainzRepository(
         }.also {
             cachedLikedUser = user
             cachedLikedTracks = it
+            likedCache.save(it)
         }
     }
 
@@ -164,6 +200,7 @@ class ListenBrainzRepository(
             } else {
                 cachedLikedTracks.orEmpty().filterNot { it.id == mbid || it.id == track.id }
             }
+            likedCache.save(cachedLikedTracks.orEmpty())
         }
         logger.info("ListenBrainz", "feedback_set", "Zapisano polubienie ListenBrainz", fields = mapOf("trackId" to mbid, "liked" to liked.toString()))
     }

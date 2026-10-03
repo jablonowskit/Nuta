@@ -119,7 +119,8 @@ fun SpotifyAndroidLogin(
     }
 }
 
-private suspend fun fetchSpotifyToken(logger: NutaLogger): SpotifyWebToken = withContext(Dispatchers.IO) {
+/** Cichy refresh z CookieManager — używane też z [MainActivity] 5 min przed wygaśnięciem. */
+internal suspend fun fetchSpotifyToken(logger: NutaLogger): SpotifyWebToken = withContext(Dispatchers.IO) {
     val cookies = android.webkit.CookieManager.getInstance().getCookie("https://open.spotify.com").orEmpty()
     require(cookies.split(';').any { it.trim().startsWith("sp_dc=") }) { "Brak cookie sp_dc" }
     logger.info("SpotifyAndroidLogin", "cookie_detected", "Wykryto cookie sesji Spotify")
