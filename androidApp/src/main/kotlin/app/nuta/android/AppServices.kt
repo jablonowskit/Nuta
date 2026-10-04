@@ -41,6 +41,8 @@ object AppServices {
     /** Anulowany i tworzony od nowa przy każdym połączeniu — patrz connectController. */
     @Volatile private var scrobblerScope: CoroutineScope? = null
     @Volatile private var reconnectJob: Job? = null
+    /** True od startu buildAsync do sukcesu/porażki — blokuje równoległy drugi connect. */
+    @Volatile private var connecting = false
     @Volatile private var appContext: Context? = null
     private var networkCallback: ConnectivityManager.NetworkCallback? = null
 
@@ -48,7 +50,7 @@ object AppServices {
         private set
     lateinit var playbackSettings: AndroidPlaybackSettingsStore
         private set
-    /** Dla Settings: uszkodzony blob tokenu ListenBrainz. */
+    /** Dla Settings: uszkodzony blob tokenu ListenBrainz — czytaj świeżo, nie cache'uj w Compose. */
     val listenBrainzTokenUnreadable: Boolean
         get() = if (::playbackSettings.isInitialized) playbackSettings.listenBrainzTokenUnreadable else false
     lateinit var youtubeMediaService: YouTubeMediaService
@@ -58,7 +60,7 @@ object AppServices {
 
     val audioPlayer = MutableStateFlow<Media3AudioPlayer?>(null)
     val playerConnectFailed = MutableStateFlow(false)
-    /** Emitowane przy powrocie sieci lub onResume Activity — UI odświeża listy (App.kt). */
+    /** Emitowane przy powrocie sieci — UI odświeża listy (App.kt). Nie przy każdym onResume. */
     private val _networkResumed = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
     val networkResumed: SharedFlow<Unit> = _networkResumed.asSharedFlow()
     /** Sesja Spotify unieważniona (401/403) — MainActivity zeruje token. */
@@ -101,7 +103,7 @@ object AppServices {
             return
         }
         if (audioPlayer.value != null) return
-        if (reconnectJob?.isActive == true) return
+        if (isConnectInFlight()) return
         playerConnectFailed.value = false
         logger.info("Playback", "retry_connect", "Ponawiam połączenie z usługą odtwarzania")
         scheduleReconnect(ctx, attempt = 0)
@@ -111,12 +113,10 @@ object AppServices {
         _spotifySessionInvalid.tryEmit(Unit)
     }
 
-    /** Activity wróciła na pierwszy plan — odśwież listy (nie tylko MediaController). */
-    fun notifyUiResumed() {
-        _networkResumed.tryEmit(Unit)
-    }
+    fun isReconnectInProgress(): Boolean = isConnectInFlight()
 
-    fun isReconnectInProgress(): Boolean = reconnectJob?.isActive == true
+    private fun isConnectInFlight(): Boolean =
+        connecting || reconnectJob?.isActive == true
 
     /**
      * Łączy się z usługą odtwarzania i — co najważniejsze — obsługuje rozłączenie. Wcześniej nic
@@ -126,13 +126,15 @@ object AppServices {
      * kontroler i łączymy się ponownie, żeby odtwarzanie dało się wznowić bez restartu apki.
      */
     private fun connectController(context: Context, attempt: Int) {
+        if (connecting) return
+        connecting = true
         val sessionToken = SessionToken(context, ComponentName(context, PlaybackService::class.java))
         val future = MediaController.Builder(context, sessionToken)
             .setListener(object : MediaController.Listener {
                 override fun onDisconnected(controller: MediaController) {
                     logger.warn("Playback", "controller_disconnected", "Usługa odtwarzania rozłączona — łączę ponownie")
-                    controller.release()
-                    replacePlayer(null)
+                    // Kontroler już się rozłącza — wrapper nie może wołać controller.release() drugi raz.
+                    clearPlayer(releaseController = false)
                     scheduleReconnect(context, attempt = 0)
                 }
             })
@@ -143,6 +145,9 @@ object AppServices {
                     playerConnectFailed.value = false
                     reconnectJob?.cancel()
                     reconnectJob = null
+                    // Najpierw zwolnij poprzedni wrapper+kontroler, dopiero potem buduj nowy
+                    // (inaczej previous.release() czyści bridge ustawiony w init nowego playera).
+                    clearPlayer(releaseController = true)
                     val player = Media3AudioPlayer(
                         controller,
                         scope,
@@ -151,18 +156,15 @@ object AppServices {
                         context.getSharedPreferences("playback-queue", Context.MODE_PRIVATE),
                         playbackSettings,
                     )
-                    replacePlayer(player)
-                    // Scrobbler sam sprawdza dataSource przy każdym utworze, więc podłączamy go
-                    // raz, do skope'u procesu — niezależnie od aktualnie wybranego źródła danych.
-                    // Własny scope per połączenie: po rozłączeniu i ponownym podpięciu stary
-                    // scrobbler musi zniknąć, inaczej każde odsłuchanie poszłoby zgłoszone tyle
-                    // razy, ile było połączeń.
+                    audioPlayer.value = player
+                    connecting = false
                     scrobblerScope?.cancel()
                     val attachScope = CoroutineScope(Dispatchers.Default + SupervisorJob())
                     scrobblerScope = attachScope
                     ListenBrainzScrobbler(playbackSettings, logger).attach(player, attachScope)
                 }
                 .onFailure { error ->
+                    connecting = false
                     logger.error("Playback", "controller_connect_failed", "Nie udało się połączyć z usługą odtwarzania", throwable = error)
                     if (attempt < MAX_CONNECT_ATTEMPTS - 1) {
                         scheduleReconnect(context, attempt + 1)
@@ -173,21 +175,19 @@ object AppServices {
         }, ContextCompat.getMainExecutor(context))
     }
 
-    private fun replacePlayer(player: Media3AudioPlayer?) {
+    private fun clearPlayer(releaseController: Boolean) {
         val previous = audioPlayer.value
-        if (previous === player) return
-        // Najpierw release starego (czyści bridge), potem nowy ustawia bridge w init.
-        previous?.release()
-        audioPlayer.value = player
+        audioPlayer.value = null
+        previous?.release(releaseController = releaseController)
     }
 
     @Synchronized
     private fun scheduleReconnect(context: Context, attempt: Int) {
-        if (reconnectJob?.isActive == true) return
+        if (reconnectJob?.isActive == true || connecting) return
         reconnectJob = scope.launch {
             if (attempt > 0) delay((CONNECT_RETRY_BASE_MS * (1L shl (attempt - 1))).coerceAtMost(CONNECT_RETRY_MAX_MS))
-            reconnectJob = null
             connectController(context, attempt)
+            reconnectJob = null
         }
     }
 

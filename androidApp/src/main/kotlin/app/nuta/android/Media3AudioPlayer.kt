@@ -5,6 +5,7 @@ import android.util.Base64
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
+import androidx.media3.session.MediaController
 import app.nuta.core.logging.NutaLogger
 import app.nuta.core.models.PlayerState
 import app.nuta.core.models.PlayerStatus
@@ -127,10 +128,11 @@ class Media3AudioPlayer(
     }
 
     /**
-     * Zwalnia listenery i korutyny tego wrappera. Nie zwalnia samego [player] (żyje w serwisie).
-     * Wołane przed podmianą przy reconnect, żeby nie zbierać listenerów.
+     * Zwalnia listenery i korutyny tego wrappera.
+     * @param releaseController true przy podmianie na nowy MediaController; false w
+     *   `onDisconnected`, gdzie kontroler jest już w trakcie zwalniania przez sesję.
      */
-    fun release() {
+    fun release(releaseController: Boolean = true) {
         if (released) return
         released = true
         cancelLoad()
@@ -146,6 +148,9 @@ class Media3AudioPlayer(
         // AppServices woła release() PRZED utworzeniem nowego playera, więc bridge jest jeszcze nasz.
         PlaybackQueueBridge.onNext = null
         PlaybackQueueBridge.onPrevious = null
+        if (releaseController) {
+            runCatching { (player as? MediaController)?.release() }
+        }
     }
 
     /** Dopasowuje stateFlow do aktualnego ExoPlayera (po reconnect / cold start z żywą sesją). */

@@ -134,4 +134,5 @@
     <string name="retry">Ponów</string>
     <string name="listenbrainz_token_invalid">Token ListenBrainz jest nieprawidłowy — wpisz go ponownie w Ustawieniach</string>
     <string name="listenbrainz_token_unreadable">Nie udało się odczytać zapisanego tokenu — wpisz go ponownie</string>
+    <string name="listenbrainz_token_configure">Skonfiguruj token ListenBrainz w Ustawieniach</string>
 </resources>

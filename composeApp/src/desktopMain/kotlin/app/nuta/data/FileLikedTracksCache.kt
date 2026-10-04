@@ -2,8 +2,6 @@ package app.nuta.data
 
 import app.nuta.core.models.Track
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonArray
-import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
@@ -23,27 +21,34 @@ class FileLikedTracksCache(
 ) : LikedTracksCache {
     private val json = Json { ignoreUnknownKeys = true }
 
-    override fun load(): List<Track> = runCatching {
-        if (!Files.isRegularFile(path)) return emptyList()
-        val root = json.parseToJsonElement(Files.readString(path)).jsonObject
-        val tracks = root["tracks"]?.jsonArray ?: return emptyList()
-        tracks.mapNotNull { element ->
-            val o = element.jsonObject
-            Track(
-                id = o["id"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null,
-                title = o["title"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null,
-                artists = o["artists"]?.jsonArray?.mapNotNull { it.jsonPrimitive.contentOrNull } ?: emptyList(),
-                album = o["album"]?.jsonPrimitive?.contentOrNull.orEmpty(),
-                durationMs = o["durationMs"]?.jsonPrimitive?.longOrNull ?: 0L,
-                imageUrl = o["imageUrl"]?.jsonPrimitive?.contentOrNull,
-                artistMbid = o["artistMbid"]?.jsonPrimitive?.contentOrNull,
-            )
-        }
-    }.getOrDefault(emptyList())
+    override fun load(username: String): List<Track> {
+        if (username.isBlank()) return emptyList()
+        return runCatching {
+            if (!Files.isRegularFile(path)) return emptyList()
+            val root = json.parseToJsonElement(Files.readString(path)).jsonObject
+            val storedUser = root["username"]?.jsonPrimitive?.contentOrNull
+            if (storedUser != username) return emptyList()
+            val tracks = root["tracks"]?.jsonArray ?: return emptyList()
+            tracks.mapNotNull { element ->
+                val o = element.jsonObject
+                Track(
+                    id = o["id"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null,
+                    title = o["title"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null,
+                    artists = o["artists"]?.jsonArray?.mapNotNull { it.jsonPrimitive.contentOrNull } ?: emptyList(),
+                    album = o["album"]?.jsonPrimitive?.contentOrNull.orEmpty(),
+                    durationMs = o["durationMs"]?.jsonPrimitive?.longOrNull ?: 0L,
+                    imageUrl = o["imageUrl"]?.jsonPrimitive?.contentOrNull,
+                    artistMbid = o["artistMbid"]?.jsonPrimitive?.contentOrNull,
+                )
+            }
+        }.getOrDefault(emptyList())
+    }
 
-    override fun save(tracks: List<Track>) {
+    override fun save(username: String, tracks: List<Track>) {
+        if (username.isBlank()) return
         Files.createDirectories(path.parent)
         val body = buildJsonObject {
+            put("username", username)
             put("tracks", buildJsonArray {
                 tracks.forEach { t ->
                     add(buildJsonObject {

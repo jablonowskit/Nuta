@@ -82,24 +82,35 @@ class MainActivity : ComponentActivity() {
                     token = null
                 }
             }
-            // 5 min przed wygaśnięciem: cichy refresh z CookieManager; dopiero potem ekran logowania.
+            // Cichy refresh tylko w trybie Spotify. Przy failu nie kasujemy tokenu, dopóki
+            // expiresAt jest jeszcze poza marginesem — inaczej chwilowy brak sieci wylogowywał.
             val activeExpiry = token?.expiresAtMs
-            LaunchedEffect(activeExpiry) {
+            LaunchedEffect(activeExpiry, settings.dataSource) {
+                if (settings.dataSource != DataSource.SPOTIFY) return@LaunchedEffect
                 val expiry = activeExpiry ?: return@LaunchedEffect
-                val refreshAt = expiry - TokenRefreshLeadMs
-                val waitMs = (refreshAt - System.currentTimeMillis()).coerceAtLeast(0L)
-                delay(waitMs)
-                val refreshed = runCatching { fetchSpotifyToken(logger) }.getOrNull()
-                if (refreshed != null) {
-                    refreshed.value.use { value ->
-                        preferences.edit().putString("accessToken", value).putLong("expiresAt", refreshed.expiresAtMs).apply()
+                while (true) {
+                    val refreshAt = expiry - TokenRefreshLeadMs
+                    val waitMs = (refreshAt - System.currentTimeMillis()).coerceAtLeast(0L)
+                    delay(waitMs)
+                    val refreshed = runCatching { fetchSpotifyToken(logger) }.getOrNull()
+                    if (refreshed != null) {
+                        refreshed.value.use { value ->
+                            preferences.edit().putString("accessToken", value).putLong("expiresAt", refreshed.expiresAtMs).apply()
+                        }
+                        token = refreshed
+                        logger.info("SpotifySession", "token_refresh_ok", "Odświeżono token Spotify z cookies")
+                        return@LaunchedEffect
                     }
-                    token = refreshed
-                    logger.info("SpotifySession", "token_refresh_ok", "Odświeżono token Spotify z cookies")
-                } else {
+                    val stillValid = expiry > System.currentTimeMillis() + SpotifyAndroidRepository.TokenExpiryMarginMs
+                    if (stillValid) {
+                        logger.warn("SpotifySession", "token_refresh_retry", "Refresh nieudany — zostawiam ważny token, ponowię")
+                        delay(TokenRefreshRetryMs)
+                        continue
+                    }
                     preferences.edit().remove("accessToken").remove("expiresAt").apply()
                     token = null
                     logger.warn("SpotifySession", "token_refresh_failed", "Cichy refresh Spotify nieudany — logowanie")
+                    return@LaunchedEffect
                 }
             }
             if (settings.dataSource == DataSource.SPOTIFY && token == null) {
@@ -134,7 +145,7 @@ class MainActivity : ComponentActivity() {
                         playbackSettings = playbackSettings,
                         networkResumed = AppServices.networkResumed,
                         onSpotifySessionInvalid = { AppServices.notifySpotifySessionInvalid() },
-                        listenBrainzTokenUnreadable = AppServices.listenBrainzTokenUnreadable,
+                        listenBrainzTokenUnreadable = { AppServices.listenBrainzTokenUnreadable },
                     )
                 }
                 NutaApp(container)
@@ -144,14 +155,14 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
+        // Tylko reconnect gdy brak playera — odświeżanie list idzie z NetworkCallback, nie z każdego resume.
         if (AppServices.audioPlayer.value == null && !AppServices.isReconnectInProgress()) {
             AppServices.retryConnect(applicationContext)
-        } else {
-            AppServices.notifyUiResumed()
         }
     }
 
     private companion object {
         const val TokenRefreshLeadMs = 5 * 60_000L
+        const val TokenRefreshRetryMs = 3 * 60_000L
     }
 }
