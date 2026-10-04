@@ -15,10 +15,13 @@ data class AppContainer(
     val logger: MemoryLogger,
     val youtubeMediaService: YouTubeMediaService? = null,
     val playbackSettings: PlaybackSettingsStore = InMemoryPlaybackSettingsStore(),
-    /** Powrót sieci / wznowienie — UI odświeża listy. Desktop: emptyFlow. */
+    /** Powrót sieci — UI odświeża listy. Desktop: emptyFlow. */
     val networkResumed: Flow<Unit> = emptyFlow(),
     /** Wywołane gdy Spotify zwróci 401/403 — Android czyści token. */
     val onSpotifySessionInvalid: () -> Unit = {},
-    /** Keystore nie odszyfrował tokenu LB — komunikat w Ustawieniach. */
-    val listenBrainzTokenUnreadable: Boolean = false,
+    /**
+     * Keystore nie odszyfrował tokenu LB. Getter (nie stała bool), żeby Compose czytał
+     * świeżą wartość przy każdym sprawdzeniu — inaczej `remember` zamrażał stan ze startu.
+     */
+    val listenBrainzTokenUnreadable: () -> Boolean = { false },
 )
