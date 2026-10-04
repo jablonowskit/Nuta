@@ -62,8 +62,9 @@ class ListenBrainzRepository(
     /**
      * `GET /1/validate-token` z nagłówkiem Authorization (wyższy rate limit niż ?token=).
      * Zweryfikowane w docs ListenBrainz; kształt odpowiedzi: `valid` bool.
+     * Błąd sieci/HTTP → `null` (UI nie pokazuje „token nieprawidłowy”).
      */
-    override suspend fun validateSession(): Boolean {
+    override suspend fun validateSession(): Boolean? {
         val token = apiToken()
         if (token.isBlank()) return false
         return runCatching {
@@ -71,20 +72,21 @@ class ListenBrainzRepository(
                 "https://api.listenbrainz.org/1/validate-token",
                 headers = mapOf("Authorization" to "Token $token"),
             )
-            json.parseToJsonElement(response).jsonObject["valid"]?.jsonPrimitive?.booleanOrNull == true
+            parseValidateTokenValid(response)
         }.getOrElse { error ->
             if (error is CancellationException) throw error
             logger.warn("ListenBrainz", "validate_token_failed", "Nie udało się zweryfikować tokenu", fields = mapOf("reason" to (error.message ?: "unknown")))
-            false
+            null
         }
     }
 
     override suspend fun getCachedLikedTracks(): List<Track> {
-        val memory = cachedLikedTracks.takeIf { cachedLikedUser == username() }
+        val user = username()
+        val memory = cachedLikedTracks.takeIf { cachedLikedUser == user }
         if (memory != null) return memory
-        val disk = likedCache.load()
+        val disk = likedCache.load(user)
         if (disk.isNotEmpty()) {
-            cachedLikedUser = username()
+            cachedLikedUser = user
             cachedLikedTracks = disk
         }
         return disk
@@ -175,7 +177,7 @@ class ListenBrainzRepository(
         }.also {
             cachedLikedUser = user
             cachedLikedTracks = it
-            likedCache.save(it)
+            likedCache.save(user, it)
         }
     }
 
@@ -200,7 +202,7 @@ class ListenBrainzRepository(
             } else {
                 cachedLikedTracks.orEmpty().filterNot { it.id == mbid || it.id == track.id }
             }
-            likedCache.save(cachedLikedTracks.orEmpty())
+            likedCache.save(username(), cachedLikedTracks.orEmpty())
         }
         logger.info("ListenBrainz", "feedback_set", "Zapisano polubienie ListenBrainz", fields = mapOf("trackId" to mbid, "liked" to liked.toString()))
     }
@@ -622,3 +624,17 @@ class ListenBrainzRepository(
         }
     }
 }
+
+/**
+ * Parsuje pole `valid` z `/1/validate-token`. `null` gdy brak pola lub nieparsowalny JSON —
+ * to nie jest „token nieprawidłowy” (to byłoby `valid: false`).
+ */
+internal fun parseValidateTokenValid(body: String): Boolean? =
+    runCatching {
+        Json { ignoreUnknownKeys = true }
+            .parseToJsonElement(body)
+            .jsonObject["valid"]
+            ?.jsonPrimitive
+            ?.booleanOrNull
+    }.getOrNull()
+

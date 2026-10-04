@@ -9,15 +9,20 @@ import app.nuta.data.LikedTracksCache
 class SharedPreferencesLikedTracksCache(
     private val preferences: SharedPreferences,
 ) : LikedTracksCache {
-    override fun load(): List<Track> =
-        preferences.getString(Key, "").orEmpty().lineSequence().filter(String::isNotBlank).mapNotNull { row ->
+    override fun load(username: String): List<Track> {
+        if (username.isBlank()) return emptyList()
+        val storedUser = preferences.getString(UserKey, null)
+        if (storedUser != username) return emptyList()
+        return preferences.getString(TracksKey, "").orEmpty().lineSequence().filter(String::isNotBlank).mapNotNull { row ->
             runCatching {
                 val v = row.split("\u001e").map { String(Base64.decode(it, Base64.DEFAULT)) }
                 Track(v[0], v[1], v[2].split("\u001f"), v[3], v[4].toLong(), v[5].ifBlank { null }, v.getOrNull(6)?.ifBlank { null })
             }.getOrNull()
         }.toList()
+    }
 
-    override fun save(tracks: List<Track>) {
+    override fun save(username: String, tracks: List<Track>) {
+        if (username.isBlank()) return
         val value = tracks.joinToString("\n") { t ->
             listOf(
                 t.id,
@@ -29,14 +34,18 @@ class SharedPreferencesLikedTracksCache(
                 t.artistMbid.orEmpty(),
             ).joinToString("\u001e") { Base64.encodeToString(it.toByteArray(), Base64.NO_WRAP) }
         }
-        preferences.edit().putString(Key, value).apply()
+        preferences.edit()
+            .putString(UserKey, username)
+            .putString(TracksKey, value)
+            .apply()
     }
 
     override fun clear() {
-        preferences.edit().remove(Key).apply()
+        preferences.edit().remove(UserKey).remove(TracksKey).apply()
     }
 
     private companion object {
-        const val Key = "likedTracks"
+        const val UserKey = "likedTracksUser"
+        const val TracksKey = "likedTracks"
     }
 }

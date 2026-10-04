@@ -212,6 +212,7 @@ private fun NutaAppContent(container: AppContainer) {
         val errorUnknownLabel = stringResource(Res.string.error_unknown)
         val listenBrainzTokenInvalidLabel = stringResource(Res.string.listenbrainz_token_invalid)
         val listenBrainzTokenUnreadableLabel = stringResource(Res.string.listenbrainz_token_unreadable)
+        val listenBrainzTokenConfigureLabel = stringResource(Res.string.listenbrainz_token_configure)
 
         LaunchedEffect(container.networkResumed) {
             container.networkResumed.collect {
@@ -224,22 +225,23 @@ private fun NutaAppContent(container: AppContainer) {
             playbackSettings.dataSource,
             playbackSettings.listenBrainzApiToken,
             playbackSettings.listenBrainzUsername,
-            container.listenBrainzTokenUnreadable,
         ) {
             if (playbackSettings.dataSource != DataSource.LISTENBRAINZ) {
                 listenBrainzAuthWarning = null
                 return@LaunchedEffect
             }
-            if (container.listenBrainzTokenUnreadable) {
+            // Getter — świeża wartość z Keystore, nie zamrożona w remember AppContainer.
+            if (container.listenBrainzTokenUnreadable()) {
                 listenBrainzAuthWarning = listenBrainzTokenUnreadableLabel
                 return@LaunchedEffect
             }
             if (playbackSettings.listenBrainzApiToken.isBlank()) {
                 listenBrainzAuthWarning = if (playbackSettings.listenBrainzUsername.isNotBlank()) {
-                    listenBrainzTokenUnreadableLabel
+                    listenBrainzTokenConfigureLabel
                 } else null
                 return@LaunchedEffect
             }
+            // null (sieć) ≠ false (token nieprawidłowy) — ostrzeżenie tylko przy valid == false.
             val valid = runCatching { container.spotifyRepository.validateSession() }.getOrNull()
             listenBrainzAuthWarning = if (valid == false) listenBrainzTokenInvalidLabel else null
         }
@@ -250,14 +252,15 @@ private fun NutaAppContent(container: AppContainer) {
                 loadError = null
                 runCatching { container.spotifyRepository.getPlaylistTracks(playlist.id) }
                     .onSuccess { selectedPlaylist = playlist.copy(tracks = it) }
-                    .onFailure {
-                        loadError = it.message
+                    .onFailure { error ->
+                        if (error is CancellationException) throw error
+                        loadError = error.message
                         container.logger.error(
                             "SpotifyPlaylist",
                             "playlist_open_failed",
                             "Nie udało się otworzyć playlisty",
                             fields = mapOf("playlistIdLength" to playlist.id.length.toString()),
-                            throwable = it,
+                            throwable = error,
                         )
                     }
                 loading = false
@@ -282,11 +285,12 @@ private fun NutaAppContent(container: AppContainer) {
                             tracks = tracks,
                         )
                     }
-                    .onFailure {
-                        loadError = it.message ?: errorUnknownLabel
+                    .onFailure { error ->
+                        if (error is CancellationException) throw error
+                        loadError = error.message ?: errorUnknownLabel
                         container.logger.warn(
                             "Search", "artist_open_failed", "Nie udało się otworzyć wykonawcy",
-                            fields = mapOf("reason" to (it.message ?: "unknown")),
+                            fields = mapOf("reason" to (error.message ?: "unknown")),
                         )
                     }
                 loading = false

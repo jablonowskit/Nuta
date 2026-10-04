@@ -17,8 +17,9 @@ interface SpotifyRepository {
     /** Ostatnia znana lista ulubionych bez sięgania do sieci — do natychmiastowego stanu serduszka po starcie. */
     suspend fun getCachedLikedTracks(): List<Track> = emptyList()
     /**
-     * Walidacja sesji źródła danych. `null` = nie dotyczy (np. Spotify sprawdza inaczej),
-     * `true`/`false` = wynik (ListenBrainz `/validate-token`).
+     * Walidacja sesji źródła danych.
+     * - `true`/`false` — tylko z pola `valid` odpowiedzi (ListenBrainz `/validate-token`)
+     * - `null` — nie dotyczy (Spotify) albo błąd sieci/HTTP (nie mylić z nieważnym tokenem)
      */
     suspend fun validateSession(): Boolean? = null
     suspend fun isTrackLiked(trackId: String): Boolean
