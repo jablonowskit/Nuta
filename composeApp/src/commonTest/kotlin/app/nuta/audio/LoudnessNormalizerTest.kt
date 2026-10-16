@@ -134,10 +134,11 @@ class LoudnessNormalizerTest {
         repeat(quietSamples) { outputs += n.processSample(sine(-30.0, it)) }
         repeat(48_000 * 2 * 2) { outputs += n.processSample(sine(-4.0, quietSamples + it)) }
         outputs.addAll(n.drain().toList())
-        // Wyjście jest opóźnione: pierwsze 100 ms głośnego fragmentu zaczyna się w outputs[quietSamples + delay].
+        // drain() oddaje zawartość linii opóźniającej, więc wyjście jest dłuższe o samo opóźnienie
+        // (600 ms stereo), a głośny fragment zaczyna się w outputs[quietSamples + delay].
         val delay = outputs.size - quietSamples - 48_000 * 2 * 2
-        assertEquals(0, delay, "drain() miał oddać całą zawartość linii opóźniającej")
-        val firstLoud = outputs.subList(quietSamples, quietSamples + 48_000 * 2 / 10)
+        assertEquals(48_000 * 2 * 6 / 10, delay, "drain() miał oddać całą zawartość linii opóźniającej")
+        val firstLoud = outputs.subList(quietSamples + delay, quietSamples + delay + 48_000 * 2 / 10)
         val peak = firstLoud.maxOf { abs(it) }
         assertTrue(peak < loudAmplitude * 0.5f, "początek głośnego fragmentu nieściszony: $peak vs $loudAmplitude")
     }
