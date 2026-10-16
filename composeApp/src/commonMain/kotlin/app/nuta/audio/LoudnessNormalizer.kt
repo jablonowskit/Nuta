@@ -25,7 +25,8 @@ import kotlin.math.sqrt
  * 1. RMS liczony w oknie ~400 ms, tak jak „momentary loudness" w EBU R128.
  * 2. Z RMS wynika wzmocnienie potrzebne do trafienia w cel, ograniczone do [maxAttenuation,
  *    maxBoost] (maxBoost=0, więc realnie tylko do [maxAttenuation, 1.0]).
- * 3. Wzmocnienie zmienia się płynnie (attack/release), żeby nie „pompowało" na perkusji.
+ * 3. Wzmocnienie w obrębie utworu tylko maleje (zapadka) i schodzi płynnie (attack) — nigdy
+ *    nie wraca w górę, żeby głośność nie falowała. Wraca do 1.0 dopiero [reset] na nowy utwór.
  * 4. Limiter twardo przycina próbki przekraczające [Ceiling], co chroni przed przesterowaniem
  *    po wzmocnieniu.
  *
@@ -65,29 +66,80 @@ class LoudnessNormalizer(
     private var currentGain = 1.0
     private var targetGain = 1.0
 
+    /**
+     * Lookahead: wyjście jest opóźnione o okno pomiaru + [LookaheadExtraMs]. Decyzja o ściszeniu
+     * zapada na końcu okna, a wtedy z bufora wychodzą jeszcze próbki sprzed tego okna — rampa
+     * ściszenia przebiega na nich i jest prawie skończona, zanim głośny fragment dotrze do ucha.
+     * Bez tego (zgłoszone 16.10.2026) głośne wejście było słychać przez ~0.5–1 s przed ściszeniem.
+     */
+    private val delayLine = FloatArray(
+        windowSamples + (sampleRateHz * LookaheadExtraMs / 1000).coerceAtLeast(0) * channelCount,
+    )
+    private var delayPos = 0
+    private var delayFilled = 0
+
     val active: Boolean get() = targetDbfs != 0.0
 
+    /** Bieżące wzmocnienie liniowe (do testów). */
+    internal val gain: Double get() = currentGain
+
     /**
-     * Zeruje stan pomiaru i wzmocnienia. Wołane przy seeku i zmianie utworu: bez tego tłumienie
-     * wyliczone dla poprzedniego materiału (nawet -12 dB) obowiązuje dalej i schodzi dopiero
-     * przez [ReleaseMs], więc początek kolejnego utworu po głośnym jest słyszalnie za cichy.
+     * Zeruje stan pomiaru i wzmocnienia. Wołane tylko przy zmianie utworu (NIE przy seeku —
+     * wtedy głośność skoczyłaby w górę w środku utworu): bez tego tłumienie wyliczone dla
+     * poprzedniego materiału (nawet -12 dB) obowiązywałoby do końca kolejnego utworu.
+     * [clearDelay]=false przy przejściu bez flush (gapless): ogon poprzedniego utworu z linii
+     * opóźniającej ma jeszcze wybrzmieć.
      */
-    fun reset() {
+    fun reset(clearDelay: Boolean = true) {
         sumOfSquares = 0.0
         samplesInWindow = 0
         currentGain = 1.0
         targetGain = 1.0
+        if (clearDelay) clearDelay()
     }
 
     /**
-     * Przetwarza jedną próbkę znormalizowaną do [-1, 1] i zwraca próbkę wyjściową.
-     * Wywoływane per próbka, bo `AudioProcessor` dostaje bufor PCM bez podziału na kanały.
+     * Seek: wyrzuca opóźnione próbki sprzed przewinięcia i zaczyna pomiar od nowa, ale
+     * zachowuje wzmocnienie — głośność nie skacze w górę w środku utworu.
+     */
+    fun clearDelay() {
+        delayLine.fill(0f)
+        delayPos = 0
+        delayFilled = 0
+        sumOfSquares = 0.0
+        samplesInWindow = 0
+    }
+
+    /**
+     * Przetwarza jedną próbkę znormalizowaną do [-1, 1] i zwraca próbkę wyjściową — opóźnioną
+     * o długość linii opóźniającej (na starcie wychodzi cisza). Wywoływane per próbka, bo
+     * `AudioProcessor` dostaje bufor PCM bez podziału na kanały.
      */
     fun processSample(sample: Float): Float {
         if (!active) return sample
         accumulate(sample)
+        val delayed = delayLine[delayPos]
+        delayLine[delayPos] = sample
+        delayPos = (delayPos + 1) % delayLine.size
+        if (delayFilled < delayLine.size) delayFilled++
         currentGain = approach(currentGain, targetGain)
-        return limit(sample * currentGain.toFloat())
+        return limit(delayed * currentGain.toFloat())
+    }
+
+    /**
+     * Koniec strumienia: oddaje próbki wciąż siedzące w linii opóźniającej (bez tego ucinałoby
+     * końcówkę utworu) i czyści ją.
+     */
+    fun drain(): FloatArray {
+        if (!active) return FloatArray(0)
+        val size = delayLine.size
+        val start = (delayPos - delayFilled + size) % size
+        val out = FloatArray(delayFilled) { i ->
+            currentGain = approach(currentGain, targetGain)
+            limit(delayLine[(start + i) % size] * currentGain.toFloat())
+        }
+        clearDelay()
+        return out
     }
 
     private fun accumulate(sample: Float) {
@@ -97,7 +149,10 @@ class LoudnessNormalizer(
         val rms = sqrt(sumOfSquares / samplesInWindow)
         sumOfSquares = 0.0
         samplesInWindow = 0
-        targetGain = gainFor(rms)
+        // Zapadka: w obrębie utworu wzmocnienie może tylko spadać. Raz ściszony utwór zostaje
+        // ściszony do końca (do [reset] przy zmianie utworu) — cichsza zwrotka po głośnym
+        // refrenie nie wraca do oryginalnej głośności, więc muzyka nie "faluje" góra-dół.
+        targetGain = minOf(targetGain, gainFor(rms))
     }
 
     /**
@@ -114,15 +169,14 @@ class LoudnessNormalizer(
     }
 
     /**
-     * Płynne dojście do docelowego wzmocnienia. Tłumimy szybciej niż wracamy do gain=1.0
-     * (attack krótszy od release): nagły głośny fragment trzeba opanować w rozsądnym czasie,
-     * ale nie natychmiast — zbyt krótki attack (dawne 50 ms) było słychać jako "szarpnięcie"
-     * w dół, patrz [AttackMs].
+     * Płynne dojście w dół do docelowego wzmocnienia. Drogi w górę nie ma — [targetGain]
+     * tylko maleje (patrz [accumulate]). Zbyt krótki attack (dawne 50 ms) było słychać jako
+     * "szarpnięcie" w dół, patrz [AttackMs].
      */
     private fun approach(from: Double, to: Double): Double {
+        if (to >= from) return from
         val stepMs = 1000.0 / sampleRateHz
-        val timeConstantMs = if (to < from) AttackMs else ReleaseMs
-        val step = (stepMs / timeConstantMs).coerceIn(0.0, 1.0)
+        val step = (stepMs / AttackMs).coerceIn(0.0, 1.0)
         return from + (to - from) * step
     }
 
@@ -138,7 +192,7 @@ class LoudnessNormalizer(
         /** -1.5 dBFS, ten sam sufit co `TP=-1.5` w desktopowym loudnorm. */
         const val Ceiling = 0.84f
         /**
-         * Zgłoszone na słuch 19.09.2026: przy poprzednim 50 ms wzrost głośności (np. wejście
+         * Historia: zgłoszone na słuch 19.09.2026: przy poprzednim 50 ms wzrost głośności (np. wejście
          * refrenu) dawał słyszalne, powtarzające się "szarpnięcie" w dół przez cały utwór —
          * klasyczny efekt pompowania (pumping) znany z agresywnej kompresji. Policzone: 50 ms
          * dawało 90% korekty w ~115 ms dla typowego skoku zwrotka→refren (16 dB) — wystarczająco
@@ -147,7 +201,13 @@ class LoudnessNormalizer(
          * które zakładają testy w LoudnessNormalizerTest (rmsAfterProcessing liczy RMS z drugiej
          * połowy 4-sekundowego sygnału).
          */
-        const val AttackMs = 250.0
-        const val ReleaseMs = 400.0
+        const val AttackMs = 100.0
+        /**
+         * Dodatkowy lookahead ponad okno pomiaru: 2× [AttackMs], czyli ~86% rampy ściszenia
+         * mija, zanim usłyszymy głośny fragment. 250 ms attack (wybrany wcześniej przeciw
+         * "szarpnięciom") nie jest już potrzebny: rampa leci na wcześniejszym, cichszym
+         * materiale, a zapadka wyklucza pompowanie. Łączne opóźnienie: 400 + 200 = 600 ms.
+         */
+        const val LookaheadExtraMs = 200
     }
 }

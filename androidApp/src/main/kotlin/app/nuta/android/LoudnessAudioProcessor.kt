@@ -59,6 +59,7 @@ class LoudnessAudioProcessor(
         // liczył według nowego celu (bez tego trzeba by restartować odtwarzanie).
         val mode = settingsStore.settings.value.loudnessNormalization
         if (mode != activeMode) rebuildNormalizer(inputAudioFormat)
+        consumeNewTrack()
         val current = normalizer
 
         // Liczymy w pełnych próbkach 16-bit, nie w bajtach: gdyby bufor miał nieparzystą liczbę
@@ -92,13 +93,49 @@ class LoudnessAudioProcessor(
         output.flip()
     }
 
+    /** Ustawiane z wątku aplikacji ([markNewTrack]), konsumowane na wątku audio w [onFlush]/[queueInput]. */
+    @Volatile
+    private var newTrackPending = false
+
     /**
-     * Media3 woła `flush()` przy seeku i przy zmianie utworu (a `reset()` dopiero przy zwalnianiu
-     * potoku), więc bez tego stan DSP przechodził na kolejny utwór: tłumienie wyliczone dla
-     * poprzedniego, głośnego materiału obowiązywało dalej i schodziło dopiero przez ReleaseMs.
+     * Sygnał "zaczął się nowy utwór" — wołany z `onMediaItemTransition`. Tylko wtedy zerujemy
+     * tłumienie: normalizer w obrębie utworu wyłącznie ścisza (zapadka), więc reset przy seeku
+     * dawałby skok głośności w górę w środku utworu.
+     */
+    fun markNewTrack() {
+        newTrackPending = true
+    }
+
+    /**
+     * Media3 woła `flush()` zarówno przy seeku, jak i przy zmianie utworu — sam flush nie
+     * resetuje więc stanu, robi to dopiero oczekujący [markNewTrack].
      */
     override fun onFlush() {
-        normalizer?.reset()
+        if (newTrackPending) {
+            newTrackPending = false
+            normalizer?.reset()
+        } else {
+            // Seek: wyrzucamy opóźnione próbki sprzed przewinięcia, ściszenie zostaje.
+            normalizer?.clearDelay()
+        }
+    }
+
+    /** Przejście bez flush() (gapless): reset ściszenia, ale ogon poprzedniego utworu ma wybrzmieć. */
+    private fun consumeNewTrack() {
+        if (!newTrackPending) return
+        newTrackPending = false
+        normalizer?.reset(clearDelay = false)
+    }
+
+    /** Oddaje końcówkę utworu zatrzymaną w linii opóźniającej (lookahead) — inaczej by przepadła. */
+    override fun onQueueEndOfStream() {
+        val tail = normalizer?.drain() ?: return
+        if (tail.isEmpty()) return
+        val output = replaceOutputBuffer(tail.size * BytesPerSample)
+        val out = output.asShortBuffer()
+        tail.forEach { out.put((it * Short.MAX_VALUE).toInt().coerceIn(MinPcm, MaxPcm).toShort()) }
+        output.position(out.position() * BytesPerSample)
+        output.flip()
     }
 
     override fun onReset() {
