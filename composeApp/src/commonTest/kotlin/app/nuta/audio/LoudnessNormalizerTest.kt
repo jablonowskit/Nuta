@@ -16,6 +16,10 @@ class LoudnessNormalizerTest {
     /** Amplituda sinusa o zadanym RMS w dBFS (RMS sinusa = amplituda / sqrt(2)). */
     private fun amplitudeForRms(dbfs: Double): Float = (10.0.pow(dbfs / 20.0) * sqrt(2.0)).toFloat()
 
+    /** Próbka [i] (przeplecione stereo) sinusa 440 Hz o zadanym RMS. */
+    private fun sine(dbfs: Double, i: Int): Float =
+        (amplitudeForRms(dbfs) * kotlin.math.sin(2.0 * kotlin.math.PI * 440.0 * (i / 2) / 48_000.0)).toFloat()
+
     /** Przepuszcza [seconds] sekund sinusa i zwraca RMS wyjścia z drugiej połowy (po ustabilizowaniu). */
     private fun rmsAfterProcessing(mode: LoudnessNormalization, inputDbfs: Double, seconds: Double = 4.0): Double {
         val n = normalizer(mode)
@@ -103,17 +107,50 @@ class LoudnessNormalizerTest {
             (amplitude * kotlin.math.sin(2.0 * kotlin.math.PI * 440.0 * (i / 2) / 48_000.0)).toFloat()
         repeat(48_000 * 2) { n.processSample(sampleAt(it)) }
 
-        // Szczyt sinusa po ustabilizowaniu — normalizator tłumi materiał głośniejszy niż cel.
-        val probe = amplitude
-        val attenuated = n.processSample(probe)
-        assertTrue(attenuated < probe * 0.9f, "spodziewane tłumienie po głośnym utworze, wyszło $attenuated")
+        assertTrue(n.gain < 0.9, "spodziewane tłumienie po głośnym utworze, gain=${n.gain}")
 
         n.reset()
-        // Zaraz po resecie gain wraca do 1.0, więc ta sama próbka przechodzi bez tłumienia.
-        assertTrue(
-            abs(n.processSample(probe) - probe) < probe * 0.01f,
-            "po reset() gain miał wrócić do 1.0",
-        )
+        assertEquals(1.0, n.gain, "po reset() gain miał wrócić do 1.0")
+    }
+
+    @Test
+    fun clearDelayOnSeekKeepsAttenuation() {
+        // Seek nie może podnieść głośności w środku utworu — czyści tylko linię opóźniającą.
+        val n = normalizer(LoudnessNormalization.NORMAL)
+        repeat(48_000 * 2 * 2) { n.processSample(sine(-6.0, it)) }
+        val before = n.gain
+        n.clearDelay()
+        assertEquals(before, n.gain)
+    }
+
+    @Test
+    fun lookaheadAttenuatesLoudPartBeforeItIsHeard() {
+        // Zgłoszone 16.10.2026: głośne wejście było słychać ~0.5–1 s, zanim zadziałało ściszenie.
+        // Z lookaheadem już pierwsze próbki głośnego fragmentu wychodzą wyraźnie ściszone.
+        val n = normalizer(LoudnessNormalization.NORMAL)
+        val quietSamples = 48_000 * 2 * 2
+        val loudAmplitude = amplitudeForRms(-4.0)
+        val outputs = ArrayList<Float>()
+        repeat(quietSamples) { outputs += n.processSample(sine(-30.0, it)) }
+        repeat(48_000 * 2 * 2) { outputs += n.processSample(sine(-4.0, quietSamples + it)) }
+        outputs.addAll(n.drain().toList())
+        // Wyjście jest opóźnione: pierwsze 100 ms głośnego fragmentu zaczyna się w outputs[quietSamples + delay].
+        val delay = outputs.size - quietSamples - 48_000 * 2 * 2
+        assertEquals(0, delay, "drain() miał oddać całą zawartość linii opóźniającej")
+        val firstLoud = outputs.subList(quietSamples, quietSamples + 48_000 * 2 / 10)
+        val peak = firstLoud.maxOf { abs(it) }
+        assertTrue(peak < loudAmplitude * 0.5f, "początek głośnego fragmentu nieściszony: $peak vs $loudAmplitude")
+    }
+
+    @Test
+    fun gainNeverRisesAfterLoudPartWithinTrack() {
+        // Zapadka: po głośnym fragmencie cichszy NIE wraca do oryginalnej głośności — muzyka
+        // ma nie falować góra-dół. Powrót do gain=1.0 tylko przez reset() (nowy utwór).
+        val n = normalizer(LoudnessNormalization.NORMAL)
+        repeat(48_000 * 2 * 3) { n.processSample(sine(-6.0, it)) }
+        val afterLoud = n.gain
+        repeat(48_000 * 2 * 3) { n.processSample(sine(-30.0, it)) }
+        assertTrue(n.gain <= afterLoud, "po cichym fragmencie gain nie powinien wrócić w górę (${n.gain} > $afterLoud)")
     }
 
     @Test
