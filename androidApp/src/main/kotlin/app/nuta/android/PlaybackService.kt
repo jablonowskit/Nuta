@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import androidx.media3.common.ForwardingPlayer
+import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
 import androidx.media3.database.StandaloneDatabaseProvider
@@ -57,10 +58,11 @@ class PlaybackService : MediaSessionService() {
                 PlaybackQueueBridge.streamCache = it
             }
         }
+        val loudnessProcessor = LoudnessAudioProcessor(settingsStore)
         val player = ExoPlayer.Builder(this)
             .setMediaSourceFactory(DefaultMediaSourceFactory(cacheFactory))
             .setLoadControl(loadControl(settingsStore.settings.value.bufferSize))
-            .setRenderersFactory(loudnessAwareRenderersFactory(settingsStore))
+            .setRenderersFactory(loudnessAwareRenderersFactory(loudnessProcessor))
             .setSeekBackIncrementMs(10_000)
             .setSeekForwardIncrementMs(10_000)
             // Bez tego odtwarzanie kontynuowało przez głośnik telefonu po utracie połączenia
@@ -71,6 +73,10 @@ class PlaybackService : MediaSessionService() {
         player.addListener(object : Player.Listener {
             override fun onPlaybackStateChanged(playbackState: Int) {
                 PlaybackQueueBridge.buffering.value = playbackState == Player.STATE_BUFFERING
+            }
+
+            override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+                loudnessProcessor.markNewTrack()
             }
         })
         // Normalizacja głośności siedzi teraz w łańcuchu audio (LoudnessAudioProcessor wpięty
@@ -259,7 +265,7 @@ class PlaybackService : MediaSessionService() {
      * Lista procesorów jest ustalana raz, przy budowie sinka — dlatego procesor jest zawsze
      * wpięty, a tryb (w tym OFF) rozstrzyga sam, czytając ustawienia przy każdym buforze.
      */
-    private fun loudnessAwareRenderersFactory(settingsStore: AndroidPlaybackSettingsStore) =
+    private fun loudnessAwareRenderersFactory(loudnessProcessor: LoudnessAudioProcessor) =
         object : DefaultRenderersFactory(this) {
             override fun buildAudioSink(
                 context: Context,
@@ -268,7 +274,7 @@ class PlaybackService : MediaSessionService() {
             ): AudioSink = DefaultAudioSink.Builder(context)
                 .setEnableFloatOutput(enableFloatOutput)
                 .setEnableAudioOutputPlaybackParameters(enableAudioOutputPlaybackParams)
-                .setAudioProcessors(arrayOf(LoudnessAudioProcessor(settingsStore)))
+                .setAudioProcessors(arrayOf(loudnessProcessor))
                 .build()
         }
 
