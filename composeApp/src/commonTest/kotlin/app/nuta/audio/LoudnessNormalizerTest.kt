@@ -124,23 +124,26 @@ class LoudnessNormalizerTest {
     }
 
     @Test
-    fun lookaheadAttenuatesLoudPartBeforeItIsHeard() {
+    fun outputIsNotDelayed() {
+        // 24.10.2026: lookahead usunięty — dawał 600 ms ciszy po seeku i przesuwał dźwięk
+        // względem pozycji odtwarzania. Pierwsza próbka ma wyjść od razu.
+        val n = normalizer(LoudnessNormalization.NORMAL)
+        assertEquals(0.1f, n.processSample(0.1f))
+    }
+
+    @Test
+    fun loudEntryIsAttenuatedQuickly() {
         // Zgłoszone 16.10.2026: głośne wejście było słychać ~0.5–1 s, zanim zadziałało ściszenie.
-        // Z lookaheadem już pierwsze próbki głośnego fragmentu wychodzą wyraźnie ściszone.
+        // Bez lookaheadu ma się to mieścić w ~0.5 s (okno 200 ms + rampa attack).
         val n = normalizer(LoudnessNormalization.NORMAL)
         val quietSamples = 48_000 * 2 * 2
+        repeat(quietSamples) { n.processSample(sine(-30.0, it)) }
         val loudAmplitude = amplitudeForRms(-4.0)
         val outputs = ArrayList<Float>()
-        repeat(quietSamples) { outputs += n.processSample(sine(-30.0, it)) }
-        repeat(48_000 * 2 * 2) { outputs += n.processSample(sine(-4.0, quietSamples + it)) }
-        outputs.addAll(n.drain().toList())
-        // drain() oddaje zawartość linii opóźniającej, więc wyjście jest dłuższe o samo opóźnienie
-        // (600 ms stereo), a głośny fragment zaczyna się w outputs[quietSamples + delay].
-        val delay = outputs.size - quietSamples - 48_000 * 2 * 2
-        assertEquals(48_000 * 2 * 6 / 10, delay, "drain() miał oddać całą zawartość linii opóźniającej")
-        val firstLoud = outputs.subList(quietSamples + delay, quietSamples + delay + 48_000 * 2 / 10)
-        val peak = firstLoud.maxOf { abs(it) }
-        assertTrue(peak < loudAmplitude * 0.5f, "początek głośnego fragmentu nieściszony: $peak vs $loudAmplitude")
+        repeat(48_000 * 2) { outputs += n.processSample(sine(-4.0, quietSamples + it)) }
+        val afterHalfSecond = outputs.subList(48_000, 48_000 + 48_000 * 2 / 10)
+        val peak = afterHalfSecond.maxOf { abs(it) }
+        assertTrue(peak < loudAmplitude * 0.5f, "po 0.5 s głośny fragment nadal nieściszony: $peak vs $loudAmplitude")
     }
 
     @Test
