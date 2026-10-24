@@ -22,7 +22,7 @@ import kotlin.math.sqrt
  * platformowe opakowanie (`AudioProcessor` w Media3) tylko podaje jej próbki.
  *
  * Algorytm (jednoprzebiegowy, bo strumień jest odtwarzany na żywo — nie znamy go z góry):
- * 1. RMS liczony w oknie ~400 ms, tak jak „momentary loudness" w EBU R128.
+ * 1. RMS liczony w oknie ~200 ms.
  * 2. Z RMS wynika wzmocnienie potrzebne do trafienia w cel, ograniczone do [maxAttenuation,
  *    maxBoost] (maxBoost=0, więc realnie tylko do [maxAttenuation, 1.0]).
  * 3. Wzmocnienie w obrębie utworu tylko maleje (zapadka) i schodzi płynnie (attack) — nigdy
@@ -66,18 +66,6 @@ class LoudnessNormalizer(
     private var currentGain = 1.0
     private var targetGain = 1.0
 
-    /**
-     * Lookahead: wyjście jest opóźnione o okno pomiaru + [LookaheadExtraMs]. Decyzja o ściszeniu
-     * zapada na końcu okna, a wtedy z bufora wychodzą jeszcze próbki sprzed tego okna — rampa
-     * ściszenia przebiega na nich i jest prawie skończona, zanim głośny fragment dotrze do ucha.
-     * Bez tego (zgłoszone 16.10.2026) głośne wejście było słychać przez ~0.5–1 s przed ściszeniem.
-     */
-    private val delayLine = FloatArray(
-        windowSamples + (sampleRateHz * LookaheadExtraMs / 1000).coerceAtLeast(0) * channelCount,
-    )
-    private var delayPos = 0
-    private var delayFilled = 0
-
     val active: Boolean get() = targetDbfs != 0.0
 
     /** Bieżące wzmocnienie liniowe (do testów). */
@@ -87,59 +75,33 @@ class LoudnessNormalizer(
      * Zeruje stan pomiaru i wzmocnienia. Wołane tylko przy zmianie utworu (NIE przy seeku —
      * wtedy głośność skoczyłaby w górę w środku utworu): bez tego tłumienie wyliczone dla
      * poprzedniego materiału (nawet -12 dB) obowiązywałoby do końca kolejnego utworu.
-     * [clearDelay]=false przy przejściu bez flush (gapless): ogon poprzedniego utworu z linii
-     * opóźniającej ma jeszcze wybrzmieć.
      */
-    fun reset(clearDelay: Boolean = true) {
-        sumOfSquares = 0.0
-        samplesInWindow = 0
+    fun reset() {
+        clearDelay()
         currentGain = 1.0
         targetGain = 1.0
-        if (clearDelay) clearDelay()
     }
 
     /**
-     * Seek: wyrzuca opóźnione próbki sprzed przewinięcia i zaczyna pomiar od nowa, ale
-     * zachowuje wzmocnienie — głośność nie skacze w górę w środku utworu.
+     * Seek: zaczyna pomiar od nowa, ale zachowuje wzmocnienie — głośność nie skacze w górę
+     * w środku utworu.
      */
     fun clearDelay() {
-        delayLine.fill(0f)
-        delayPos = 0
-        delayFilled = 0
         sumOfSquares = 0.0
         samplesInWindow = 0
     }
 
     /**
-     * Przetwarza jedną próbkę znormalizowaną do [-1, 1] i zwraca próbkę wyjściową — opóźnioną
-     * o długość linii opóźniającej (na starcie wychodzi cisza). Wywoływane per próbka, bo
-     * `AudioProcessor` dostaje bufor PCM bez podziału na kanały.
+     * Przetwarza jedną próbkę znormalizowaną do [-1, 1]. Bez opóźnienia: lookahead (600 ms,
+     * 16.10.2026) usunięty 24.10.2026 — dawał 600 ms ciszy po każdym seeku i starcie utworu
+     * oraz przesuwał dźwięk względem pozycji Media3. Szybkie łapanie głośnego wejścia daje
+     * teraz krótsze okno pomiaru ([WindowMs]).
      */
     fun processSample(sample: Float): Float {
         if (!active) return sample
         accumulate(sample)
-        val delayed = delayLine[delayPos]
-        delayLine[delayPos] = sample
-        delayPos = (delayPos + 1) % delayLine.size
-        if (delayFilled < delayLine.size) delayFilled++
         currentGain = approach(currentGain, targetGain)
-        return limit(delayed * currentGain.toFloat())
-    }
-
-    /**
-     * Koniec strumienia: oddaje próbki wciąż siedzące w linii opóźniającej (bez tego ucinałoby
-     * końcówkę utworu) i czyści ją.
-     */
-    fun drain(): FloatArray {
-        if (!active) return FloatArray(0)
-        val size = delayLine.size
-        val start = (delayPos - delayFilled + size) % size
-        val out = FloatArray(delayFilled) { i ->
-            currentGain = approach(currentGain, targetGain)
-            limit(delayLine[(start + i) % size] * currentGain.toFloat())
-        }
-        clearDelay()
-        return out
+        return limit(sample * currentGain.toFloat())
     }
 
     private fun accumulate(sample: Float) {
@@ -185,8 +147,11 @@ class LoudnessNormalizer(
         if (abs(sample) <= Ceiling) sample else if (sample > 0) Ceiling else -Ceiling
 
     internal companion object {
-        /** Okno pomiaru ~400 ms — tyle samo, ile „momentary loudness" w EBU R128. */
-        const val WindowMs = 400
+        /**
+         * Okno pomiaru 200 ms (krócej niż 400 ms „momentary loudness" z EBU R128): bez lookaheadu
+         * od tego zależy, jak długo słychać głośne wejście przed ściszeniem.
+         */
+        const val WindowMs = 200
         /** Poniżej tego poziomu nie korygujemy (przerwy, wybrzmienia). */
         const val SilenceFloorDbfs = -50.0
         /** -1.5 dBFS, ten sam sufit co `TP=-1.5` w desktopowym loudnorm. */
@@ -202,12 +167,5 @@ class LoudnessNormalizer(
          * połowy 4-sekundowego sygnału).
          */
         const val AttackMs = 100.0
-        /**
-         * Dodatkowy lookahead ponad okno pomiaru: 2× [AttackMs], czyli ~86% rampy ściszenia
-         * mija, zanim usłyszymy głośny fragment. 250 ms attack (wybrany wcześniej przeciw
-         * "szarpnięciom") nie jest już potrzebny: rampa leci na wcześniejszym, cichszym
-         * materiale, a zapadka wyklucza pompowanie. Łączne opóźnienie: 400 + 200 = 600 ms.
-         */
-        const val LookaheadExtraMs = 200
     }
 }

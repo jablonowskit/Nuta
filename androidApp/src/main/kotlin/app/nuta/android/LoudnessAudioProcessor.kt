@@ -115,32 +115,22 @@ class LoudnessAudioProcessor(
             newTrackPending = false
             normalizer?.reset()
         } else {
-            // Seek: wyrzucamy opóźnione próbki sprzed przewinięcia, ściszenie zostaje.
+            // Seek: pomiar od nowa, ściszenie zostaje.
             normalizer?.clearDelay()
         }
     }
 
-    /** Przejście bez flush() (gapless): reset ściszenia, ale ogon poprzedniego utworu ma wybrzmieć. */
+    /** Przejście bez flush() (gapless): reset ściszenia przy pierwszym buforze nowego utworu. */
     private fun consumeNewTrack() {
         if (!newTrackPending) return
         newTrackPending = false
-        normalizer?.reset(clearDelay = false)
-    }
-
-    /** Oddaje końcówkę utworu zatrzymaną w linii opóźniającej (lookahead) — inaczej by przepadła. */
-    override fun onQueueEndOfStream() {
-        val tail = normalizer?.drain() ?: return
-        if (tail.isEmpty()) return
-        val output = replaceOutputBuffer(tail.size * BytesPerSample)
-        val out = output.asShortBuffer()
-        tail.forEach { out.put((it * Short.MAX_VALUE).toInt().coerceIn(MinPcm, MaxPcm).toShort()) }
-        output.position(out.position() * BytesPerSample)
-        output.flip()
+        normalizer?.reset()
     }
 
     override fun onReset() {
         normalizer = null
         activeMode = null
+        newTrackPending = false
     }
 
     private companion object {
