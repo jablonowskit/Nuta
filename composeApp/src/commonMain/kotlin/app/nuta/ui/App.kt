@@ -158,7 +158,10 @@ fun NutaApp(container: AppContainer) {
     val settings by container.playbackSettings.settings.collectAsState()
     val density = LocalDensity.current
     val palette = settings.theme.toPalette()
-    CompositionLocalProvider(LocalDensity provides Density(density.density, settings.fontScale)) {
+    CompositionLocalProvider(
+        LocalDensity provides Density(density.density, settings.fontScale),
+        LocalLoadCovers provides settings.loadCovers,
+    ) {
         ProvideNutaPalette(palette) {
             MaterialTheme(colors = palette.toColors()) {
                 NutaAppContent(container)

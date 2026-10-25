@@ -219,6 +219,14 @@ internal fun SettingsScreen(container: AppContainer, authWarning: String? = null
             }
         }
         item {
+            SettingsGroup(stringResource(Res.string.load_covers_title), stringResource(Res.string.load_covers_desc)) {
+                SettingOptions(
+                    options = listOf(false to stringResource(Res.string.loudness_off), true to stringResource(Res.string.option_enabled)),
+                    selected = settings.loadCovers,
+                ) { value -> container.playbackSettings.update { it.copy(loadCovers = value) } }
+            }
+        }
+        item {
             var cacheBytes by remember { mutableStateOf<Long?>(null) }
             var clearedJustNow by remember { mutableStateOf(false) }
             var refreshTrigger by remember { mutableStateOf(0) }

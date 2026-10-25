@@ -149,4 +149,6 @@
     <string name="stats_no_username">Ustaw nazwę użytkownika ListenBrainz w Ustawieniach, żeby zobaczyć swoje statystyki.</string>
     <string name="stats_empty">Brak statystyk dla tego okresu. ListenBrainz liczy je okresowo.</string>
     <string name="home_open_stats">Statystyki</string>
+    <string name="load_covers_title">Pobieraj okładki</string>
+    <string name="load_covers_desc">Okładki albumów na listach i w playerze. Wyłącz, żeby oszczędzać transfer — zamiast nich pokazuje się kafelek z literą.</string>
 </resources>

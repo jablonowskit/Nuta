@@ -20,13 +20,13 @@ import java.io.ByteArrayOutputStream
 internal object NotificationArtwork {
     private val tileColors = intArrayOf(0xFF2D6A4F.toInt(), 0xFF40916C.toInt(), 0xFF1B4332.toInt(), 0xFF52B788.toInt())
 
-    fun metadata(track: Track): MediaMetadata {
+    fun metadata(track: Track, loadCovers: Boolean = true): MediaMetadata {
         val builder = MediaMetadata.Builder()
             .setTitle(track.title)
             .setArtist(track.artists.joinToString())
             .setAlbumTitle(track.album)
             .setArtworkData(letterTile(track), MediaMetadata.PICTURE_TYPE_FRONT_COVER)
-        track.imageUrl?.takeIf { it.isNotBlank() }?.let { builder.setArtworkUri(Uri.parse(it)) }
+        if (loadCovers) track.imageUrl?.takeIf { it.isNotBlank() }?.let { builder.setArtworkUri(Uri.parse(it)) }
         return builder.build()
     }
 
