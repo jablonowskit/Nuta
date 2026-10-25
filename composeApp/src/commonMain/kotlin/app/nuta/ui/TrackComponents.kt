@@ -64,10 +64,14 @@ internal fun TrackRow(
         rowModifier,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        if (active && loading) {
-            Text("⏳︎", fontSize = 14.sp, modifier = Modifier.width(28.dp), textAlign = TextAlign.Center)
-        } else {
-            Text(if (active) "▶" else "♪", color = if (active) MaterialTheme.colors.primary else palette.muted, modifier = Modifier.width(28.dp))
+        // Okładka z ikoną stanu na wierzchu: aktywny utwór nadal widać po ▶/⏳ (i po tle wiersza).
+        Box(Modifier.padding(end = 10.dp), contentAlignment = Alignment.Center) {
+            Cover(track.title, track.imageUrl, Modifier.size(40.dp))
+            if (active) {
+                Box(Modifier.size(40.dp).background(Color.Black.copy(alpha = 0.45f), RoundedCornerShape(8.dp)), contentAlignment = Alignment.Center) {
+                    Text(if (loading) "⏳︎" else "▶", color = Color.White, fontSize = 14.sp, textAlign = TextAlign.Center)
+                }
+            }
         }
         Column(Modifier.weight(1f)) {
             // Jedna linia z wielokropkiem zamiast zawijania do 2 linii — długie tytuły

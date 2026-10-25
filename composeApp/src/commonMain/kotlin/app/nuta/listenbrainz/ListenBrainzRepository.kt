@@ -164,14 +164,16 @@ class ListenBrainzRepository(
                 (page.totalCount == null && page.entriesOnPage < FEEDBACK_PAGE_SIZE)
             ) break
         }
-        val durationByMbid = lookupMetadata(inline.filter { it.hasMbid }.map(FeedbackEntry::id)).associate { it.id to it.durationMs }
+        val metadataByMbid = lookupMetadata(inline.filter { it.hasMbid }.map(FeedbackEntry::id)).associateBy { it.id }
         return inline.map {
+            val metadata = metadataByMbid[it.id]
             Track(
                 id = it.id,
                 title = it.title,
                 artists = listOfNotNull(it.artist.takeIf(String::isNotBlank)),
-                album = it.album,
-                durationMs = durationByMbid[it.id] ?: 0L,
+                album = it.album.ifBlank { metadata?.album.orEmpty() },
+                durationMs = metadata?.durationMs ?: 0L,
+                imageUrl = metadata?.imageUrl,
                 artistMbid = it.artistMbid,
             )
         }.also {
@@ -456,7 +458,7 @@ class ListenBrainzRepository(
         val tracks = mutableListOf<Track>()
         mbids.distinct().chunked(50).forEach { chunk ->
             val response = try {
-                httpGet("https://api.listenbrainz.org/1/metadata/recording/?recording_mbids=${chunk.joinToString(",")}&inc=artist")
+                httpGet("https://api.listenbrainz.org/1/metadata/recording/?recording_mbids=${chunk.joinToString(",")}&inc=artist+release")
             } catch (error: Throwable) {
                 if (error is CancellationException) throw error
                 logger.warn("ListenBrainz", "metadata_lookup_failed", "Nie udało się dociągnąć metadanych nagrań", fields = mapOf("reason" to (error.message ?: "unknown")))
@@ -589,7 +591,8 @@ class ListenBrainzRepository(
             val duration = obj["duration"]?.jsonPrimitive?.longOrNull ?: 0L
             val trackExtension = obj["extension"]?.jsonObject
                 ?.get("https://musicbrainz.org/doc/jspf#track")?.jsonObject
-            val artistMbid = trackExtension?.get("additional_metadata")?.jsonObject
+            val additional = trackExtension?.get("additional_metadata") as? JsonObject
+            val artistMbid = additional
                 ?.get("artists")?.let { it as? JsonArray }?.firstOrNull()?.jsonObject
                 ?.get("artist_mbid")?.jsonPrimitive?.contentOrNull
                 ?: (trackExtension?.get("artist_identifiers") as? JsonArray)?.firstOrNull()?.jsonPrimitive?.contentOrNull
@@ -598,11 +601,23 @@ class ListenBrainzRepository(
                 id = mbid,
                 title = title,
                 artists = listOfNotNull(creator.takeIf(String::isNotBlank)),
-                album = "",
+                album = obj["album"]?.jsonPrimitive?.contentOrNull.orEmpty(),
                 durationMs = duration,
+                imageUrl = coverArtUrl(
+                    additional?.get("caa_release_mbid")?.jsonPrimitive?.contentOrNull,
+                    additional?.get("caa_id")?.jsonPrimitive?.contentOrNull,
+                ),
                 artistMbid = artistMbid,
             )
         }
+
+        /**
+         * Miniatura 250 px z Cover Art Archive. ListenBrainz podaje `caa_id` tylko wtedy, gdy
+         * okładka istnieje, więc tu (inaczej niż w MusicBrainz) nie trafiamy w 404.
+         */
+        fun coverArtUrl(releaseMbid: String?, caaId: String?): String? =
+            if (releaseMbid.isNullOrBlank() || caaId.isNullOrBlank()) null
+            else "https://coverartarchive.org/release/$releaseMbid/$caaId-250.jpg"
 
         fun parseMetadataLookup(body: String, mbids: List<String>): List<Track> {
             if (body.isBlank()) return emptyList()
@@ -612,11 +627,16 @@ class ListenBrainzRepository(
                 val recording = entry["recording"] as? JsonObject ?: return@mapNotNull null
                 val name = recording["name"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
                 val artists = ((entry["artist"] as? JsonObject)?.get("artists") as? JsonArray).orEmpty()
+                val release = entry["release"] as? JsonObject
                 Track(
                     id = mbid,
                     title = name,
                     artists = artists.mapNotNull { (it as? JsonObject)?.get("name")?.jsonPrimitive?.contentOrNull },
-                    album = "",
+                    album = release?.get("name")?.jsonPrimitive?.contentOrNull.orEmpty(),
+                    imageUrl = coverArtUrl(
+                        release?.get("caa_release_mbid")?.jsonPrimitive?.contentOrNull,
+                        release?.get("caa_id")?.jsonPrimitive?.contentOrNull,
+                    ),
                     durationMs = recording["length"]?.jsonPrimitive?.longOrNull ?: 0L,
                     artistMbid = (artists.firstOrNull() as? JsonObject)?.get("artist_mbid")?.jsonPrimitive?.contentOrNull,
                 )

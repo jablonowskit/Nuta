@@ -272,11 +272,16 @@ class MusicBrainzRepository(private val logger: NutaLogger) {
                 val artistMbid = (artistCredit.firstOrNull() as? JsonObject)
                     ?.get("artist")?.let { it as? JsonObject }
                     ?.get("id")?.jsonPrimitive?.contentOrNull
+                // Okładka z Cover Art Archive po release-group (nie po release): grupa ma okładkę
+                // częściej niż akurat pierwsze wydanie z listy. Brak okładki = 404 i placeholder.
+                val release = (obj["releases"] as? JsonArray)?.firstOrNull() as? JsonObject
+                val releaseGroupId = (release?.get("release-group") as? JsonObject)?.get("id")?.jsonPrimitive?.contentOrNull
                 Track(
                     id = id,
                     title = title,
                     artists = artists,
-                    album = "",
+                    album = release?.get("title")?.jsonPrimitive?.contentOrNull.orEmpty(),
+                    imageUrl = releaseGroupId?.let { "https://coverartarchive.org/release-group/$it/front-250" },
                     // `length` bywa jawnym null-em — wtedy 0, a odtwarzacz nie klampuje pozycji
                     // do zera (patrz seekTo w Media3AudioPlayer/MpvAudioPlayer).
                     durationMs = obj["length"]?.jsonPrimitive?.longOrNull ?: 0L,
