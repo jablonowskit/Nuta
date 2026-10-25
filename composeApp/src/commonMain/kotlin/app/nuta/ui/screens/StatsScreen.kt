@@ -93,8 +93,6 @@ internal fun StatsScreen(
     }
 
     Column(Modifier.fillMaxSize()) {
-        Heading(stringResource(Res.string.nav_stats), stringResource(Res.string.stats_subtitle))
-        Spacer(Modifier.height(12.dp))
         ChoiceRow(listOf(true to Res.string.stats_mine, false to Res.string.stats_global), mine) { mine = it }
         Spacer(Modifier.height(6.dp))
         ChoiceRow(

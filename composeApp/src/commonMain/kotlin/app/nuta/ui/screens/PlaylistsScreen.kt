@@ -39,8 +39,6 @@ import androidx.compose.foundation.horizontalScroll
 @Composable
 internal fun PlaylistsScreen(playlists: List<Playlist>, onSelect: (Playlist) -> Unit, onCreatePlaylist: () -> Unit) {
     Column(Modifier.fillMaxSize()) {
-        Heading(stringResource(Res.string.library_title), stringResource(Res.string.library_subtitle))
-        Spacer(Modifier.height(12.dp))
         Button(onClick = onCreatePlaylist) { Text(stringResource(Res.string.create_playlist_title), maxLines = 1, softWrap = false) }
         Spacer(Modifier.height(12.dp))
         if (playlists.isEmpty()) EmptyState(stringResource(Res.string.no_playlists)) else ScrollableLazyColumn(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(10.dp)) {

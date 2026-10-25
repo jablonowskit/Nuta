@@ -44,8 +44,6 @@ internal fun HomeScreen(
     }
     ScrollableLazyColumn(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(12.dp), onVisibleRangeChanged = onVisibleRangeChanged) {
         item {
-        Heading(stringResource(Res.string.home_title), stringResource(Res.string.home_subtitle))
-        Spacer(Modifier.height(8.dp))
         androidx.compose.material.OutlinedButton(onClick = onOpenStats) { androidx.compose.material.Text(stringResource(Res.string.home_open_stats)) }
         Spacer(Modifier.height(16.dp))
         BoxWithConstraints(Modifier.fillMaxWidth()) {
