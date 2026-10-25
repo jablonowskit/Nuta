@@ -584,10 +584,7 @@ private fun NutaAppContent(container: AppContainer) {
                 if (compact) {
                     if (showPlayerBar) {
                         Divider(color = LocalNutaPalette.current.divider)
-                        CompactPlayerBar(playerState, container, similarModeActive, { similarModeActive = it }, openQueue, displayedTrackLiked, favoriteLoading, toggleCurrentTrackLiked, playbackSettings.playerCollapsed, setCollapsed,
-                            minimized = playbackSettings.playerMinimized,
-                            onMinimizedChange = { value -> container.playbackSettings.update { it.copy(playerMinimized = value) } },
-                        )
+                        CompactPlayerBar(playerState, container, similarModeActive, { similarModeActive = it }, openQueue, displayedTrackLiked, favoriteLoading, toggleCurrentTrackLiked, playbackSettings.playerCollapsed, setCollapsed)
                     }
                     BottomNavigation(destination) {
                         destination = it

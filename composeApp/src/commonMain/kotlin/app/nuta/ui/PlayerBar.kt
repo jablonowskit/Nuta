@@ -177,8 +177,6 @@ internal fun CompactPlayerBar(
     onToggleLiked: () -> Unit,
     collapsed: Boolean,
     onCollapsedChange: (Boolean) -> Unit,
-    minimized: Boolean = false,
-    onMinimizedChange: (Boolean) -> Unit = {},
 ) {
     val palette = LocalNutaPalette.current
     val scope = rememberCoroutineScope()
@@ -189,39 +187,21 @@ internal fun CompactPlayerBar(
     Column(
         Modifier.fillMaxWidth()
             .background(palette.chrome)
-            .pointerInput(collapsed, minimized) {
-                // Trzy stany: pełny ↔ zwinięty ↔ sam pasek postępu. Palec w dół schodzi o stan
-                // niżej, w górę o stan wyżej. Pasek leży poza LazyColumn treści, więc gest nie
-                // konkuruje ze scrollem listy.
+            .pointerInput(collapsed) {
+                // Palec w dół zwija, w górę rozwija. Pasek leży poza LazyColumn treści,
+                // więc gest nie konkuruje ze scrollem listy.
                 detectVerticalDragGestures(
                     onDragStart = { dragAccumulated = 0f },
                     onDragEnd = {
-                        if (dragAccumulated > dragThresholdPx) {
-                            if (collapsed) onMinimizedChange(true) else onCollapsedChange(true)
-                        } else if (dragAccumulated < -dragThresholdPx) {
-                            if (minimized) onMinimizedChange(false) else onCollapsedChange(false)
-                        }
+                        if (dragAccumulated > dragThresholdPx) onCollapsedChange(true)
+                        else if (dragAccumulated < -dragThresholdPx) onCollapsedChange(false)
                         dragAccumulated = 0f
                     },
                 ) { _, dy -> dragAccumulated += dy }
             }
             .animateContentSize(),
     ) {
-    if (minimized) {
-        // Najmniejszy stan: sam pasek postępu (4 dp) w 16 dp strefie dotyku — dotknięcie
-        // wraca do zwiniętego paska. Sterowanie zostaje w powiadomieniu/na ekranie blokady.
-        val progress = if (state.durationMs > 0) {
-            (state.positionMs.toFloat() / state.durationMs.toFloat()).coerceIn(0f, 1f)
-        } else 0f
-        Box(
-            Modifier.fillMaxWidth().height(16.dp).clickable { onMinimizedChange(false) },
-            contentAlignment = Alignment.Center,
-        ) {
-            Box(Modifier.fillMaxWidth().height(4.dp).background(palette.divider)) {
-                Box(Modifier.fillMaxWidth(progress).height(4.dp).background(MaterialTheme.colors.primary))
-            }
-        }
-    } else if (collapsed) {
+    if (collapsed) {
         // Mini-player jak Spotify/YT Music: cienki postęp + jedna linia
         // [okładka | tytuł/artysta | ▶ ⏭]. Reszta kontrolek po przeciągnięciu w górę.
         val progress = if (state.durationMs > 0) {

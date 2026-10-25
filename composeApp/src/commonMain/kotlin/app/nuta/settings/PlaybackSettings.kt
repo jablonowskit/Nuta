@@ -54,8 +54,6 @@ data class YouTubePlaybackSettings(
     val prefetchEnabled: Boolean = false,
     /** Pasek playera jest zawsze widoczny; to pole trzyma tylko stan zwinięcia do wąskiego paska. */
     val playerCollapsed: Boolean = false,
-    /** Telefon: player zredukowany do samego paska postępu (stan poniżej zwiniętego). */
-    val playerMinimized: Boolean = false,
     /** Limit cache'u zbuforowanych strumieni audio (MB). Zmiana działa dopiero po restarcie aplikacji. */
     val cacheSizeMb: Int = 150,
     val cassetteBackground: Boolean = true,
@@ -68,7 +66,7 @@ data class YouTubePlaybackSettings(
         "loudnessNormalization=$loudnessNormalization, youtubeClientProfile=$youtubeClientProfile, " +
         "audioSource=$audioSource, dataSource=$dataSource, listenBrainzUsername=$listenBrainzUsername, " +
         "listenBrainzApiToken=${if (listenBrainzApiToken.isBlank()) "" else "[REDACTED]"}, " +
-        "prefetchEnabled=$prefetchEnabled, playerCollapsed=$playerCollapsed, playerMinimized=$playerMinimized, cacheSizeMb=$cacheSizeMb, " +
+        "prefetchEnabled=$prefetchEnabled, playerCollapsed=$playerCollapsed, cacheSizeMb=$cacheSizeMb, " +
         "cassetteBackground=$cassetteBackground, loadCovers=$loadCovers, theme=$theme)"
 }
 
