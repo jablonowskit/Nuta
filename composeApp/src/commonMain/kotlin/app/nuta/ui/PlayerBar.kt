@@ -3,6 +3,7 @@ package app.nuta.ui
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -213,8 +214,22 @@ internal fun CompactPlayerBar(
                     .background(MaterialTheme.colors.primary),
             )
         }
+        var swipeAccumulated by remember { mutableStateOf(0f) }
+        val swipeThresholdPx = with(LocalDensity.current) { 64.dp.toPx() }
         Row(
-            Modifier.fillMaxWidth().height(52.dp).padding(start = 8.dp, end = 4.dp),
+            Modifier.fillMaxWidth().height(52.dp)
+                .pointerInput(Unit) {
+                    // Przesunięcie w lewo = następny, w prawo = poprzedni (jak Spotify).
+                    detectHorizontalDragGestures(
+                        onDragStart = { swipeAccumulated = 0f },
+                        onDragEnd = {
+                            if (swipeAccumulated < -swipeThresholdPx) scope.launch { container.audioPlayer.next() }
+                            else if (swipeAccumulated > swipeThresholdPx) scope.launch { container.audioPlayer.previous() }
+                            swipeAccumulated = 0f
+                        },
+                    ) { _, dx -> swipeAccumulated += dx }
+                }
+                .padding(start = 8.dp, end = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Cover(
