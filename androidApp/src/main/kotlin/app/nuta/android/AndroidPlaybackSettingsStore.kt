@@ -44,6 +44,7 @@ class AndroidPlaybackSettingsStore(
             .putString("listenBrainzUsername", validated.listenBrainzUsername)
             .putBoolean("prefetchEnabled", validated.prefetchEnabled)
             .putBoolean("playerCollapsed", validated.playerCollapsed)
+            .putBoolean("playerMinimized", validated.playerMinimized)
             .putInt("cacheSizeMb", validated.cacheSizeMb)
             .putBoolean("cassetteBackground", validated.cassetteBackground)
             .putBoolean("loadCovers", validated.loadCovers)
@@ -68,6 +69,7 @@ class AndroidPlaybackSettingsStore(
         listenBrainzApiToken = readTokenAndMigrate(),
         prefetchEnabled = preferences.getBoolean("prefetchEnabled", false),
         playerCollapsed = preferences.getBoolean("playerCollapsed", false),
+        playerMinimized = preferences.getBoolean("playerMinimized", false),
         cacheSizeMb = preferences.getInt("cacheSizeMb", 150).coerceIn(25, 500),
         cassetteBackground = preferences.getBoolean("cassetteBackground", true),
         loadCovers = preferences.getBoolean("loadCovers", true),
