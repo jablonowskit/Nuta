@@ -35,6 +35,7 @@ import androidx.compose.material.Surface
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -185,6 +186,30 @@ private fun NutaAppContent(container: AppContainer) {
             stateSaver = Saver<Destination, String>(save = { it.name }, restore = { name -> Destination.valueOf(name) }),
         ) { mutableStateOf(Destination.HOME) }
         var selectedPlaylist by remember { mutableStateOf<Playlist?>(null) }
+        // Historia zakładek dla systemowego „wstecz”: każda zmiana zakładki (z dowolnego miejsca)
+        // odkłada poprzednią; cofnięcie zdejmuje ją bez ponownego odkładania. Bez tego „wstecz”
+        // na Androidzie zamykało aplikację zamiast wracać.
+        val destinationHistory = remember { mutableStateListOf<Destination>() }
+        var lastDestination by remember { mutableStateOf(destination) }
+        var navigatingBack by remember { mutableStateOf(false) }
+        LaunchedEffect(destination) {
+            if (destination != lastDestination) {
+                if (!navigatingBack) {
+                    destinationHistory.remove(lastDestination)
+                    destinationHistory.add(lastDestination)
+                }
+                navigatingBack = false
+                lastDestination = destination
+            }
+        }
+        PlatformBackHandler(enabled = selectedPlaylist != null || destinationHistory.isNotEmpty() || destination != Destination.HOME) {
+            if (selectedPlaylist != null) {
+                selectedPlaylist = null
+            } else {
+                navigatingBack = true
+                destination = destinationHistory.removeLastOrNull() ?: Destination.HOME
+            }
+        }
         var playlists by remember { mutableStateOf<List<Playlist>>(emptyList()) }
         var savedPlaylists by remember { mutableStateOf<List<Playlist>>(emptyList()) }
         var savedPlaylistsLoaded by remember { mutableStateOf(false) }
