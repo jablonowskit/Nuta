@@ -394,7 +394,7 @@ class Media3AudioPlayer(
                 player.setMediaItem(MediaItem.Builder()
                     .setMediaId(track.id)
                     .setUri(url)
-                    .setMediaMetadata(NotificationArtwork.metadata(track))
+                    .setMediaMetadata(NotificationArtwork.metadata(track, settingsStore.settings.value.loadCovers))
                     .build())
                 player.prepare()
                 if (resumeFromMs != null) player.seekTo(resumeFromMs)
@@ -421,7 +421,7 @@ class Media3AudioPlayer(
 
     /** Podmienia tylko metadane bieżącego itemu — strumień zostaje, chip w pasku już się zmienia. */
     private fun publishSessionMetadata(track: Track) {
-        val metadata = NotificationArtwork.metadata(track)
+        val metadata = NotificationArtwork.metadata(track, settingsStore.settings.value.loadCovers)
         if (player.mediaItemCount > 0) {
             val index = player.currentMediaItemIndex.coerceAtLeast(0)
             val current = player.getMediaItemAt(index)

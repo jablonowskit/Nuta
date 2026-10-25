@@ -147,4 +147,6 @@
     <string name="stats_no_username">Set your ListenBrainz username in Settings to see your statistics.</string>
     <string name="stats_empty">No statistics for this period yet. ListenBrainz computes them periodically.</string>
     <string name="home_open_stats">Statistics</string>
+    <string name="load_covers_title">Download covers</string>
+    <string name="load_covers_desc">Album art in lists and the player. Turn off to save mobile data — a letter tile is shown instead.</string>
 </resources>

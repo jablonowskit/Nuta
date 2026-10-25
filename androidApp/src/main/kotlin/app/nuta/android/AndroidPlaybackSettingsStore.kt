@@ -46,6 +46,7 @@ class AndroidPlaybackSettingsStore(
             .putBoolean("playerCollapsed", validated.playerCollapsed)
             .putInt("cacheSizeMb", validated.cacheSizeMb)
             .putBoolean("cassetteBackground", validated.cassetteBackground)
+            .putBoolean("loadCovers", validated.loadCovers)
             .putString("theme", validated.theme.name)
             .remove("listenBrainzApiToken")
             .apply()
@@ -69,6 +70,7 @@ class AndroidPlaybackSettingsStore(
         playerCollapsed = preferences.getBoolean("playerCollapsed", false),
         cacheSizeMb = preferences.getInt("cacheSizeMb", 150).coerceIn(25, 500),
         cassetteBackground = preferences.getBoolean("cassetteBackground", true),
+        loadCovers = preferences.getBoolean("loadCovers", true),
         theme = enumValue(preferences.getString("theme", null), AppTheme.FOREST),
     )
 

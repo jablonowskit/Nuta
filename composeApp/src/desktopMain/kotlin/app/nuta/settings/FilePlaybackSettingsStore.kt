@@ -105,6 +105,7 @@ class FilePlaybackSettingsStore(
             playerCollapsed = root["playerCollapsed"]?.jsonPrimitive?.boolean ?: defaults.playerCollapsed,
             cacheSizeMb = root["cacheSizeMb"]?.jsonPrimitive?.int ?: defaults.cacheSizeMb,
             cassetteBackground = root["cassetteBackground"]?.jsonPrimitive?.boolean ?: defaults.cassetteBackground,
+            loadCovers = root["loadCovers"]?.jsonPrimitive?.boolean ?: defaults.loadCovers,
             theme = root["theme"]?.jsonPrimitive?.contentOrNull?.let(::enumOrNull) ?: defaults.theme,
         ).validated().also {
             logger.info("PlaybackSettings", "settings_loaded", "Odtworzono ustawienia odtwarzania z dysku", fields = mapOf("path" to file.toString()))
@@ -135,6 +136,7 @@ class FilePlaybackSettingsStore(
                 put("playerCollapsed", value.playerCollapsed)
                 put("cacheSizeMb", value.cacheSizeMb)
                 put("cassetteBackground", value.cassetteBackground)
+                put("loadCovers", value.loadCovers)
                 put("theme", value.theme.name)
             }.toString()
             val temporary = file.resolveSibling("${file.fileName}.tmp")

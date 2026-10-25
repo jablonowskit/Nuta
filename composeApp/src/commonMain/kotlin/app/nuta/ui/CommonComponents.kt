@@ -28,6 +28,9 @@ import org.jetbrains.compose.resources.stringResource
  * oraz formatery tekstu. Wydzielone z `App.kt`, żeby ekrany w `ui/screens/` mogły ich używać bez
  * ciągnięcia za sobą całego pliku aplikacji.
  */
+/** Ustawienie „Pobieraj okładki” — false: [Cover] nie pobiera obrazów, zostaje kafelek z literą. */
+internal val LocalLoadCovers = androidx.compose.runtime.staticCompositionLocalOf { true }
+
 @Composable
 internal fun Cover(seed: String, imageUrl: String? = null, modifier: Modifier = Modifier.size(54.dp)) {
     val palette = LocalNutaPalette.current
@@ -35,7 +38,7 @@ internal fun Cover(seed: String, imageUrl: String? = null, modifier: Modifier = 
     val color = colors[(seed.hashCode() and Int.MAX_VALUE) % colors.size]
     Box(modifier.background(color, RoundedCornerShape(8.dp)), contentAlignment = Alignment.Center) {
         Text(seed.take(1).uppercase(), fontWeight = FontWeight.Bold, fontSize = 20.sp)
-        imageUrl?.let { PlatformRemoteImage(it, seed, Modifier.fillMaxSize()) }
+        if (LocalLoadCovers.current) imageUrl?.let { PlatformRemoteImage(it, seed, Modifier.fillMaxSize()) }
     }
 }
 
