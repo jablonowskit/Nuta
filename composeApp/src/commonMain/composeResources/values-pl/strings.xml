@@ -135,4 +135,18 @@
     <string name="listenbrainz_token_invalid">Token ListenBrainz jest nieprawidłowy — wpisz go ponownie w Ustawieniach</string>
     <string name="listenbrainz_token_unreadable">Nie udało się odczytać zapisanego tokenu — wpisz go ponownie</string>
     <string name="listenbrainz_token_configure">Skonfiguruj token ListenBrainz w Ustawieniach</string>
+    <string name="nav_stats">Statystyki</string>
+    <string name="stats_subtitle">Topki ListenBrainz</string>
+    <string name="stats_mine">Moje</string>
+    <string name="stats_global">Świat</string>
+    <string name="stats_tracks">Utwory</string>
+    <string name="stats_artists">Wykonawcy</string>
+    <string name="stats_albums">Albumy</string>
+    <string name="stats_week">Tydzień</string>
+    <string name="stats_month">Miesiąc</string>
+    <string name="stats_year">Rok</string>
+    <string name="stats_all_time">Zawsze</string>
+    <string name="stats_no_username">Ustaw nazwę użytkownika ListenBrainz w Ustawieniach, żeby zobaczyć swoje statystyki.</string>
+    <string name="stats_empty">Brak statystyk dla tego okresu. ListenBrainz liczy je okresowo.</string>
+    <string name="home_open_stats">Statystyki</string>
 </resources>
