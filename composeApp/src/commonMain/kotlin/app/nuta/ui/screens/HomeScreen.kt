@@ -30,6 +30,7 @@ internal fun HomeScreen(
     playlists: List<Playlist>,
     playerState: PlayerState,
     onSelectPlaylist: (Playlist) -> Unit,
+    onOpenStats: () -> Unit = {},
 ) {
     // Zamiast stałej liczby z ustawień: pokazuj stopniowo więcej rekomendacji w miarę
     // przewijania listy w dół, dociągając kolejne partie z już pobranej puli.
@@ -44,7 +45,9 @@ internal fun HomeScreen(
     ScrollableLazyColumn(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(12.dp), onVisibleRangeChanged = onVisibleRangeChanged) {
         item {
         Heading(stringResource(Res.string.home_title), stringResource(Res.string.home_subtitle))
-        Spacer(Modifier.height(24.dp))
+        Spacer(Modifier.height(8.dp))
+        androidx.compose.material.OutlinedButton(onClick = onOpenStats) { androidx.compose.material.Text(stringResource(Res.string.home_open_stats)) }
+        Spacer(Modifier.height(16.dp))
         BoxWithConstraints(Modifier.fillMaxWidth()) {
             if (maxWidth < 520.dp) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

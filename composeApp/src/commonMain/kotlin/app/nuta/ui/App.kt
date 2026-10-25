@@ -64,6 +64,7 @@ import app.nuta.ui.screens.PlaylistDetails
 import app.nuta.ui.screens.PlaylistsScreen
 import app.nuta.ui.screens.QueueScreen
 import app.nuta.ui.screens.SearchScreen
+import app.nuta.ui.screens.StatsScreen
 import app.nuta.ui.screens.SettingsScreen
 import app.nuta.ui.theme.LocalNutaPalette
 import app.nuta.ui.theme.ProvideNutaPalette
@@ -503,6 +504,7 @@ private fun NutaAppContent(container: AppContainer) {
                                     playlists = playlists,
                                     playerState = playerState,
                                     onSelectPlaylist = ::selectPlaylist,
+                                    onOpenStats = { destination = Destination.STATS },
                                 )
                                 Destination.PLAYLISTS -> PlaylistsScreen(savedPlaylists, ::selectPlaylist, onCreatePlaylist = { createPlaylistDialogOpen = true })
                                 Destination.LIKED -> LikedScreen(
@@ -525,6 +527,7 @@ private fun NutaAppContent(container: AppContainer) {
                                     onArtist = ::selectArtist,
                                     onAddToPlaylist = ::openAddToPlaylistDialog,
                                 )
+                                Destination.STATS -> StatsScreen(playerState, container, onArtist = ::selectArtist)
                                 Destination.QUEUE -> QueueScreen(playerState, container)
                                 Destination.SETTINGS -> SettingsScreen(container, authWarning = listenBrainzAuthWarning)
                                 Destination.DIAGNOSTICS -> DiagnosticsScreen(container)
@@ -741,7 +744,8 @@ private fun BottomNavigation(selected: Destination, onSelect: (Destination) -> U
         Destination.SETTINGS to stringResource(Res.string.nav_settings_short),
     )
     Row(Modifier.fillMaxWidth().height(58.dp).background(palette.chrome).padding(horizontal = 4.dp)) {
-        Destination.entries.filter { it != Destination.DIAGNOSTICS }.forEach { item ->
+        // Statystyki: na telefonie przez przycisk na ekranie głównym (siódma zakładka nie mieści się w pasku).
+        Destination.entries.filter { it != Destination.DIAGNOSTICS && it != Destination.STATS }.forEach { item ->
             val active = item == selected
             Box(
                 Modifier.weight(1f).fillMaxHeight().clickable { onSelect(item) }
@@ -793,6 +797,7 @@ private fun destinationLabel(destination: Destination): String = stringResource(
         Destination.PLAYLISTS -> Res.string.nav_playlists
         Destination.LIKED -> Res.string.nav_liked
         Destination.SEARCH -> Res.string.nav_search
+        Destination.STATS -> Res.string.nav_stats
         Destination.QUEUE -> Res.string.nav_queue
         Destination.SETTINGS -> Res.string.nav_settings
         Destination.DIAGNOSTICS -> Res.string.nav_diagnostics

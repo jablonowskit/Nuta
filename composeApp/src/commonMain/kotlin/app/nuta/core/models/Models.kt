@@ -62,6 +62,7 @@ enum class Destination {
     PLAYLISTS,
     LIKED,
     SEARCH,
+    STATS,
     QUEUE,
     SETTINGS,
     DIAGNOSTICS,
