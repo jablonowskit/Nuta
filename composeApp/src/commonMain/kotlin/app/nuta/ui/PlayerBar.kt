@@ -472,7 +472,7 @@ internal fun PlayerBar(
         Modifier.fillMaxWidth().height(82.dp).background(palette.chrome).padding(horizontal = 18.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Cover(track?.title ?: "N", track?.imageUrl)
+        Cover(track?.title ?: "N", track?.imageUrl, zoomable = true)
         Spacer(Modifier.width(12.dp))
         Column(Modifier.width(230.dp)) {
             Text(track?.title ?: stringResource(Res.string.nothing_playing), maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.Bold, lineHeight = 16.sp)

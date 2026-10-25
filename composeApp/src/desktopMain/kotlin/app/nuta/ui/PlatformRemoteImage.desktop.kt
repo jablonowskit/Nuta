@@ -4,4 +4,4 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 
 @Composable
-actual fun PlatformRemoteImage(url: String, description: String?, modifier: Modifier) = Unit
+actual fun PlatformRemoteImage(url: String, description: String?, modifier: Modifier, fit: Boolean) = Unit

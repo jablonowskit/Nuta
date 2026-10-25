@@ -181,7 +181,7 @@ private fun EntryRow(position: Int, entry: StatsEntry, onClick: (() -> Unit)?) {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text("$position", color = palette.muted, modifier = Modifier.width(32.dp))
-        Cover(entry.title, entry.imageUrl, Modifier.size(40.dp))
+        Cover(entry.title, entry.imageUrl, Modifier.size(40.dp), zoomable = true)
         Spacer(Modifier.width(10.dp))
         Column(Modifier.weight(1f)) {
             Text(entry.title, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)

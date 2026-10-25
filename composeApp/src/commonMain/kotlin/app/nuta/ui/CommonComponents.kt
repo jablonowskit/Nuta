@@ -1,6 +1,15 @@
 package app.nuta.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -31,16 +40,43 @@ import org.jetbrains.compose.resources.stringResource
 /** Ustawienie „Pobieraj okładki” — false: [Cover] nie pobiera obrazów, zostaje kafelek z literą. */
 internal val LocalLoadCovers = androidx.compose.runtime.staticCompositionLocalOf { true }
 
+/**
+ * Kafelek okładki. [zoomable]: kliknięcie otwiera okładkę na cały ekran (w większej
+ * rozdzielczości, patrz [largeCoverUrl]); kliknięcie w powiększenie je zamyka.
+ */
 @Composable
-internal fun Cover(seed: String, imageUrl: String? = null, modifier: Modifier = Modifier.size(54.dp)) {
+internal fun Cover(seed: String, imageUrl: String? = null, modifier: Modifier = Modifier.size(54.dp), zoomable: Boolean = false) {
     val palette = LocalNutaPalette.current
     val colors = listOf(palette.primaryVariant, palette.secondary, palette.activeHighlight, palette.divider)
     val color = colors[(seed.hashCode() and Int.MAX_VALUE) % colors.size]
-    Box(modifier.background(color, RoundedCornerShape(8.dp)), contentAlignment = Alignment.Center) {
+    val loadCovers = LocalLoadCovers.current
+    var zoomed by remember { mutableStateOf(false) }
+    val canZoom = zoomable && loadCovers && imageUrl != null
+    Box(
+        modifier.background(color, RoundedCornerShape(8.dp))
+            .let { if (canZoom) it.clickable { zoomed = true } else it },
+        contentAlignment = Alignment.Center,
+    ) {
         Text(seed.take(1).uppercase(), fontWeight = FontWeight.Bold, fontSize = 20.sp)
-        if (LocalLoadCovers.current) imageUrl?.let { PlatformRemoteImage(it, seed, Modifier.fillMaxSize()) }
+        if (loadCovers) imageUrl?.let { PlatformRemoteImage(it, seed, Modifier.fillMaxSize()) }
+    }
+    if (zoomed && imageUrl != null) {
+        Dialog(onDismissRequest = { zoomed = false }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+            Box(
+                Modifier.fillMaxSize().background(Color.Black).clickable { zoomed = false },
+                contentAlignment = Alignment.Center,
+            ) {
+                // Najpierw miniatura (już w cache), na wierzchu duża wersja, gdy dojdzie.
+                PlatformRemoteImage(imageUrl, seed, Modifier.fillMaxWidth().aspectRatio(1f), fit = true)
+                PlatformRemoteImage(largeCoverUrl(imageUrl), seed, Modifier.fillMaxWidth().aspectRatio(1f), fit = true)
+            }
+        }
     }
 }
+
+/** Cover Art Archive daje miniatury 250/500/1200 px — do powiększenia bierzemy 1200. */
+internal fun largeCoverUrl(url: String): String =
+    if ("coverartarchive.org" in url) url.replace("-250.jpg", "-1200.jpg").replace("/front-250", "/front-1200") else url
 
 @Composable
 internal fun Heading(title: String, subtitle: String? = null) {
