@@ -56,7 +56,7 @@ internal fun PlaylistCard(playlist: Playlist, onClick: () -> Unit) {
         shape = RoundedCornerShape(10.dp),
     ) {
         Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-            Cover(playlist.name, playlist.imageUrl)
+            Cover(playlist.name, playlist.imageUrl ?: playlist.tracks.firstNotNullOfOrNull { it.imageUrl })
             Spacer(Modifier.width(14.dp))
             Column(Modifier.weight(1f)) {
                 Text(playlist.name, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis)

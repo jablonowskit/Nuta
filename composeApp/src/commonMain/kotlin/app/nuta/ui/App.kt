@@ -186,6 +186,10 @@ private fun NutaAppContent(container: AppContainer) {
             stateSaver = Saver<Destination, String>(save = { it.name }, restore = { name -> Destination.valueOf(name) }),
         ) { mutableStateOf(Destination.HOME) }
         var selectedPlaylist by remember { mutableStateOf<Playlist?>(null) }
+        // ListenBrainz nie ma okładek playlist, a lista zapisanych playlist przychodzi bez utworów —
+        // okładkę (pierwszego utworu z okładką) zapamiętujemy przy otwarciu playlisty.
+        val playlistCovers = remember { androidx.compose.runtime.mutableStateMapOf<String, String>() }
+        fun withCover(p: Playlist) = if (p.imageUrl != null) p else p.copy(imageUrl = playlistCovers[p.id] ?: p.tracks.firstNotNullOfOrNull { it.imageUrl })
         // Historia zakładek dla systemowego „wstecz”: każda zmiana zakładki (z dowolnego miejsca)
         // odkłada poprzednią; cofnięcie zdejmuje ją bez ponownego odkładania. Bez tego „wstecz”
         // na Androidzie zamykało aplikację zamiast wracać.
@@ -280,7 +284,10 @@ private fun NutaAppContent(container: AppContainer) {
                 loading = true
                 loadError = null
                 runCatching { container.spotifyRepository.getPlaylistTracks(playlist.id) }
-                    .onSuccess { selectedPlaylist = playlist.copy(tracks = it) }
+                    .onSuccess { tracks ->
+                        tracks.firstNotNullOfOrNull { it.imageUrl }?.let { playlistCovers[playlist.id] = it }
+                        selectedPlaylist = playlist.copy(tracks = tracks)
+                    }
                     .onFailure { error ->
                         if (error is CancellationException) throw error
                         loadError = error.message
@@ -534,7 +541,7 @@ private fun NutaAppContent(container: AppContainer) {
                                     onSelectPlaylist = ::selectPlaylist,
                                     onOpenStats = { destination = Destination.STATS },
                                 )
-                                Destination.PLAYLISTS -> PlaylistsScreen(savedPlaylists, ::selectPlaylist, onCreatePlaylist = { createPlaylistDialogOpen = true })
+                                Destination.PLAYLISTS -> PlaylistsScreen(savedPlaylists.map(::withCover), ::selectPlaylist, onCreatePlaylist = { createPlaylistDialogOpen = true })
                                 Destination.LIKED -> LikedScreen(
                                     likedTracks,
                                     likedLoading,
