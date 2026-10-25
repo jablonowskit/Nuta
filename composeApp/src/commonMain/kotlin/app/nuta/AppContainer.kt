@@ -3,6 +3,7 @@ package app.nuta
 import app.nuta.core.logging.MemoryLogger
 import app.nuta.domain.AudioPlayer
 import app.nuta.domain.SpotifyRepository
+import app.nuta.player.SleepTimer
 import app.nuta.youtube.YouTubeMediaService
 import app.nuta.settings.InMemoryPlaybackSettingsStore
 import app.nuta.settings.PlaybackSettingsStore
@@ -24,4 +25,5 @@ data class AppContainer(
      * świeżą wartość przy każdym sprawdzeniu — inaczej `remember` zamrażał stan ze startu.
      */
     val listenBrainzTokenUnreadable: () -> Boolean = { false },
+    val sleepTimer: SleepTimer = SleepTimer(audioPlayer),
 )

@@ -149,4 +149,8 @@
     <string name="home_open_stats">Statistics</string>
     <string name="load_covers_title">Download covers</string>
     <string name="load_covers_desc">Album art in lists and the player. Turn off to save mobile data — a letter tile is shown instead.</string>
+    <string name="sleep_timer">Sleep timer</string>
+    <string name="sleep_minutes">%1$d min</string>
+    <string name="sleep_end_of_track">End of track</string>
+    <string name="sleep_off">Turn off</string>
 </resources>

@@ -151,4 +151,8 @@
     <string name="home_open_stats">Statystyki</string>
     <string name="load_covers_title">Pobieraj okładki</string>
     <string name="load_covers_desc">Okładki albumów na listach i w playerze. Wyłącz, żeby oszczędzać transfer — zamiast nich pokazuje się kafelek z literą.</string>
+    <string name="sleep_timer">Wyłącznik czasowy</string>
+    <string name="sleep_minutes">%1$d min</string>
+    <string name="sleep_end_of_track">Do końca utworu</string>
+    <string name="sleep_off">Wyłącz</string>
 </resources>

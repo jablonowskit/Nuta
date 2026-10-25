@@ -47,6 +47,10 @@ import app.nuta.core.models.PlayerStatus
 import app.nuta.core.models.Track
 import app.nuta.resources.*
 import app.nuta.ui.theme.LocalNutaPalette
+import androidx.compose.material.DropdownMenu
+import androidx.compose.material.DropdownMenuItem
+import androidx.compose.runtime.collectAsState
+import app.nuta.player.SleepTimerState
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.stringResource
 
@@ -321,6 +325,7 @@ internal fun CompactPlayerBar(
                 }
             }
         }
+        SleepTimerButton(container)
     }
     CompactTransportRow(state, container, isLiked, favoriteLoading, onToggleLiked, onOpenQueue, similarModeActive, onSimilarModeChange)
     Row(Modifier.fillMaxWidth().height(38.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -381,6 +386,43 @@ private fun PositionSlider(
         enabled = enabled && state.durationMs > 0,
         modifier = modifier,
     )
+}
+
+/** ⏾ z menu: 15/30/45/60 min, do końca utworu, wyłącz. Aktywny pokazuje pozostałe minuty. */
+@Composable
+private fun SleepTimerButton(container: AppContainer) {
+    val timer by container.sleepTimer.state.collectAsState()
+    var open by remember { mutableStateOf(false) }
+    val active = timer != SleepTimerState.Off
+    Box {
+        Text(
+            when (val t = timer) {
+                is SleepTimerState.Countdown -> "⏾ ${(t.remainingMs + 59_999) / 60_000}′"
+                SleepTimerState.EndOfTrack -> "⏾ ⇥"
+                SleepTimerState.Off -> "⏾"
+            },
+            color = if (active) MaterialTheme.colors.primary else LocalNutaPalette.current.muted,
+            fontSize = 16.sp,
+            maxLines = 1,
+            modifier = Modifier.clickable { open = true }.padding(horizontal = 8.dp, vertical = 6.dp),
+        )
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            Text(stringResource(Res.string.sleep_timer), fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp))
+            listOf(15, 30, 45, 60).forEach { minutes ->
+                DropdownMenuItem(onClick = { container.sleepTimer.startMinutes(minutes); open = false }) {
+                    Text(stringResource(Res.string.sleep_minutes, minutes))
+                }
+            }
+            DropdownMenuItem(onClick = { container.sleepTimer.startEndOfTrack(); open = false }) {
+                Text(stringResource(Res.string.sleep_end_of_track))
+            }
+            if (active) {
+                DropdownMenuItem(onClick = { container.sleepTimer.cancel(); open = false }) {
+                    Text(stringResource(Res.string.sleep_off))
+                }
+            }
+        }
+    }
 }
 
 /** Na tyle blisko celu, że uznajemy seek za wykonany (player raportuje pozycję skokowo). */
@@ -554,7 +596,9 @@ internal fun PlayerBar(
             modifier = Modifier.weight(1f).padding(horizontal = 10.dp),
         )
         Text(formatTime(state.durationMs), color = palette.muted, fontSize = 11.sp)
-        Spacer(Modifier.width(14.dp))
+        Spacer(Modifier.width(8.dp))
+        SleepTimerButton(container)
+        Spacer(Modifier.width(6.dp))
         Text(
             when (state.status) {
                 PlayerStatus.LOADING -> stringResource(Res.string.status_buffering)
