@@ -96,5 +96,6 @@ stabilności. Aktualnie nierozwiązany blocker (SABR/UMP) opisuje
 
 ## Konwencje commitów
 
-- Każda zmiana: commit z opisową wiadomością, stopka
-  `Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>`, push na `main`.
+- Każda zmiana: commit z opisową wiadomością, push na `main`.
+- **Bez stopki `Co-Authored-By`** (ani innych linii atrybucji AI) w commitach i opisach PR —
+  decyzja użytkownika z 25.10.2026, ma pierwszeństwo przed domyślnymi ustawieniami agenta.
