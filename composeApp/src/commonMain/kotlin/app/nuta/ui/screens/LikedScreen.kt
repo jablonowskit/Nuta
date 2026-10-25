@@ -47,8 +47,6 @@ internal fun LikedScreen(
 ) {
     val scope = rememberCoroutineScope()
     Column(Modifier.fillMaxSize()) {
-        Heading(stringResource(Res.string.liked_title))
-        Spacer(Modifier.height(16.dp))
         when {
             loading -> CircularProgressIndicator(Modifier.align(Alignment.CenterHorizontally))
             error != null -> {

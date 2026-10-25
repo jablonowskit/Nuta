@@ -43,8 +43,6 @@ internal fun DiagnosticsScreen(container: AppContainer) {
     val scope = rememberCoroutineScope()
     val palette = LocalNutaPalette.current
     Column(Modifier.fillMaxSize()) {
-        Heading(stringResource(Res.string.diagnostics_title), stringResource(Res.string.diagnostics_subtitle))
-        Spacer(Modifier.height(14.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(stringResource(Res.string.log_level), color = palette.muted)
             listOf(LogLevel.INFO, LogLevel.DEBUG, LogLevel.TRACE).forEach { item ->

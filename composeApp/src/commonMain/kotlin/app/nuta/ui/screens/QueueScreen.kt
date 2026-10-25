@@ -48,7 +48,7 @@ internal fun QueueScreen(state: PlayerState, container: AppContainer) {
     val scope = rememberCoroutineScope()
     Column(Modifier.fillMaxSize()) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.weight(1f)) { Heading(stringResource(Res.string.nav_queue)) }
+            Spacer(Modifier.weight(1f))
             if (state.queue.isNotEmpty()) {
                 OutlinedButton(onClick = { scope.launch { container.audioPlayer.clearQueue() } }) {
                     Text(stringResource(Res.string.clear_queue))
