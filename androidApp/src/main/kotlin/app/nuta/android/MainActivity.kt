@@ -149,6 +149,7 @@ class MainActivity : ComponentActivity() {
                         listenBrainzTokenUnreadable = { AppServices.listenBrainzTokenUnreadable },
                         sleepTimer = AppServices.sleepTimer,
                         queueContinuation = AppServices.queueContinuation,
+                        appUpdater = AppServices.appUpdater,
                     )
                 }
                 NutaApp(container)

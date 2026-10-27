@@ -1,5 +1,10 @@
 package app.nuta.ui.screens
 
+import androidx.compose.material.Button
+import androidx.compose.material.LinearProgressIndicator
+import app.nuta.core.BuildInfo
+import app.nuta.update.AppUpdater
+import app.nuta.update.UpdateState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -68,6 +73,7 @@ internal fun SettingsScreen(container: AppContainer, authWarning: String? = null
                 }
             }
         }
+        container.appUpdater?.let { updater -> item { UpdateGroup(updater) } }
         item {
             SettingsGroup(stringResource(Res.string.font_size_title), stringResource(Res.string.font_size_desc)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -300,6 +306,41 @@ internal fun SettingsScreen(container: AppContainer, authWarning: String? = null
                 color = palette.onMuted,
                 fontSize = 11.sp,
             )
+        }
+    }
+}
+
+@Composable
+private fun UpdateGroup(updater: AppUpdater) {
+    val state by updater.state.collectAsState()
+    val scope = rememberCoroutineScope()
+    LaunchedEffect(updater) { if (state == UpdateState.Idle) updater.check() }
+    SettingsGroup(stringResource(Res.string.update_title), stringResource(Res.string.update_desc, BuildInfo.GIT_SHA)) {
+        when (val s = state) {
+            is UpdateState.Downloading -> {
+                Text(stringResource(Res.string.update_downloading, s.version, "${(s.progress * 100).toInt()}%"), fontSize = 13.sp)
+                Spacer(Modifier.height(6.dp))
+                LinearProgressIndicator(progress = s.progress, modifier = Modifier.fillMaxWidth())
+            }
+            is UpdateState.Available -> Button(onClick = { scope.launch { updater.downloadAndInstall() } }, modifier = Modifier.fillMaxWidth()) {
+                Text(stringResource(Res.string.update_install, s.version))
+            }
+            else -> Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    when (s) {
+                        UpdateState.Checking -> stringResource(Res.string.update_checking)
+                        UpdateState.UpToDate -> stringResource(Res.string.update_up_to_date)
+                        is UpdateState.Failed -> stringResource(Res.string.update_failed, s.reason)
+                        else -> ""
+                    },
+                    color = if (s is UpdateState.Failed) LocalNutaPalette.current.danger else LocalNutaPalette.current.muted,
+                    fontSize = 13.sp,
+                    modifier = Modifier.weight(1f),
+                )
+                OutlinedButton(onClick = { scope.launch { updater.check() } }, enabled = s != UpdateState.Checking) {
+                    Text(stringResource(Res.string.update_check))
+                }
+            }
         }
     }
 }
