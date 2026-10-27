@@ -230,6 +230,7 @@ private fun NutaAppContent(container: AppContainer) {
         var likedError by remember { mutableStateOf<String?>(null) }
         // Stan trybu podobnych (♬+) żyje w QueueContinuation — dokładanie działa też przy zgaszonym ekranie.
         val similarModeActive by container.queueContinuation.similarMode.collectAsState()
+        var lyricsVisible by rememberSaveable { mutableStateOf(false) }
         var currentTrackLiked by remember { mutableStateOf(false) }
         // tylko stan ręcznego kliknięcia — celowo NIE dzielony z tłowym sprawdzaniem "czy polubione"
         // przy zmianie utworu; gdyby to sprawdzenie się zawiesiło, nie może trwale zablokować przycisku
@@ -572,11 +573,16 @@ private fun NutaAppContent(container: AppContainer) {
                 if (compact) {
                     if (showPlayerBar) {
                         Divider(color = LocalNutaPalette.current.divider)
-                        CompactPlayerBar(playerState, container, similarModeActive, container.queueContinuation::setSimilarMode, openQueue, displayedTrackLiked, favoriteLoading, toggleCurrentTrackLiked, playbackSettings.playerCollapsed, setCollapsed)
+                        CompactPlayerBar(playerState, container, similarModeActive, container.queueContinuation::setSimilarMode, openQueue, displayedTrackLiked, favoriteLoading, toggleCurrentTrackLiked, playbackSettings.playerCollapsed, setCollapsed, lyricsVisible, { lyricsVisible = it })
                     }
                     BottomNavigation(destination) { navigate(it) }
                 } else if (showPlayerBar) {
                     Divider(color = LocalNutaPalette.current.divider)
+                    // Pasek desktopowy ma stałe 82 dp — tekst idzie nad nim, nie w nim.
+                    if (lyricsVisible && !playbackSettings.playerCollapsed) {
+                        LyricsPanel(playerState.currentTrack, playerState.positionMs, Modifier.fillMaxWidth().height(200.dp).background(LocalNutaPalette.current.chrome))
+                        Divider(color = LocalNutaPalette.current.divider)
+                    }
                     PlayerBar(
                         state = playerState,
                         container = container,
@@ -588,6 +594,8 @@ private fun NutaAppContent(container: AppContainer) {
                         onToggleLiked = toggleCurrentTrackLiked,
                         collapsed = playbackSettings.playerCollapsed,
                         onCollapsedChange = setCollapsed,
+                        lyricsVisible = lyricsVisible,
+                        onLyricsVisibleChange = { lyricsVisible = it },
                     )
                 }
             }
