@@ -146,6 +146,7 @@ class MainActivity : ComponentActivity() {
                         networkResumed = AppServices.networkResumed,
                         onSpotifySessionInvalid = { AppServices.notifySpotifySessionInvalid() },
                         listenBrainzTokenUnreadable = { AppServices.listenBrainzTokenUnreadable },
+                        sleepTimer = AppServices.sleepTimer,
                     )
                 }
                 NutaApp(container)

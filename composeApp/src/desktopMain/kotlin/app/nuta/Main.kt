@@ -129,6 +129,7 @@ fun main() {
                             // bez tego nowy kontener dostawał świeży store i ustawienia
                             // odtwarzania resetowały się przy każdym odświeżeniu tokenu
                             playbackSettings = playbackSettings,
+                            sleepTimer = container.sleepTimer,
                         )
                         tokenExpiresAtMs = token.expiresAtMs
                         showSpotifyLogin = false

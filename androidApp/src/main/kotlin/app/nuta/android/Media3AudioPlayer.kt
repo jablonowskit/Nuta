@@ -64,6 +64,13 @@ class Media3AudioPlayer(
     private val prefetchCache = LinkedHashMap<String, Deferred<YouTubeResolution>>()
     private val prefetchLock = Any()
     private var released = false
+    /**
+     * Pauza przyszła, zanim [loadTrack] skończył resolve — wtedy nie wolno mu na końcu wołać
+     * play(). Inaczej wyłącznik „do końca utworu” (pauza tuż po przejściu na następny) i pauza
+     * użytkownika w trakcie ładowania przegrywały z resolve i muzyka grała dalej.
+     * Zeruje ją tylko świadoma akcja użytkownika (play/next/previous/playAt), nie auto-przejście.
+     */
+    @Volatile private var pauseRequested = false
     private val playerListener = object : Player.Listener {
         override fun onPlaybackStateChanged(playbackState: Int) {
             when (playbackState) {
@@ -96,8 +103,12 @@ class Media3AudioPlayer(
                 retryingAfterError = true
                 scope.launch {
                     delay(250)
-                    withContext(Dispatchers.Main) { player.stop(); player.clearMediaItems() }
-                    play()
+                    withContext(Dispatchers.Main) {
+                        // bez tego retry po chwilowym błędzie sieci zaczynał utwór od 0:00
+                        pendingResumePositionMs = player.currentPosition.takeIf { it > 0 } ?: stateFlow.value.positionMs
+                        player.stop(); player.clearMediaItems()
+                    }
+                    startPlayback()
                 }
             }
             logger.error("Media3Player", "playback_failed", "Media3 zgłosił błąd odtwarzania", throwable = error)
@@ -250,7 +261,7 @@ class Media3AudioPlayer(
                 withContext(Dispatchers.Main) { player.stop(); player.clearMediaItems() }
                 stateFlow.value = PlayerState(queue = newQueue, currentIndex = newIndex)
                 saveQueue(); savePosition(0)
-                if (wasPlaying) play()
+                if (wasPlaying) startPlayback()
             }
             else -> {
                 // utwór po aktualnym: nie wpływa na to, co gra teraz
@@ -353,6 +364,11 @@ class Media3AudioPlayer(
     }
 
     override suspend fun play() {
+        pauseRequested = false
+        startPlayback()
+    }
+
+    private suspend fun startPlayback() {
         val track = stateFlow.value.currentTrack ?: return
         if (stateFlow.value.status == PlayerStatus.PAUSED) { withContext(Dispatchers.Main) { player.play() }; return }
         val job = synchronized(loadLock) {
@@ -398,7 +414,7 @@ class Media3AudioPlayer(
                     .build())
                 player.prepare()
                 if (resumeFromMs != null) player.seekTo(resumeFromMs)
-                player.play()
+                if (!pauseRequested) player.play()
             }
             logger.info("Media3Player", "playback_prepared", "Przekazano strumień YouTube do Media3", fields = mapOf(
                 "codec" to resolution.stream.codec,
@@ -440,7 +456,10 @@ class Media3AudioPlayer(
     }
 
     override suspend fun pause() = withContext(Dispatchers.Main) {
+        pauseRequested = true
         player.pause()
+        // w trakcie ładowania player trzyma jeszcze poprzedni utwór — jego pozycja byłaby bzdurą
+        if (stateFlow.value.status == PlayerStatus.LOADING || stateFlow.value.status == PlayerStatus.IDLE) return@withContext
         val position = player.currentPosition.coerceAtLeast(0)
         stateFlow.value = stateFlow.value.copy(positionMs = position)
         savePosition(position)
@@ -462,9 +481,9 @@ class Media3AudioPlayer(
         stateFlow.value = stateFlow.value.copy(positionMs = target)
         savePosition(target)
     }
-    override suspend fun next() = move(stateFlow.value.currentIndex + 1)
-    override suspend fun previous() = move(stateFlow.value.currentIndex - 1)
-    override suspend fun playAt(index: Int) = move(index)
+    override suspend fun next() { pauseRequested = false; move(stateFlow.value.currentIndex + 1) }
+    override suspend fun previous() { pauseRequested = false; move(stateFlow.value.currentIndex - 1) }
+    override suspend fun playAt(index: Int) { pauseRequested = false; move(index) }
     override suspend fun simulateError() { stateFlow.value = stateFlow.value.copy(status = PlayerStatus.ERROR, errorMessage = "Symulowany błąd") }
 
     private suspend fun move(index: Int) {
@@ -476,7 +495,7 @@ class Media3AudioPlayer(
         savePosition(0)
         // pause zamiast stop: stop przełącza sesję w IDLE i zwija powiadomienie/lock screen na czas rozwiązywania streamu
         withContext(Dispatchers.Main) { player.pause() }
-        play()
+        startPlayback()
     }
 
     private fun saveQueue() {

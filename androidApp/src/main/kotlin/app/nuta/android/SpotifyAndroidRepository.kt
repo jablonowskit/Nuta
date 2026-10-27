@@ -259,10 +259,13 @@ class SpotifyAndroidRepository(
                 val status = connection.responseCode
                 val response = (if (status in 200..299) connection.inputStream else connection.errorStream)
                     ?.bufferedReader()?.use { it.readText() }.orEmpty()
-                if (status == 401 || status == 403) {
+                // Tylko 401 to martwy token. 403 = brak uprawnień do zasobu (np. dodawanie do
+                // cudzej playlisty) — wylogowywanie wtedy zmuszało do logowania z ważnym tokenem.
+                if (status == 401) {
                     onSessionInvalid()
                     error("Sesja Spotify wygasła. Zaloguj się ponownie.")
                 }
+                if (status == 403) error("Spotify odmówiło dostępu (HTTP 403).")
                 require(status in 200..299) { "Spotify REST HTTP $status" }
                 if (response.isBlank()) JsonObject(emptyMap()) else json.parseToJsonElement(response)
             } finally {
@@ -298,10 +301,13 @@ class SpotifyAndroidRepository(
                 val status = connection.responseCode
                 val response = (if (status in 200..299) connection.inputStream else connection.errorStream)
                     ?.bufferedReader()?.use { it.readText() }.orEmpty()
-                if (status == 401 || status == 403) {
+                // Tylko 401 to martwy token. 403 = brak uprawnień do zasobu (np. dodawanie do
+                // cudzej playlisty) — wylogowywanie wtedy zmuszało do logowania z ważnym tokenem.
+                if (status == 401) {
                     onSessionInvalid()
                     error("Sesja Spotify wygasła. Zaloguj się ponownie.")
                 }
+                if (status == 403) error("Spotify odmówiło dostępu (HTTP 403).")
                 if (status !in 200..299) {
                     logger.warn(
                         "SpotifyAndroid",
