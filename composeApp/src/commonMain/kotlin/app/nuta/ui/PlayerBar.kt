@@ -336,9 +336,12 @@ internal fun CompactPlayerBar(
                 }
             }
         }
-        MusicVideoButton(track)
-        LyricsToggleButton(lyricsVisible, onLyricsVisibleChange)
-        SleepTimerButton(container)
+        // w pionie: tytuł zostaje szeroki na długie nazwy
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            MusicVideoButton(track)
+            LyricsToggleButton(lyricsVisible, onLyricsVisibleChange)
+            SleepTimerButton(container)
+        }
     }
     if (lyricsVisible) LyricsPanel(track, state.positionMs, Modifier.fillMaxWidth().height(240.dp))
     CompactTransportRow(state, container, isLiked, favoriteLoading, onToggleLiked, onOpenQueue, similarModeActive, onSimilarModeChange)

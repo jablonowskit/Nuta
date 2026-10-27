@@ -127,7 +127,7 @@ internal fun SettingsScreen(container: AppContainer, authWarning: String? = null
             SettingsGroup(stringResource(Res.string.equalizer_title), stringResource(Res.string.equalizer_desc)) {
                 SettingOptions(
                     options = listOf(
-                        EqualizerPreset.OFF to stringResource(Res.string.loudness_off),
+                        EqualizerPreset.OFF to stringResource(Res.string.equalizer_off),
                         EqualizerPreset.BASS to stringResource(Res.string.equalizer_bass),
                         EqualizerPreset.VOCAL to stringResource(Res.string.equalizer_vocal),
                         EqualizerPreset.BRIGHT to stringResource(Res.string.equalizer_bright),
