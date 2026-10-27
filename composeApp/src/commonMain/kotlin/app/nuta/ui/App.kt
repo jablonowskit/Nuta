@@ -60,6 +60,7 @@ import org.jetbrains.compose.resources.stringResource
 import app.nuta.resources.*
 import app.nuta.AppContainer
 import app.nuta.ui.screens.DiagnosticsScreen
+import app.nuta.ui.screens.HistoryScreen
 import app.nuta.ui.screens.HomeScreen
 import app.nuta.ui.screens.LikedScreen
 import app.nuta.ui.screens.PlaylistDetails
@@ -533,6 +534,7 @@ private fun NutaAppContent(container: AppContainer) {
                                     playerState = playerState,
                                     onSelectPlaylist = ::selectPlaylist,
                                     onOpenStats = { destination = Destination.STATS },
+                                    onOpenHistory = { destination = Destination.HISTORY },
                                 )
                                 Destination.PLAYLISTS -> PlaylistsScreen(savedPlaylists.map(::withCover), ::selectPlaylist, onCreatePlaylist = { createPlaylistDialogOpen = true })
                                 Destination.LIKED -> LikedScreen(
@@ -556,6 +558,7 @@ private fun NutaAppContent(container: AppContainer) {
                                     onAddToPlaylist = ::openAddToPlaylistDialog,
                                 )
                                 Destination.STATS -> StatsScreen(playerState, container, onArtist = ::selectArtist)
+                                Destination.HISTORY -> HistoryScreen(playerState, container, onAddToPlaylist = ::openAddToPlaylistDialog)
                                 Destination.QUEUE -> QueueScreen(playerState, container)
                                 Destination.SETTINGS -> SettingsScreen(container, authWarning = listenBrainzAuthWarning)
                                 Destination.DIAGNOSTICS -> DiagnosticsScreen(container)
@@ -771,7 +774,7 @@ private fun BottomNavigation(selected: Destination, onSelect: (Destination) -> U
     )
     Row(Modifier.fillMaxWidth().height(58.dp).background(palette.chrome).padding(horizontal = 4.dp)) {
         // Statystyki: na telefonie przez przycisk na ekranie głównym (siódma zakładka nie mieści się w pasku).
-        Destination.entries.filter { it != Destination.DIAGNOSTICS && it != Destination.STATS }.forEach { item ->
+        Destination.entries.filter { it != Destination.DIAGNOSTICS && it != Destination.STATS && it != Destination.HISTORY }.forEach { item ->
             val active = item == selected
             Box(
                 Modifier.weight(1f).fillMaxHeight().clickable { onSelect(item) }
@@ -824,6 +827,7 @@ private fun destinationLabel(destination: Destination): String = stringResource(
         Destination.LIKED -> Res.string.nav_liked
         Destination.SEARCH -> Res.string.nav_search
         Destination.STATS -> Res.string.nav_stats
+        Destination.HISTORY -> Res.string.nav_history
         Destination.QUEUE -> Res.string.nav_queue
         Destination.SETTINGS -> Res.string.nav_settings
         Destination.DIAGNOSTICS -> Res.string.nav_diagnostics

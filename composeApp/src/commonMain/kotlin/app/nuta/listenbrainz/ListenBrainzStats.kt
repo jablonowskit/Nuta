@@ -10,8 +10,18 @@ import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.longOrNull
 
-/** Zakres czasu statystyk — wartości parametru `range` w API ListenBrainz. */
-enum class StatsRange(val apiValue: String) { WEEK("week"), MONTH("month"), YEAR("year"), ALL_TIME("all_time") }
+/**
+ * Zakres czasu statystyk — wartości parametru `range` w API ListenBrainz. [activityApiValue] dla
+ * wykresu aktywności: `this_*` sięga do dziś, a gołe `week`/`month` kończą się na poprzednim pełnym
+ * okresie (curl 27.10.2026: `month` dawał sierpień–wrzesień, `this_month` wrzesień–październik).
+ * ListenBrainz zwraca w obu przypadkach dwa okresy — poprzedni i bieżący — do porównania.
+ */
+enum class StatsRange(val apiValue: String, val activityApiValue: String) {
+    WEEK("week", "this_week"), MONTH("month", "this_month"), YEAR("year", "this_year"), ALL_TIME("all_time", "all_time"),
+}
+
+/** Kubełek wykresu aktywności: dzień, miesiąc albo rok, zależnie od zakresu. */
+data class ActivityBucket(val label: String, val fromTs: Long, val count: Long)
 
 enum class StatsKind { RECORDINGS, ARTISTS, RELEASES }
 
@@ -48,8 +58,31 @@ class ListenBrainzStats {
         return parse(httpGet("https://api.listenbrainz.org/1/stats/$scope/$path?range=${range.apiValue}&count=$count"), kind)
     }
 
+    /** Liczba odsłuchań w czasie z `/1/stats/user/<nazwa>/listening-activity`. */
+    suspend fun activity(user: String, range: StatsRange): List<ActivityBucket> =
+        parseActivity(httpGet("https://api.listenbrainz.org/1/stats/user/${userPathSegment(user)}/listening-activity?range=${range.activityApiValue}"))
+
     companion object {
         private val json = Json { ignoreUnknownKeys = true }
+
+        /**
+         * Kubełki w kolejności czasu. Wiodące zera odcinamy: `all_time` zaczyna od 2002 roku
+         * i wykres byłby w większości pusty.
+         */
+        fun parseActivity(body: String): List<ActivityBucket> {
+            if (body.isBlank()) return emptyList()
+            val payload = runCatching { (json.parseToJsonElement(body) as? JsonObject)?.get("payload") as? JsonObject }
+                .getOrNull() ?: return emptyList()
+            val items = payload["listening_activity"] as? JsonArray ?: return emptyList()
+            return items.mapNotNull { item ->
+                val o = item as? JsonObject ?: return@mapNotNull null
+                ActivityBucket(
+                    label = o["time_range"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null,
+                    fromTs = o["from_ts"]?.jsonPrimitive?.longOrNull ?: 0L,
+                    count = o["listen_count"]?.jsonPrimitive?.longOrNull ?: 0L,
+                )
+            }.sortedBy { it.fromTs }.dropWhile { it.count == 0L }
+        }
 
         fun parse(body: String, kind: StatsKind): List<StatsEntry> {
             if (body.isBlank()) return emptyList()

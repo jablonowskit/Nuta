@@ -63,6 +63,7 @@ enum class Destination {
     LIKED,
     SEARCH,
     STATS,
+    HISTORY,
     QUEUE,
     SETTINGS,
     DIAGNOSTICS,
