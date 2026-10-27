@@ -312,10 +312,13 @@ class PlaybackService : MediaSessionService() {
         private const val COMMAND_SEEK_FORWARD_10 = "app.nuta.SEEK_FORWARD_10"
 
         private fun loadControl(size: BufferSize): DefaultLoadControl {
+            // Trzeci próg (bufor przed startem) to cisza między utworami: przy 1500 ms przejście
+            // trwało ~1 s nawet na światłowodzie i z trafionym prefetchem (zmierzone 27.10.2026).
+            // Ochronę przed zacinaniem daje czwarty próg (po rebuforze), którego nie ruszamy.
             val values = when (size) {
                 BufferSize.SMALL -> intArrayOf(5_000, 15_000, 500, 1_000)
-                BufferSize.STANDARD -> intArrayOf(15_000, 50_000, 1_500, 3_000)
-                BufferSize.LARGE -> intArrayOf(30_000, 120_000, 3_000, 5_000)
+                BufferSize.STANDARD -> intArrayOf(15_000, 50_000, 500, 3_000)
+                BufferSize.LARGE -> intArrayOf(30_000, 120_000, 1_000, 5_000)
             }
             return DefaultLoadControl.Builder().setBufferDurationsMs(values[0], values[1], values[2], values[3]).build()
         }
