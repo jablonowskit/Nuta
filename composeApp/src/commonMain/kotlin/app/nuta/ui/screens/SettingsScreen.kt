@@ -197,6 +197,14 @@ internal fun SettingsScreen(container: AppContainer, authWarning: String? = null
             }
         }
         item {
+            SettingsGroup(stringResource(Res.string.auto_continue_title), stringResource(Res.string.auto_continue_desc)) {
+                SettingOptions(
+                    options = listOf(false to stringResource(Res.string.loudness_off), true to stringResource(Res.string.option_enabled)),
+                    selected = settings.autoContinue,
+                ) { value -> container.playbackSettings.update { it.copy(autoContinue = value) } }
+            }
+        }
+        item {
             SettingsGroup(stringResource(Res.string.theme_title), stringResource(Res.string.theme_desc)) {
                 SettingOptions(
                     options = listOf(

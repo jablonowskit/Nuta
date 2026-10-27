@@ -36,6 +36,9 @@ import app.nuta.core.models.Track
 import app.nuta.resources.Res
 import app.nuta.resources.add_to_playlist_menu
 import app.nuta.resources.play_next
+import app.nuta.resources.track_radio
+import app.nuta.AppContainer
+import kotlinx.coroutines.CancellationException
 import app.nuta.ui.theme.LocalNutaPalette
 import kotlinx.coroutines.delay
 import org.jetbrains.compose.resources.stringResource
@@ -58,10 +61,12 @@ internal fun TrackRow(
     // Z tym przytrzymanie otwiera menu („Odtwórz jako następny” + dodawanie do playlisty)
     // zamiast od razu dialogu playlist.
     onPlayNext: (() -> Unit)? = null,
+    onRadio: (() -> Unit)? = null,
 ) {
     val palette = LocalNutaPalette.current
     var menuOpen by remember { mutableStateOf(false) }
-    val longPress: (() -> Unit)? = if (onPlayNext != null) ({ menuOpen = true }) else onLongPress
+    val hasMenu = onPlayNext != null || onRadio != null
+    val longPress: (() -> Unit)? = if (hasMenu) ({ menuOpen = true }) else onLongPress
     BoxWithConstraints(Modifier.fillMaxWidth()) {
     val compact = maxWidth < 520.dp
     val rowModifier = Modifier.fillMaxWidth()
@@ -102,9 +107,14 @@ internal fun TrackRow(
             }
         }
     }
-    if (onPlayNext != null) {
+    if (hasMenu) {
         DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-            DropdownMenuItem(onClick = { menuOpen = false; onPlayNext() }) { Text(stringResource(Res.string.play_next)) }
+            if (onPlayNext != null) {
+                DropdownMenuItem(onClick = { menuOpen = false; onPlayNext() }) { Text(stringResource(Res.string.play_next)) }
+            }
+            if (onRadio != null) {
+                DropdownMenuItem(onClick = { menuOpen = false; onRadio() }) { Text(stringResource(Res.string.track_radio)) }
+            }
             if (onLongPress != null) {
                 DropdownMenuItem(onClick = { menuOpen = false; onLongPress() }) { Text(stringResource(Res.string.add_to_playlist_menu)) }
             }
@@ -138,6 +148,24 @@ private fun TrackActionButton(label: String, confirmLabel: String, fontSize: Tex
             fontWeight = FontWeight.Bold,
         )
     }
+}
+
+/**
+ * „Graj podobne”: kolejka = ten utwór + radio od niego. Najpierw pobieramy radio, potem
+ * startujemy — gdyby utwór ruszył sam, QueueContinuation (ostatni w kolejce) dokładałby
+ * równolegle drugie radio.
+ */
+internal suspend fun startTrackRadio(container: AppContainer, track: Track) {
+    val radio = try {
+        container.spotifyRepository.getTrackRadio(track)
+    } catch (error: CancellationException) {
+        throw error
+    } catch (error: Throwable) {
+        container.logger.warn("TrackRadio", "radio_failed", "Nie udało się pobrać podobnych utworów", fields = mapOf("reason" to (error.message ?: "unknown")))
+        emptyList()
+    }
+    container.audioPlayer.setQueue(listOf(track) + radio.filterNot { it.id == track.id }, 0)
+    container.audioPlayer.play()
 }
 
 @Composable

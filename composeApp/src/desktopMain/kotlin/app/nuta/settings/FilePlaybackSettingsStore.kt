@@ -102,6 +102,7 @@ class FilePlaybackSettingsStore(
             listenBrainzUsername = root["listenBrainzUsername"]?.jsonPrimitive?.contentOrNull ?: defaults.listenBrainzUsername,
             listenBrainzApiToken = loadTokenAndMigrate(root["listenBrainzApiToken"]?.jsonPrimitive?.contentOrNull),
             prefetchEnabled = root["prefetchEnabled"]?.jsonPrimitive?.boolean ?: defaults.prefetchEnabled,
+            autoContinue = root["autoContinue"]?.jsonPrimitive?.boolean ?: defaults.autoContinue,
             playerCollapsed = root["playerCollapsed"]?.jsonPrimitive?.boolean ?: defaults.playerCollapsed,
             cacheSizeMb = root["cacheSizeMb"]?.jsonPrimitive?.int ?: defaults.cacheSizeMb,
             cassetteBackground = root["cassetteBackground"]?.jsonPrimitive?.boolean ?: defaults.cassetteBackground,
@@ -135,6 +136,7 @@ class FilePlaybackSettingsStore(
                 put("dataSource", value.dataSource.name)
                 put("listenBrainzUsername", value.listenBrainzUsername)
                 put("prefetchEnabled", value.prefetchEnabled)
+                put("autoContinue", value.autoContinue)
                 put("playerCollapsed", value.playerCollapsed)
                 put("cacheSizeMb", value.cacheSizeMb)
                 put("cassetteBackground", value.cassetteBackground)
