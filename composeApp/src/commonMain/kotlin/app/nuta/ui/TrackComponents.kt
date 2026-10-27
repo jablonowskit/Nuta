@@ -37,6 +37,9 @@ import app.nuta.resources.Res
 import app.nuta.resources.add_to_playlist_menu
 import app.nuta.resources.play_next
 import app.nuta.resources.track_radio
+import app.nuta.resources.share_track
+import app.nuta.listenbrainz.ListenBrainzRepository
+import app.nuta.settings.DataSource
 import app.nuta.AppContainer
 import kotlinx.coroutines.CancellationException
 import app.nuta.ui.theme.LocalNutaPalette
@@ -62,10 +65,11 @@ internal fun TrackRow(
     // zamiast od razu dialogu playlist.
     onPlayNext: (() -> Unit)? = null,
     onRadio: (() -> Unit)? = null,
+    onShare: (() -> Unit)? = null,
 ) {
     val palette = LocalNutaPalette.current
     var menuOpen by remember { mutableStateOf(false) }
-    val hasMenu = onPlayNext != null || onRadio != null
+    val hasMenu = onPlayNext != null || onRadio != null || onShare != null
     val longPress: (() -> Unit)? = if (hasMenu) ({ menuOpen = true }) else onLongPress
     BoxWithConstraints(Modifier.fillMaxWidth()) {
     val compact = maxWidth < 520.dp
@@ -115,6 +119,9 @@ internal fun TrackRow(
             if (onRadio != null) {
                 DropdownMenuItem(onClick = { menuOpen = false; onRadio() }) { Text(stringResource(Res.string.track_radio)) }
             }
+            if (onShare != null) {
+                DropdownMenuItem(onClick = { menuOpen = false; onShare() }) { Text(stringResource(Res.string.share_track)) }
+            }
             if (onLongPress != null) {
                 DropdownMenuItem(onClick = { menuOpen = false; onLongPress() }) { Text(stringResource(Res.string.add_to_playlist_menu)) }
             }
@@ -149,6 +156,26 @@ private fun TrackActionButton(label: String, confirmLabel: String, fontSize: Tex
         )
     }
 }
+
+/**
+ * Tekst do udostępnienia: „Tytuł — Wykonawcy” + link, jeśli da się go zbudować z id.
+ * MBID → MusicBrainz (otwiera się bez konta), Spotify → open.spotify.com, MSID i reszta → sam tekst.
+ */
+internal fun trackShareText(track: Track, dataSource: DataSource): String {
+    val label = listOf(track.title, track.artists.joinToString()).filter(String::isNotBlank).joinToString(" — ")
+    val link = when {
+        ListenBrainzRepository.MbidRegex.matches(track.id) -> "https://musicbrainz.org/recording/${track.id}"
+        dataSource == DataSource.SPOTIFY && SpotifyIdRegex.matches(track.id) -> "https://open.spotify.com/track/${track.id}"
+        else -> null
+    }
+    return if (link == null) label else "$label\n$link"
+}
+
+private val SpotifyIdRegex = Regex("^[0-9A-Za-z]{22}$")
+
+/** Udostępnia [track] systemowo (desktop: schowek). Źródło danych czytane w chwili kliknięcia. */
+internal fun shareTrack(container: AppContainer, track: Track) =
+    shareText(trackShareText(track, container.playbackSettings.settings.value.dataSource))
 
 /**
  * „Graj podobne”: kolejka = ten utwór + radio od niego. Najpierw pobieramy radio, potem

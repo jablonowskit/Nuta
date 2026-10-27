@@ -34,6 +34,7 @@ import app.nuta.ui.EmptyState
 import app.nuta.ui.ErrorState
 import app.nuta.ui.ScrollableLazyColumn
 import app.nuta.ui.TrackRow
+import app.nuta.ui.shareTrack
 import app.nuta.ui.startTrackRadio
 import app.nuta.ui.theme.LocalNutaPalette
 import java.time.Instant
@@ -107,6 +108,7 @@ internal fun HistoryScreen(
                         onLongPress = { onAddToPlaylist(track) },
                         onPlayNext = { scope.launch { container.audioPlayer.insertNext(listOf(track)) } },
                         onRadio = { scope.launch { startTrackRadio(container, track) } },
+                        onShare = { shareTrack(container, track) },
                     )
                 }
                 item {
