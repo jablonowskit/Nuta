@@ -15,6 +15,7 @@ import app.nuta.core.logging.MemoryLogger
 import app.nuta.listenbrainz.ListenBrainzRepository
 import app.nuta.listenbrainz.ListenBrainzScrobbler
 import app.nuta.musicbrainz.MusicBrainzRepository
+import app.nuta.player.SleepTimer
 import app.nuta.ui.initPlatformBrowser
 import app.nuta.youtube.SourceSelectingMediaService
 import app.nuta.youtube.YouTubeMediaService
@@ -60,6 +61,8 @@ object AppServices {
 
     val audioPlayer = MutableStateFlow<Media3AudioPlayer?>(null)
     val playerConnectFailed = MutableStateFlow(false)
+    /** Przeżywa przebudowy AppContainer w MainActivity; player zawsze aktualny po reconnect. */
+    val sleepTimer = SleepTimer(player = { audioPlayer.value })
     /** Emitowane przy powrocie sieci — UI odświeża listy (App.kt). Nie przy każdym onResume. */
     private val _networkResumed = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
     val networkResumed: SharedFlow<Unit> = _networkResumed.asSharedFlow()

@@ -20,10 +20,12 @@ sealed interface SleepTimerState {
 
 /**
  * Wyłącznik czasowy: po czasie (albo gdy skończy się bieżący utwór) pauzuje odtwarzanie.
- * Żyje w [app.nuta.AppContainer], nie w kompozycji — odlicza dalej, gdy ekran jest wygaszony.
+ * Żyje dłużej niż [app.nuta.AppContainer] (ten jest przebudowywany np. przy odświeżeniu tokenu
+ * Spotify) — inaczej stary timer pauzował "w tle", a UI nowego kontenera pokazywało Off.
+ * Player brany z [player] przy każdym użyciu, bo na Androidzie zmienia się po reconnect.
  */
 class SleepTimer(
-    private val player: AudioPlayer,
+    private val player: () -> AudioPlayer?,
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
 ) {
     private val _state = MutableStateFlow<SleepTimerState>(SleepTimerState.Off)
@@ -38,10 +40,11 @@ class SleepTimer(
             delay(step)
             remaining -= step
         }
-        player.pause()
+        player()?.pause()
     }
 
     fun startEndOfTrack() = restart {
+        val player = player() ?: return@restart
         _state.value = SleepTimerState.EndOfTrack
         val startIndex = player.state.value.currentIndex
         val startId = player.state.value.currentTrack?.id

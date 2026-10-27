@@ -429,19 +429,24 @@ private fun NutaAppContent(container: AppContainer) {
             if (destination != Destination.PLAYLISTS && destination != Destination.LIKED || likedLoaded || likedLoading) return@LaunchedEffect
             likedLoading = true
             likedError = null
-            runCatching { container.spotifyRepository.getLikedTracks() }
-                .onSuccess {
-                    likedTracks = it
-                    likedLoaded = true
-                }
-                .onFailure { error ->
-                    // Zmiana źródła danych/ekranu anuluje ten efekt — bez tego rzutu anulowanie
-                    // lądowało w likedError i użytkownik widział czerwony błąd zamiast po prostu
-                    // przerwanego ładowania.
-                    if (error is CancellationException) throw error
-                    likedError = error.message ?: likedFetchFailedLabel
-                }
-            likedLoading = false
+            // finally: anulowanie (np. przejście Playlisty → Polubione w trakcie ładowania)
+            // zostawiało likedLoading = true i każdy kolejny efekt wychodził od razu — wieczny spinner
+            try {
+                runCatching { container.spotifyRepository.getLikedTracks() }
+                    .onSuccess {
+                        likedTracks = it
+                        likedLoaded = true
+                    }
+                    .onFailure { error ->
+                        // Zmiana źródła danych/ekranu anuluje ten efekt — bez tego rzutu anulowanie
+                        // lądowało w likedError i użytkownik widział czerwony błąd zamiast po prostu
+                        // przerwanego ładowania.
+                        if (error is CancellationException) throw error
+                        likedError = error.message ?: likedFetchFailedLabel
+                    }
+            } finally {
+                likedLoading = false
+            }
         }
 
         LaunchedEffect(playerState.currentTrack?.id, container.spotifyRepository, playbackSettings.dataSource) {

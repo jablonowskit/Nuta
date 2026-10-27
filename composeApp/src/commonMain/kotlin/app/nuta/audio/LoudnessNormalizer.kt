@@ -38,7 +38,7 @@ import kotlin.math.sqrt
 class LoudnessNormalizer(
     private val sampleRateHz: Int,
     /** Liczba kanałów — okno pomiaru liczymy w próbkach przeplecionych, więc skaluje jego długość. */
-    channelCount: Int,
+    private val channelCount: Int,
     mode: LoudnessNormalization,
 ) {
     /** Poziom docelowy w dBFS. Odpowiada celom `loudnorm` na desktopie (I=-16 / I=-20 LUFS). */
@@ -137,7 +137,9 @@ class LoudnessNormalizer(
      */
     private fun approach(from: Double, to: Double): Double {
         if (to >= from) return from
-        val stepMs = 1000.0 / sampleRateHz
+        // processSample idzie po próbkach przeplecionych — przy stereo dwa wywołania na ramkę,
+        // więc bez channelCount attack był dwa razy krótszy (100 ms działało jak 50 ms)
+        val stepMs = 1000.0 / (sampleRateHz * channelCount)
         val step = (stepMs / AttackMs).coerceIn(0.0, 1.0)
         return from + (to - from) * step
     }

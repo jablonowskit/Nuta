@@ -51,6 +51,9 @@ class ListenBrainzScrobbler(
         każdym tyknięciu pozycji oraz przy pauzie/wznowieniu tego samego utworu. */
     private var scrobbledKey: String? = null
     private var pendingScrobbleKey: String? = null
+    /** Utwór, którego zgłoszenie padło (już po ponowieniach w [post]) — bez tego każde tyknięcie
+        pozycji odpalało nowy POST: ~120 na utwór przy złym tokenie albo przy 429. */
+    private var failedScrobbleKey: String? = null
 
     /** Utwór, dla którego zgłosiliśmy już „słucham teraz" — żeby nie powtarzać tego co sekundę. */
     private var nowPlayingKey: String? = null
@@ -87,18 +90,19 @@ class ListenBrainzScrobbler(
                         pendingScrobbleKey = null
                         nowPlayingKey = null
                     }
+                    if (key == failedScrobbleKey && state.positionMs < RestartPositionMs) failedScrobbleKey = null
                     if (key != scrobbledKey && key != nowPlayingKey && state.status == PlayerStatus.PLAYING) {
                         nowPlayingKey = key
                         submitPlayingNow(track)
                     }
-                    if (key != scrobbledKey && key != pendingScrobbleKey && ListenThreshold.isReached(state.positionMs, state.durationMs)) {
+                    if (key != scrobbledKey && key != pendingScrobbleKey && key != failedScrobbleKey && ListenThreshold.isReached(state.positionMs, state.durationMs)) {
                         pendingScrobbleKey = key
                         val positionMs = state.positionMs
                         val durationMs = state.durationMs
                         launch {
                             val submitted = submitListen(track, positionMs, durationMs)
                             if (pendingScrobbleKey == key) {
-                                if (submitted) scrobbledKey = key
+                                if (submitted) scrobbledKey = key else failedScrobbleKey = key
                                 pendingScrobbleKey = null
                             }
                         }

@@ -18,12 +18,13 @@ data class AppContainer(
     val playbackSettings: PlaybackSettingsStore = InMemoryPlaybackSettingsStore(),
     /** Powrót sieci — UI odświeża listy. Desktop: emptyFlow. */
     val networkResumed: Flow<Unit> = emptyFlow(),
-    /** Wywołane gdy Spotify zwróci 401/403 — Android czyści token. */
+    /** Wywołane gdy Spotify zwróci 401 — Android czyści token. */
     val onSpotifySessionInvalid: () -> Unit = {},
     /**
      * Keystore nie odszyfrował tokenu LB. Getter (nie stała bool), żeby Compose czytał
      * świeżą wartość przy każdym sprawdzeniu — inaczej `remember` zamrażał stan ze startu.
      */
     val listenBrainzTokenUnreadable: () -> Boolean = { false },
-    val sleepTimer: SleepTimer = SleepTimer(audioPlayer),
+    /** Jeden na proces, przekazywany do każdego nowego kontenera — patrz [SleepTimer]. */
+    val sleepTimer: SleepTimer = SleepTimer(player = { audioPlayer }),
 )
