@@ -183,6 +183,8 @@ internal fun CompactPlayerBar(
     onToggleLiked: () -> Unit,
     collapsed: Boolean,
     onCollapsedChange: (Boolean) -> Unit,
+    lyricsVisible: Boolean = false,
+    onLyricsVisibleChange: (Boolean) -> Unit = {},
 ) {
     val palette = LocalNutaPalette.current
     val scope = rememberCoroutineScope()
@@ -326,8 +328,10 @@ internal fun CompactPlayerBar(
                 }
             }
         }
+        LyricsToggleButton(lyricsVisible, onLyricsVisibleChange)
         SleepTimerButton(container)
     }
+    if (lyricsVisible) LyricsPanel(track, state.positionMs, Modifier.fillMaxWidth().height(240.dp))
     CompactTransportRow(state, container, isLiked, favoriteLoading, onToggleLiked, onOpenQueue, similarModeActive, onSimilarModeChange)
     Row(Modifier.fillMaxWidth().height(38.dp), verticalAlignment = Alignment.CenterVertically) {
         Text(formatTime(state.positionMs), color = palette.muted, fontSize = 10.sp)
@@ -477,6 +481,8 @@ internal fun PlayerBar(
     onToggleLiked: () -> Unit,
     collapsed: Boolean,
     onCollapsedChange: (Boolean) -> Unit,
+    lyricsVisible: Boolean = false,
+    onLyricsVisibleChange: (Boolean) -> Unit = {},
 ) {
     val palette = LocalNutaPalette.current
     val scope = rememberCoroutineScope()
@@ -606,6 +612,7 @@ internal fun PlayerBar(
         )
         Text(formatTime(state.durationMs), color = palette.muted, fontSize = 11.sp)
         Spacer(Modifier.width(8.dp))
+        LyricsToggleButton(lyricsVisible, onLyricsVisibleChange)
         SleepTimerButton(container)
         Spacer(Modifier.width(6.dp))
         Text(
