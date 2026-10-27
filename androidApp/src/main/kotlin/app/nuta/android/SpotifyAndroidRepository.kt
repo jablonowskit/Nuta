@@ -81,12 +81,23 @@ class SpotifyAndroidRepository(
 
     override suspend fun getPlaylistTracks(playlistId: String): List<Track> {
         require(playlistId.matches(Regex("[A-Za-z0-9]+")))
-        val root = query("fetchPlaylistContents", PLAYLIST_HASH, JsonObject(mapOf(
-            "uri" to JsonPrimitive("spotify:playlist:$playlistId"),
-            "offset" to JsonPrimitive(0), "limit" to JsonPrimitive(50),
-            "includeEpisodeContentRatingsV2" to JsonPrimitive(false),
-        )))
-        return collectTracks(root).distinctBy(Track::id).take(50)
+        // Stronicowanie — wcześniej dłuższe playlisty urywały się na 50 utworach.
+        val result = LinkedHashMap<String, Track>()
+        var offset = 0
+        while (offset < PLAYLIST_MAX_TRACKS) {
+            val root = query("fetchPlaylistContents", PLAYLIST_HASH, JsonObject(mapOf(
+                "uri" to JsonPrimitive("spotify:playlist:$playlistId"),
+                "offset" to JsonPrimitive(offset), "limit" to JsonPrimitive(PLAYLIST_PAGE_SIZE),
+                "includeEpisodeContentRatingsV2" to JsonPrimitive(false),
+            )))
+            val page = collectTracks(root)
+            val before = result.size
+            page.forEach { result.putIfAbsent(it.id, it) }
+            // krótsza strona = koniec; brak nowych = serwer zignorował offset, nie kręcimy się w kółko
+            if (page.size < PLAYLIST_PAGE_SIZE || result.size == before) break
+            offset += PLAYLIST_PAGE_SIZE
+        }
+        return result.values.toList()
     }
 
     override suspend fun getLikedTracks(): List<Track> {
@@ -405,6 +416,9 @@ class SpotifyAndroidRepository(
         private const val SEARCH_HASH = "bc1ca2fcd0ba1013a0fc88e6cc4f190af501851e3dafd3e1ef85840297694428"
         private const val HOME_HASH = "76243c78b0e20ecdbe41b794dec8cbe73f75e585b0a7201b8d2e84578412847a"
         private const val PLAYLIST_HASH = "a65e12194ed5fc443a1cdebed5fabe33ca5b07b987185d63c72483867ad13cb4"
+        private const val PLAYLIST_PAGE_SIZE = 50
+        /** Górna granica, żeby gigantyczna playlista nie ładowała się minutami. */
+        private const val PLAYLIST_MAX_TRACKS = 1_000
         private const val SEARCH_PLAYLISTS_HASH = "af1730623dc1248b75a61a18bad1f47f1fc7eff802fb0676683de88815c958d8"
         private const val SEARCH_ARTISTS_HASH = "270905851ba5c7faca81cfe053c2dbd8ceb4f156a0e0ef4b385af75ab69ffd13"
         private const val ARE_ENTITIES_IN_LIBRARY_HASH = "134337999233cc6fdd6b1e6dbf94841409f04a946c5c7b744b09ba0dfe5a85ed"

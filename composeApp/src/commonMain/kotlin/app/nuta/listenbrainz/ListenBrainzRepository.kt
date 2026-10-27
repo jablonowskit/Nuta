@@ -50,7 +50,8 @@ class ListenBrainzRepository(
     private var cachedLikedUser: String? = null
     private var cachedLikedTracks: List<Track>? = null
 
-    private fun username() = settingsStore.settings.value.listenBrainzUsername
+    // trim: klawiatura Androida dokleja spację po autouzupełnieniu, a nazwa idzie do ścieżki URL
+    private fun username() = settingsStore.settings.value.listenBrainzUsername.trim()
     private fun apiToken() = settingsStore.settings.value.listenBrainzApiToken
 
     private fun requireToken(): String {
@@ -150,7 +151,7 @@ class ListenBrainzRepository(
         // niepusta) zapętliłby pobieranie na zawsze.
         while (pageIndex++ < MAX_FEEDBACK_PAGES) {
             val response = try {
-                httpGet("https://api.listenbrainz.org/1/feedback/user/$user/get-feedback?score=1&metadata=true&count=100&offset=$offset")
+                httpGet("https://api.listenbrainz.org/1/feedback/user/${userPathSegment(user)}/get-feedback?score=1&metadata=true&count=100&offset=$offset")
             } catch (error: Throwable) {
                 if (error is CancellationException) throw error
                 logger.warn("ListenBrainz", "feedback_failed", "Nie udało się pobrać polubień ListenBrainz", fields = mapOf("reason" to (error.message ?: "unknown")))
@@ -168,7 +169,9 @@ class ListenBrainzRepository(
         return inline.map {
             val metadata = metadataByMbid[it.id]
             Track(
-                id = it.id,
+                // MSID to też UUID — bez prefiksu brany był za MBID: cofnięcie polubienia wysyłało
+                // recording_mbid=<msid> (nic nie usuwało), a scrobble wiązał odsłuch z nieistniejącym nagraniem
+                id = if (it.hasMbid) it.id else MsidIdPrefix + it.id,
                 title = it.title,
                 artists = listOfNotNull(it.artist.takeIf(String::isNotBlank)),
                 album = it.album.ifBlank { metadata?.album.orEmpty() },
@@ -190,6 +193,19 @@ class ListenBrainzRepository(
     }
 
     override suspend fun setTrackLiked(track: Track, liked: Boolean) {
+        if (track.id.startsWith(MsidIdPrefix)) {
+            // Polubienie bez dopasowania w MusicBrainz — feedback API przyjmuje też samo MSID.
+            val body = JsonObject(mapOf(
+                "recording_msid" to JsonPrimitive(track.id.removePrefix(MsidIdPrefix)),
+                "score" to JsonPrimitive(if (liked) 1 else 0),
+            )).toString()
+            httpPost("https://api.listenbrainz.org/1/feedback/recording-feedback", headers = mapOf("Authorization" to "Token ${requireToken()}"), body = body)
+            if (cachedLikedUser == username()) {
+                cachedLikedTracks = cachedLikedTracks.orEmpty().filterNot { it.id == track.id } + listOfNotNull(track.takeIf { liked })
+                likedCache.save(username(), cachedLikedTracks.orEmpty())
+            }
+            return
+        }
         val mbid = resolveMbid(track)
             ?: throw IllegalStateException("Nie znaleziono odpowiednika utworu '${track.title}' w MusicBrainz — nie można polubić")
         val token = requireToken()
@@ -394,7 +410,7 @@ class ListenBrainzRepository(
     private suspend fun fetchRecommendations(user: String): List<Track> {
         if (user.isBlank()) return emptyList()
         val mbidsArray = runCatching {
-            val response = httpGet("https://api.listenbrainz.org/1/cf/recommendation/user/$user/recording?count=60")
+            val response = httpGet("https://api.listenbrainz.org/1/cf/recommendation/user/${userPathSegment(user)}/recording?count=60")
             if (response.isBlank()) return@runCatching null
             val root = json.parseToJsonElement(response).jsonObject
             root["payload"]?.jsonObject?.get("mbids") as? JsonArray ?: root["mbids"] as? JsonArray
@@ -409,7 +425,7 @@ class ListenBrainzRepository(
 
     private suspend fun fetchUserPlaylists(user: String): List<Playlist> {
         if (user.isBlank()) return emptyList()
-        val playlists = fetchPlaylistsJson(user, "https://api.listenbrainz.org/1/user/$user/playlists") ?: return emptyList()
+        val playlists = fetchPlaylistsJson(user, "https://api.listenbrainz.org/1/user/${userPathSegment(user)}/playlists") ?: return emptyList()
         return playlists.mapNotNull { item ->
             val playlist = item.jsonObject["playlist"]?.jsonObject ?: return@mapNotNull null
             val identifier = playlist["identifier"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
@@ -428,7 +444,7 @@ class ListenBrainzRepository(
         dalej na liście. */
     private suspend fun fetchGeneratedPlaylists(user: String): List<Playlist> {
         if (user.isBlank()) return emptyList()
-        val playlists = fetchPlaylistsJson(user, "https://api.listenbrainz.org/1/user/$user/playlists/createdfor?count=100") ?: return emptyList()
+        val playlists = fetchPlaylistsJson(user, "https://api.listenbrainz.org/1/user/${userPathSegment(user)}/playlists/createdfor?count=100") ?: return emptyList()
         return playlists.mapNotNull { item ->
             val playlist = item.jsonObject["playlist"]?.jsonObject ?: return@mapNotNull null
             val identifier = playlist["identifier"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
@@ -498,6 +514,8 @@ class ListenBrainzRepository(
         /** Timeout dla `playlist/search` — zweryfikowane curlem 19.09.2026: gdy ten endpoint
             odpowiada, robi to w 1-2 s; długie oczekiwanie oznacza martwe połączenie. */
         const val PlaylistSearchTimeoutMs = 5_000
+        /** Prefiks `Track.id` polubień, które mają tylko MSID (MessyBrainz), nie MBID. */
+        const val MsidIdPrefix = "msid:"
         val MbidRegex = Regex("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
 
         private val parserJson = Json { ignoreUnknownKeys = true }

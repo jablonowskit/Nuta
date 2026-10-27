@@ -17,11 +17,13 @@ import app.nuta.platform.RotatingJsonLogSink
 import app.nuta.spotify.SpotifyLoginPrototype
 import app.nuta.spotify.SpotifyTestTokenStore
 import app.nuta.spotify.SpotifyWebSearchRepository
+import app.nuta.settings.DataSource
 import app.nuta.settings.FilePlaybackSettingsStore
 import app.nuta.soundcloud.NutaSoundCloudMediaService
 import app.nuta.youtube.NutaYouTubeMediaService
 import app.nuta.youtube.SourceSelectingMediaService
 import app.nuta.ui.NutaApp
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
@@ -97,8 +99,12 @@ fun main() {
             var activeContainer by remember { mutableStateOf(container) }
             var tokenExpiresAtMs by remember { mutableStateOf(restoredToken?.expiresAtMs) }
             var refreshingSession by remember { mutableStateOf(false) }
+            // Jak na Androidzie: logowanie i odświeżanie tokenu tylko w trybie Spotify — w trybie
+            // ListenBrainz okno logowania zasłaniało aplikację przy starcie i co ~55 minut.
+            val spotifyMode = playbackSettings.settings.collectAsState().value.dataSource == DataSource.SPOTIFY
 
-            LaunchedEffect(tokenExpiresAtMs) {
+            LaunchedEffect(tokenExpiresAtMs, spotifyMode) {
+                if (!spotifyMode) return@LaunchedEffect
                 val expiry = tokenExpiresAtMs ?: return@LaunchedEffect
                 val refreshAt = expiry - 5 * 60_000L
                 val waitMs = (refreshAt - System.currentTimeMillis()).coerceAtLeast(0L)
@@ -112,7 +118,7 @@ fun main() {
                 )
                 showSpotifyLogin = true
             }
-            if (showSpotifyLogin) {
+            if (showSpotifyLogin && spotifyMode) {
                 SpotifyLoginPrototype(
                     logger = logger,
                     onSessionDetected = { token ->

@@ -119,7 +119,9 @@ class FilePlaybackSettingsStore(
 
     private fun save(value: YouTubePlaybackSettings) = synchronized(saveLock) {
         runCatching {
-            if (value.listenBrainzApiToken.isBlank()) credentials.clear(ListenBrainzTokenKey)
+            // pusty token po nieudanym odczycie = „nie wiemy”, a nie „użytkownik go usunął”
+            val tokenUnreadable = (credentials as? DesktopCredentialStore)?.lastLoadFailed == true
+            if (value.listenBrainzApiToken.isBlank()) { if (!tokenUnreadable) credentials.clear(ListenBrainzTokenKey) }
             else credentials.save(ListenBrainzTokenKey, value.listenBrainzApiToken)
             Files.createDirectories(file.parent)
             val payload = buildJsonObject {

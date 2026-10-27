@@ -1,7 +1,9 @@
 package app.nuta.android
 
 import android.content.Context
+import android.webkit.RenderProcessGoneDetail
 import android.webkit.WebView
+import android.webkit.WebViewClient
 import app.nuta.core.logging.NutaLogger
 import kotlin.coroutines.resume
 import kotlinx.coroutines.Dispatchers
@@ -31,13 +33,23 @@ import kotlinx.serialization.json.jsonPrimitive
 class YtEjsSolver(private val context: Context, private val logger: NutaLogger) {
     private val json = Json { ignoreUnknownKeys = true }
     private val initMutex = Mutex()
-    private var webView: WebView? = null
+    @Volatile private var webView: WebView? = null
 
     private suspend fun ensureInitialized(): WebView {
         webView?.let { return it }
         return initMutex.withLock {
             webView ?: withContext(Dispatchers.Main) {
                 val view = WebView(context).apply { settings.javaScriptEnabled = true }
+                // Domyślnie śmierć renderera (LMK w tle) zabija cały proces aplikacji — muzyka staje.
+                // true = przeżywamy; martwy widok porzucamy, następne solve() zbuduje nowy.
+                view.webViewClient = object : WebViewClient() {
+                    override fun onRenderProcessGone(view: WebView, detail: RenderProcessGoneDetail): Boolean {
+                        logger.warn("YtEjsSolver", "renderer_gone", "Renderer WebView solvera padł", fields = mapOf("crashed" to detail.didCrash().toString()))
+                        if (webView === view) webView = null
+                        view.destroy()
+                        return true
+                    }
+                }
                 view.loadUrl("about:blank")
                 val lib = context.assets.open("ejs/yt.solver.lib.min.js").bufferedReader().use { it.readText() }
                 val core = context.assets.open("ejs/yt.solver.core.min.js").bufferedReader().use { it.readText() }
