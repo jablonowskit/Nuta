@@ -35,6 +35,7 @@ import app.nuta.ui.ScrollableLazyColumn
 import app.nuta.ui.TrackPlayButton
 import app.nuta.ui.TrackQueueButton
 import app.nuta.ui.TrackRow
+import app.nuta.ui.shareTrack
 import app.nuta.ui.startTrackRadio
 import app.nuta.ui.rememberPrefetchHandler
 import kotlinx.coroutines.launch
@@ -130,7 +131,7 @@ internal fun LikedScreen(
                             } }
                         }, subtitleAction = {
                             TrackQueueButton { scope.launch { container.audioPlayer.appendToQueue(listOf(track)) } }
-                        }, onLongPress = { onAddToPlaylist(track) }, onPlayNext = { scope.launch { container.audioPlayer.insertNext(listOf(track)) } }, onRadio = { scope.launch { startTrackRadio(container, track) } })
+                        }, onLongPress = { onAddToPlaylist(track) }, onPlayNext = { scope.launch { container.audioPlayer.insertNext(listOf(track)) } }, onRadio = { scope.launch { startTrackRadio(container, track) } }, onShare = { shareTrack(container, track) })
                     }
                 }
             }

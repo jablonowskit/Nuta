@@ -35,6 +35,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
@@ -191,10 +193,16 @@ internal fun CompactPlayerBar(
     val track = state.currentTrack
     val dragThresholdPx = with(LocalDensity.current) { 24.dp.toPx() }
     var dragAccumulated by remember { mutableStateOf(0f) }
+    // Rozwinięty player w odcieniu okładki; zwinięty pasek zostaje w kolorze motywu, żeby nie
+    // migotał przy każdej zmianie utworu na dole ekranu.
+    val coverColor = rememberCoverColor(track?.imageUrl?.takeIf { !collapsed })
+    val background by animateColorAsState(
+        if (coverColor != null && !collapsed) lerp(palette.chrome, coverColor, 0.35f) else palette.chrome,
+    )
     // Bez stałej wysokości w trybie rozwiniętym: tytuł/wykonawca mogą zająć do 2 linii.
     Column(
         Modifier.fillMaxWidth()
-            .background(palette.chrome)
+            .background(background)
             .pointerInput(collapsed) {
                 // Palec w dół zwija, w górę rozwija. Pasek leży poza LazyColumn treści,
                 // więc gest nie konkuruje ze scrollem listy.
