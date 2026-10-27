@@ -10,6 +10,7 @@ import androidx.media3.common.Player
 import androidx.media3.datasource.DataSpec
 import androidx.media3.session.MediaController
 import app.nuta.core.logging.NutaLogger
+import app.nuta.player.LongTrackPositions
 import app.nuta.core.models.PlayerState
 import app.nuta.core.models.PlayerStatus
 import app.nuta.core.models.Track
@@ -45,6 +46,10 @@ class Media3AudioPlayer(
     /** Pozycja z poprzedniej sesji — użyta raz przy pierwszym odtworzeniu przywróconego utworu. */
     private var pendingResumePositionMs = queuePreferences.getLong("positionMs", 0L).coerceAtLeast(0L)
     private var lastPositionSaveMs = 0L
+    private val longTrackPositions = LongTrackPositions(
+        load = { queuePreferences.getString("longTrackPositions", "").orEmpty() },
+        save = { queuePreferences.edit().putString("longTrackPositions", it).apply() },
+    )
     private val stateFlow = MutableStateFlow(restoreQueue())
     override val state: StateFlow<PlayerState> = stateFlow.asStateFlow()
     private val loadLock = Any()
@@ -101,7 +106,7 @@ class Media3AudioPlayer(
             if (stateFlow.value.status == PlayerStatus.LOADING || stateFlow.value.status == PlayerStatus.IDLE) return
             val position = newPosition.positionMs.coerceAtLeast(0)
             stateFlow.value = stateFlow.value.copy(positionMs = position)
-            savePosition(position)
+            savePlayingPosition(position)
         }
         override fun onPlayerError(error: PlaybackException) {
             // musi pójść PRZED odczytem retryingAfterError — inaczej opóźnione zerowanie ze
@@ -460,7 +465,8 @@ class Media3AudioPlayer(
     private suspend fun loadTrack(track: Track, generation: Long) {
         try {
             val savedPosition = pendingResumePositionMs
-            val resumeFromMs = savedPosition.takeIf { it > 0 && (track.durationMs <= 0 || it < track.durationMs) }
+            val resumeFromMs = (savedPosition.takeIf { it > 0 } ?: longTrackPositions.positionFor(track))
+                ?.takeIf { track.durationMs <= 0 || it < track.durationMs }
             pendingResumePositionMs = 0
             if (!isCurrentLoad(generation, track.id)) return
             stateFlow.value = stateFlow.value.copy(
@@ -548,7 +554,7 @@ class Media3AudioPlayer(
         if (stateFlow.value.status == PlayerStatus.LOADING || stateFlow.value.status == PlayerStatus.IDLE) return@withContext
         val position = player.currentPosition.coerceAtLeast(0)
         stateFlow.value = stateFlow.value.copy(positionMs = position)
-        savePosition(position)
+        savePlayingPosition(position)
     }
     override suspend fun stop() {
         cancelLoad()
@@ -565,7 +571,7 @@ class Media3AudioPlayer(
         val target = if (duration > 0) positionMs.coerceIn(0, duration) else positionMs.coerceAtLeast(0)
         withContext(Dispatchers.Main) { player.seekTo(target) }
         stateFlow.value = stateFlow.value.copy(positionMs = target)
-        savePosition(target)
+        savePlayingPosition(target)
     }
     override suspend fun next() { pauseRequested = false; move(stateFlow.value.currentIndex + 1) }
     override suspend fun previous() { pauseRequested = false; move(stateFlow.value.currentIndex - 1) }
@@ -590,6 +596,13 @@ class Media3AudioPlayer(
         queuePreferences.edit().putString("tracks", rows).putInt("index", state.currentIndex).apply()
     }
 
+    /** Pozycja grającego utworu: do wznowienia po restarcie, a w długich utworach także po powrocie do nich. */
+    private fun savePlayingPosition(positionMs: Long) {
+        savePosition(positionMs)
+        val state = stateFlow.value
+        state.currentTrack?.let { longTrackPositions.remember(it, positionMs, state.durationMs) }
+    }
+
     private fun savePosition(positionMs: Long) {
         queuePreferences.edit().putLong("positionMs", positionMs.coerceAtLeast(0)).apply()
     }
@@ -607,6 +620,7 @@ class Media3AudioPlayer(
         )
     }
     private suspend fun advanceAfterEnd() {
+        stateFlow.value.currentTrack?.let(longTrackPositions::forget)
         val next = stateFlow.value.currentIndex + 1
         if (next in stateFlow.value.queue.indices) move(next) else {
             savePosition(stateFlow.value.positionMs)
@@ -642,7 +656,7 @@ class Media3AudioPlayer(
                 if (generation != tickerGeneration) return@launch
                 stateFlow.value = stateFlow.value.copy(positionMs = position.coerceAtLeast(0))
                 val now = System.currentTimeMillis()
-                if (now - lastPositionSaveMs > 5_000) { lastPositionSaveMs = now; savePosition(position) }
+                if (now - lastPositionSaveMs > 5_000) { lastPositionSaveMs = now; savePlayingPosition(position) }
             }
         }
     }
