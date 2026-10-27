@@ -158,6 +158,7 @@
     <string name="play_next">Odtwórz jako następny</string>
     <string name="track_radio">Graj podobne</string>
     <string name="share_track">Udostępnij</string>
+    <string name="music_video">Teledysk (YouTube)</string>
     <string name="equalizer_title">Korektor</string>
     <string name="equalizer_desc">Barwa dźwięku, przed normalizacją głośności. Presety z podbiciem lekko ściszają całość, żeby szczyty nigdy się nie przesterowały.</string>
     <string name="equalizer_bass">Więcej basu</string>

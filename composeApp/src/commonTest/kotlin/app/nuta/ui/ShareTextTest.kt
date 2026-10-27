@@ -29,4 +29,12 @@ class ShareTextTest {
     fun msidSharesTextOnly() {
         assertEquals("Enter Sandman — Metallica", trackShareText(track("msid:4d2f7c87-46e2-40df-8dc4-c4b5d803e8e5"), DataSource.LISTENBRAINZ))
     }
+
+    @Test
+    fun musicVideoSearchUsesArtistTitleAndOfficialVideo() {
+        assertEquals(
+            "https://www.youtube.com/results?search_query=Metallica+Enter+Sandman+official+video",
+            musicVideoUrl(track("x")),
+        )
+    }
 }

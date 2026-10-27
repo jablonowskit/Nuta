@@ -38,6 +38,7 @@ import app.nuta.resources.add_to_playlist_menu
 import app.nuta.resources.play_next
 import app.nuta.resources.track_radio
 import app.nuta.resources.share_track
+import app.nuta.resources.music_video
 import app.nuta.listenbrainz.ListenBrainzRepository
 import app.nuta.settings.DataSource
 import app.nuta.AppContainer
@@ -66,10 +67,11 @@ internal fun TrackRow(
     onPlayNext: (() -> Unit)? = null,
     onRadio: (() -> Unit)? = null,
     onShare: (() -> Unit)? = null,
+    onVideo: (() -> Unit)? = null,
 ) {
     val palette = LocalNutaPalette.current
     var menuOpen by remember { mutableStateOf(false) }
-    val hasMenu = onPlayNext != null || onRadio != null || onShare != null
+    val hasMenu = onPlayNext != null || onRadio != null || onShare != null || onVideo != null
     val longPress: (() -> Unit)? = if (hasMenu) ({ menuOpen = true }) else onLongPress
     BoxWithConstraints(Modifier.fillMaxWidth()) {
     val compact = maxWidth < 520.dp
@@ -122,6 +124,9 @@ internal fun TrackRow(
             if (onShare != null) {
                 DropdownMenuItem(onClick = { menuOpen = false; onShare() }) { Text(stringResource(Res.string.share_track)) }
             }
+            if (onVideo != null) {
+                DropdownMenuItem(onClick = { menuOpen = false; onVideo() }) { Text(stringResource(Res.string.music_video)) }
+            }
             if (onLongPress != null) {
                 DropdownMenuItem(onClick = { menuOpen = false; onLongPress() }) { Text(stringResource(Res.string.add_to_playlist_menu)) }
             }
@@ -172,6 +177,30 @@ internal fun trackShareText(track: Track, dataSource: DataSource): String {
 }
 
 private val SpotifyIdRegex = Regex("^[0-9A-Za-z]{22}$")
+
+/**
+ * Wyszukiwanie teledysku w YouTube. Nie film, z którego gra dźwięk: dopasowanie celowo wybiera
+ * wersję audio (często kanał „- Topic” ze statyczną okładką), a nie teledysk. Na Androidzie link
+ * youtube.com otwiera aplikację YouTube, jeśli jest zainstalowana.
+ */
+internal fun musicVideoUrl(track: Track): String {
+    val query = listOf(track.artists.firstOrNull().orEmpty(), track.title, "official video").filter(String::isNotBlank).joinToString(" ")
+    return "https://www.youtube.com/results?search_query=" + java.net.URLEncoder.encode(query, "UTF-8")
+}
+
+internal fun openMusicVideo(track: Track) = openUrlInBrowser(musicVideoUrl(track))
+
+/** „YT” w rozwiniętym playerze — teledysk bieżącego utworu (patrz [musicVideoUrl]). */
+@Composable
+internal fun MusicVideoButton(track: Track?) {
+    Text(
+        "YT",
+        color = if (track != null) MaterialTheme.colors.primary else LocalNutaPalette.current.muted,
+        fontSize = 13.sp,
+        fontWeight = FontWeight.Bold,
+        modifier = Modifier.clickable(enabled = track != null) { track?.let(::openMusicVideo) }.padding(horizontal = 8.dp, vertical = 6.dp),
+    )
+}
 
 /** Udostępnia [track] systemowo (desktop: schowek). Źródło danych czytane w chwili kliknięcia. */
 internal fun shareTrack(container: AppContainer, track: Track) =

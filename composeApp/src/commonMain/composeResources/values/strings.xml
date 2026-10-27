@@ -156,6 +156,7 @@
     <string name="play_next">Play next</string>
     <string name="track_radio">Play similar</string>
     <string name="share_track">Share</string>
+    <string name="music_video">Music video (YouTube)</string>
     <string name="equalizer_title">Equalizer</string>
     <string name="equalizer_desc">Tone preset applied before loudness normalization. Boosting presets lower the overall level a little so peaks never clip.</string>
     <string name="equalizer_bass">More bass</string>
