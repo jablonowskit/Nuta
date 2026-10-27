@@ -17,7 +17,6 @@ usuń stąd — historia jest w gicie. Rozmiar to zgrubna ocena: mały ≈ jeden
   obsługuje).
 
 ### Wygoda
-- **Aktualizacja APK z GitHuba w aplikacji** (średni) — bez adb i kabla.
 - **Skróty klawiszowe na desktopie** (mały) — spacja, strzałki.
 
 ## Drobne rzeczy techniczne

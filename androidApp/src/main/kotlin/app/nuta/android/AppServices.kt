@@ -1,5 +1,6 @@
 package app.nuta.android
 
+import app.nuta.update.AppUpdater
 import android.content.ComponentName
 import android.content.Context
 import android.net.ConnectivityManager
@@ -65,6 +66,10 @@ object AppServices {
     val playerConnectFailed = MutableStateFlow(false)
     /** Przeżywa przebudowy AppContainer w MainActivity; player zawsze aktualny po reconnect. */
     val sleepTimer = SleepTimer(player = { audioPlayer.value })
+    /** Jeden na proces, żeby stan pobierania przetrwał przebudowę kontenera i obrót ekranu. */
+    val appUpdater = AppUpdater(install = { url, onProgress ->
+        ApkInstaller.install(checkNotNull(appContext) { "AppServices nie wystartował" }, url, onProgress)
+    })
     /** Repozytorium bieżącego kontenera UI (zmienia się z sesją Spotify) — dla [QueueContinuation]. */
     @Volatile var repository: SpotifyRepository? = null
     lateinit var queueContinuation: QueueContinuation

@@ -1,5 +1,7 @@
 package app.nuta.ui
 
+import app.nuta.update.AppUpdater
+import app.nuta.update.UpdateState
 import app.nuta.core.BuildInfo
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -513,7 +515,7 @@ private fun NutaAppContent(container: AppContainer) {
             // Leave enough room for the desktop sidebar and player controls.
             val compact = maxWidth < 960.dp
             Column(Modifier.fillMaxSize()) {
-                TopBar(compact)
+                TopBar(compact, container.appUpdater) { navigate(Destination.SETTINGS) }
                 Row(Modifier.weight(1f).fillMaxWidth()) {
                     if (!compact) Sidebar(destination) {
                         navigate(it)
@@ -766,7 +768,7 @@ private fun AddToPlaylistDialog(
 }
 
 @Composable
-private fun TopBar(compact: Boolean) {
+private fun TopBar(compact: Boolean, updater: AppUpdater?, onOpenUpdate: () -> Unit) {
     val palette = LocalNutaPalette.current
     Row(
         Modifier.fillMaxWidth().height(56.dp).background(palette.chrome).padding(horizontal = 20.dp),
@@ -782,6 +784,20 @@ private fun TopBar(compact: Boolean) {
             fontWeight = FontWeight.Bold,
             fontSize = 11.sp,
         )
+        if (updater != null) {
+            // raz na start aplikacji; szczegóły i instalacja w Ustawieniach
+            LaunchedEffect(updater) { if (updater.state.value == UpdateState.Idle) updater.check() }
+            val update by updater.state.collectAsState()
+            (update as? UpdateState.Available)?.let { available ->
+                Text(
+                    "↑ ${available.version}",
+                    color = MaterialTheme.colors.primary,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 11.sp,
+                    modifier = Modifier.clickable(onClick = onOpenUpdate).padding(start = 8.dp, top = 6.dp, bottom = 6.dp),
+                )
+            }
+        }
     }
 }
 

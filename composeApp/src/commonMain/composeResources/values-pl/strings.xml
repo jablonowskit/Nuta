@@ -183,4 +183,12 @@
     <string name="add_to_playlist_menu">Dodaj do playlisty…</string>
     <string name="filter_liked">Szukaj po tytule lub wykonawcy</string>
     <string name="queue_drag_handle">Przeciągnij, by zmienić kolejność</string>
+    <string name="update_title">Aktualizacja</string>
+    <string name="update_desc">Zainstalowana wersja: %1$s. Nowe wersje to automatyczne buildy z GitHuba (gałąź main).</string>
+    <string name="update_check">Sprawdź</string>
+    <string name="update_checking">Sprawdzam…</string>
+    <string name="update_up_to_date">Masz najnowszą wersję</string>
+    <string name="update_install">Pobierz i zainstaluj %1$s</string>
+    <string name="update_downloading">Pobieram %1$s… %2$s</string>
+    <string name="update_failed">Nie udało się sprawdzić: %1$s</string>
 </resources>

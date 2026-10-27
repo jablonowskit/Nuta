@@ -1,5 +1,6 @@
 package app.nuta
 
+import app.nuta.update.AppUpdater
 import app.nuta.core.logging.MemoryLogger
 import app.nuta.domain.AudioPlayer
 import app.nuta.domain.SpotifyRepository
@@ -30,4 +31,6 @@ data class AppContainer(
     val sleepTimer: SleepTimer = SleepTimer(player = { audioPlayer }),
     /** Jak [sleepTimer]: jeden na proces, żyje poza UI (tryb podobnych ♬+ i „Graj dalej”). */
     val queueContinuation: QueueContinuation = QueueContinuation(playbackSettings, { spotifyRepository }, logger),
+    /** Aktualizacja z GitHuba — tylko Android (desktop: null, sekcja w Ustawieniach się nie pokazuje). */
+    val appUpdater: AppUpdater? = null,
 )

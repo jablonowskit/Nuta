@@ -181,4 +181,12 @@
     <string name="add_to_playlist_menu">Add to playlist…</string>
     <string name="filter_liked">Filter by title or artist</string>
     <string name="queue_drag_handle">Drag to reorder</string>
+    <string name="update_title">Update</string>
+    <string name="update_desc">Installed version: %1$s. New versions are automatic builds from GitHub (main branch).</string>
+    <string name="update_check">Check</string>
+    <string name="update_checking">Checking…</string>
+    <string name="update_up_to_date">You have the latest version</string>
+    <string name="update_install">Download and install %1$s</string>
+    <string name="update_downloading">Downloading %1$s… %2$s</string>
+    <string name="update_failed">Check failed: %1$s</string>
 </resources>
