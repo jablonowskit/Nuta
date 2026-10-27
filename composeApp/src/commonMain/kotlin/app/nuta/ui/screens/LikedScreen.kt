@@ -19,6 +19,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -52,14 +53,22 @@ internal fun LikedScreen(
     onRetry: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
-    var filter by remember { mutableStateOf("") }
+    // rememberSaveable: filtr i sortowanie przeżywają przejście na inną zakładkę i z powrotem
+    var filter by rememberSaveable { mutableStateOf("") }
+    var sort by rememberSaveable { mutableStateOf(LikedSort.RECENT) }
     // Przy ~100 polubionych przewijanie w poszukiwaniu jednego utworu było męczące. „Odtwórz
     // wszystkie” i „Dodaj do kolejki” biorą to, co widać — z aktywnym filtrem tylko trafienia.
-    val shown = remember(tracks, filter) {
+    val shown = remember(tracks, filter, sort) {
         val needle = filter.trim()
-        if (needle.isEmpty()) tracks
+        val filtered = if (needle.isEmpty()) tracks
         else tracks.filter { track ->
             track.title.contains(needle, ignoreCase = true) || track.artists.any { it.contains(needle, ignoreCase = true) }
+        }
+        when (sort) {
+            // API zwraca polubienia od najnowszych (pole `created`, sprawdzone curlem) — to jest ta kolejność
+            LikedSort.RECENT -> filtered
+            LikedSort.TITLE -> filtered.sortedBy { it.title.lowercase() }
+            LikedSort.ARTIST -> filtered.sortedWith(compareBy({ it.artists.firstOrNull().orEmpty().lowercase() }, { it.title.lowercase() }))
         }
     }
     Column(Modifier.fillMaxSize()) {
@@ -82,6 +91,20 @@ internal fun LikedScreen(
                         }
                     }) { Text(stringResource(Res.string.liked_play_all, shown.size), maxLines = 1, softWrap = false) }
                     OutlinedButton(enabled = shown.isNotEmpty(), onClick = { scope.launch { container.audioPlayer.appendToQueue(shown) } }) { Text(stringResource(Res.string.add_all_to_queue), maxLines = 1, softWrap = false) }
+                    // jeden przycisk przełączający po kolei zamiast trzeciego rzędu — na telefonie brakuje miejsca
+                    OutlinedButton(onClick = { sort = LikedSort.entries[(sort.ordinal + 1) % LikedSort.entries.size] }) {
+                        Text(
+                            stringResource(
+                                when (sort) {
+                                    LikedSort.RECENT -> Res.string.sort_recent
+                                    LikedSort.TITLE -> Res.string.sort_title
+                                    LikedSort.ARTIST -> Res.string.sort_artist
+                                },
+                            ),
+                            maxLines = 1,
+                            softWrap = false,
+                        )
+                    }
                 }
                 Spacer(Modifier.height(8.dp))
                 OutlinedTextField(
@@ -115,3 +138,4 @@ internal fun LikedScreen(
     }
 }
 
+private enum class LikedSort { RECENT, TITLE, ARTIST }
