@@ -4,6 +4,8 @@ import app.nuta.core.logging.NutaLogger
 import app.nuta.core.models.PlayerState
 import app.nuta.core.models.PlayerStatus
 import app.nuta.core.models.Track
+import app.nuta.core.models.withInsertedNext
+import app.nuta.core.models.withMoved
 import app.nuta.core.models.withResolvedDuration
 import app.nuta.domain.AudioPlayer
 import app.nuta.settings.LoudnessNormalization
@@ -87,6 +89,17 @@ class MpvAudioPlayer(
         }
         persistQueue()
         logger.info("MpvPlayer", "queue_set", "Ustawiono kolejkę playera", fields = mapOf("count" to tracks.size.toString()))
+    }
+
+    override suspend fun insertNext(tracks: List<Track>) {
+        if (tracks.isEmpty()) return
+        _state.value = _state.value.withInsertedNext(tracks)
+        persistQueue()
+    }
+
+    override suspend fun moveInQueue(from: Int, to: Int) {
+        _state.value = _state.value.withMoved(from, to)
+        persistQueue()
     }
 
     override suspend fun appendToQueue(tracks: List<Track>) {

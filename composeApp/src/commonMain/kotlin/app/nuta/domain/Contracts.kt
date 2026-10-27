@@ -45,6 +45,10 @@ interface AudioPlayer {
     val state: StateFlow<PlayerState>
     suspend fun setQueue(tracks: List<Track>, startIndex: Int = 0)
     suspend fun appendToQueue(tracks: List<Track>)
+    /** Wstawia utwory zaraz za bieżącym („Odtwórz jako następny”). */
+    suspend fun insertNext(tracks: List<Track>)
+    /** Przenosi utwór w kolejce (przeciąganie); bieżący utwór gra dalej. */
+    suspend fun moveInQueue(from: Int, to: Int)
     suspend fun removeFromQueue(index: Int)
     suspend fun clearQueue()
     suspend fun shuffleUpcoming()

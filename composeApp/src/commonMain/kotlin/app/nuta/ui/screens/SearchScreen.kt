@@ -282,7 +282,7 @@ internal fun SearchScreen(
                             }
                             }, subtitleAction = {
                             TrackQueueButton { scope.launch { container.audioPlayer.appendToQueue(listOf(track)) } }
-                        }, onLongPress = { onAddToPlaylist(track) })
+                        }, onLongPress = { onAddToPlaylist(track) }, onPlayNext = { scope.launch { container.audioPlayer.insertNext(listOf(track)) } })
                     }
                 }
             }

@@ -14,7 +14,15 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.OutlinedButton
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.zIndex
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -46,6 +54,25 @@ import androidx.compose.foundation.layout.size
 internal fun QueueScreen(state: PlayerState, container: AppContainer) {
     val palette = LocalNutaPalette.current
     val scope = rememberCoroutineScope()
+    val listState = rememberLazyListState()
+    // Przeciąganie za uchwyt ≡: wiersz jedzie za palcem, a po puszczeniu ląduje tam, gdzie jest
+    // środek przeciąganego wiersza (wiersze mają różną wysokość — 1–3 linie tytułu — więc
+    // cel liczymy z faktycznego układu listy, a nie z dzielenia przesunięcia przez wysokość).
+    var draggingIndex by remember { mutableStateOf<Int?>(null) }
+    var dragOffset by remember { mutableStateOf(0f) }
+    fun finishDrag() {
+        val from = draggingIndex ?: return
+        val visible = listState.layoutInfo.visibleItemsInfo
+        val dragged = visible.firstOrNull { it.index == from }
+        val target = dragged?.let { item ->
+            val center = item.offset + item.size / 2 + dragOffset
+            visible.firstOrNull { center >= it.offset && center < it.offset + it.size }?.index
+                ?: if (dragOffset > 0) visible.last().index else visible.first().index
+        } ?: from
+        draggingIndex = null
+        dragOffset = 0f
+        if (target != from) scope.launch { container.audioPlayer.moveInQueue(from, target) }
+    }
     Column(Modifier.fillMaxSize()) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Spacer(Modifier.weight(1f))
@@ -70,13 +97,23 @@ internal fun QueueScreen(state: PlayerState, container: AppContainer) {
                     "queue-${track.id}-$occurrence"
                 }
             }
-            ScrollableLazyColumn(Modifier.fillMaxSize(), scrollToIndex = state.currentIndex) {
+            ScrollableLazyColumn(Modifier.fillMaxSize(), scrollToIndex = state.currentIndex, listState = listState) {
                     items(state.queue.indices.toList(), key = { index -> queueKeys[index] }) { index ->
                         val item = state.queue[index]
                         val active = index == state.currentIndex
+                        val dragging = draggingIndex == index
                         Row(
                             Modifier.fillMaxWidth()
-                                .background(if (active) palette.activeHighlight else Color.Transparent, RoundedCornerShape(8.dp))
+                                .zIndex(if (dragging) 1f else 0f)
+                                .graphicsLayer { translationY = if (dragging) dragOffset else 0f }
+                                .background(
+                                    when {
+                                        dragging -> MaterialTheme.colors.surface
+                                        active -> palette.activeHighlight
+                                        else -> Color.Transparent
+                                    },
+                                    RoundedCornerShape(8.dp),
+                                )
                                 .clickable {
                                     scope.launch { container.audioPlayer.playAt(index) }
                                 }
@@ -119,6 +156,20 @@ internal fun QueueScreen(state: PlayerState, container: AppContainer) {
                                     Text(formatTime(item.durationMs), color = palette.muted, fontSize = 12.sp)
                                 }
                             }
+                            Text(
+                                "≡",
+                                color = palette.muted,
+                                fontSize = 20.sp,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.size(32.dp).pointerInput(index) {
+                                    detectVerticalDragGestures(
+                                        onDragStart = { draggingIndex = index; dragOffset = 0f },
+                                        onVerticalDrag = { change, amount -> change.consume(); dragOffset += amount },
+                                        onDragEnd = { finishDrag() },
+                                        onDragCancel = { draggingIndex = null; dragOffset = 0f },
+                                    )
+                                },
+                            )
                             Text(
                                 "✕",
                                 color = palette.muted,

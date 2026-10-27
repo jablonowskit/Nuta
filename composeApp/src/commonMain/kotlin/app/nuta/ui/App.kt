@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -108,9 +109,10 @@ internal fun ScrollableLazyColumn(
     verticalArrangement: Arrangement.Vertical = Arrangement.Top,
     scrollToIndex: Int? = null,
     onVisibleRangeChanged: ((IntRange) -> Unit)? = null,
+    /** Z zewnątrz, gdy ekran potrzebuje układu listy (przeciąganie w Kolejce). */
+    listState: LazyListState = rememberLazyListState(),
     content: LazyListScope.() -> Unit,
 ) {
-    val listState = rememberLazyListState()
     LaunchedEffect(scrollToIndex) {
         scrollToIndex?.takeIf { it >= 0 }?.let { index ->
             listState.animateScrollToItem(index)

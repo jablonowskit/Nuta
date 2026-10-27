@@ -4,6 +4,8 @@ import app.nuta.core.logging.NutaLogger
 import app.nuta.core.models.PlayerState
 import app.nuta.core.models.PlayerStatus
 import app.nuta.core.models.Track
+import app.nuta.core.models.withInsertedNext
+import app.nuta.core.models.withMoved
 import app.nuta.domain.AudioPlayer
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -26,6 +28,14 @@ class FakeAudioPlayer(
         val safeIndex = if (tracks.isEmpty()) -1 else startIndex.coerceIn(tracks.indices)
         _state.value = PlayerState(status = if (tracks.isEmpty()) PlayerStatus.IDLE else PlayerStatus.PAUSED, queue = tracks, currentIndex = safeIndex)
         logger.info("FakeAudioPlayer", "queue_set", "Ustawiono kolejkę demonstracyjną", fields = mapOf("size" to tracks.size.toString(), "index" to safeIndex.toString()))
+    }
+
+    override suspend fun insertNext(tracks: List<Track>) {
+        _state.value = _state.value.withInsertedNext(tracks)
+    }
+
+    override suspend fun moveInQueue(from: Int, to: Int) {
+        _state.value = _state.value.withMoved(from, to)
     }
 
     override suspend fun appendToQueue(tracks: List<Track>) {

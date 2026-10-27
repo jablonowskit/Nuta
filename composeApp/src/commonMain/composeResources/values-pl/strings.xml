@@ -155,4 +155,8 @@
     <string name="sleep_minutes">%1$d min</string>
     <string name="sleep_end_of_track">Do końca utworu</string>
     <string name="sleep_off">Wyłącz</string>
+    <string name="play_next">Odtwórz jako następny</string>
+    <string name="add_to_playlist_menu">Dodaj do playlisty…</string>
+    <string name="filter_liked">Szukaj po tytule lub wykonawcy</string>
+    <string name="queue_drag_handle">Przeciągnij, by zmienić kolejność</string>
 </resources>
