@@ -43,6 +43,7 @@ class MpvAudioPlayer(
     private val logger: NutaLogger,
     private val settingsStore: PlaybackSettingsStore,
     private val queueStore: FilePlaybackQueueStore = FilePlaybackQueueStore(),
+    private val longTrackPositions: LongTrackPositions = fileLongTrackPositions(),
 ) : AudioPlayer {
     private val _state = MutableStateFlow(queueStore.load())
     override val state: StateFlow<PlayerState> = _state.asStateFlow()
@@ -176,12 +177,15 @@ class MpvAudioPlayer(
     private suspend fun loadCurrentLocked() {
         val current = _state.value.currentTrack ?: return
         playbackGeneration++
-        _state.value = _state.value.copy(status = PlayerStatus.LOADING, positionMs = 0, errorMessage = null)
+        val resumeMs = longTrackPositions.positionFor(current)
+        _state.value = _state.value.copy(status = PlayerStatus.LOADING, positionMs = resumeMs ?: 0, errorMessage = null)
         logger.info("MpvPlayer", "track_resolving", "Rozpoczęto przygotowanie źródła audio")
         try {
             val resolution = youtube.resolve(current)
             youtube.validate(resolution.stream)
             ensureProcess()
+            // `start` dotyczy następnego loadfile — ustawiany zawsze, żeby nie przeszedł na kolejny utwór
+            sendCommand("set_property", "start", resumeMs?.let { (it / 1_000.0).toString() } ?: "none")
             val loadCommand = resolution.stream.url.use { url -> arrayOf("loadfile", url, "replace") }
             sendCommand(*loadCommand)
             sendCommand("set_property", "af", audioFilter(settingsStore.settings.value))
@@ -224,6 +228,7 @@ class MpvAudioPlayer(
         sendCommand("seek", bounded / 1_000.0, "absolute", "exact")
         _state.value = _state.value.copy(positionMs = bounded)
         persistQueue()
+        _state.value.currentTrack?.let { longTrackPositions.remember(it, bounded, duration) }
     }
 
     override suspend fun next() = moveTo(_state.value.currentIndex + 1)
@@ -343,6 +348,7 @@ class MpvAudioPlayer(
                         if (now - lastPositionSaveMs > 5_000) {
                             lastPositionSaveMs = now
                             persistQueue()
+                            _state.value.currentTrack?.let { longTrackPositions.remember(it, position, _state.value.durationMs) }
                         }
                     }
                     // Odpowiednik ACTION_AUDIO_BECOMING_NOISY z Androida: gdy zniknie
@@ -366,6 +372,7 @@ class MpvAudioPlayer(
                                 // Użytkownik mógł w tym czasie przełączyć utwór lub zatrzymać
                                 // odtwarzanie — wtedy to auto-przejście jest już nieaktualne.
                                 if (generation != playbackGeneration) return@withLock
+                                _state.value.currentTrack?.let(longTrackPositions::forget)
                                 val nextIndex = _state.value.currentIndex + 1
                                 if (nextIndex in _state.value.queue.indices) {
                                     _state.value = _state.value.copy(
@@ -465,4 +472,12 @@ class MpvAudioPlayer(
         process = null
         runCatching { Files.deleteIfExists(socketPath) }
     }
+}
+
+private fun fileLongTrackPositions(): LongTrackPositions {
+    val path = FilePlaybackQueueStore.defaultPath().resolveSibling("long-track-positions.txt")
+    return LongTrackPositions(
+        load = { runCatching { Files.readString(path) }.getOrDefault("") },
+        save = { text -> runCatching { Files.createDirectories(path.parent); Files.writeString(path, text) } },
+    )
 }

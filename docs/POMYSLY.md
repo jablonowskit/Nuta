@@ -7,8 +7,6 @@ usuń stąd — historia jest w gicie. Rozmiar to zgrubna ocena: mały ≈ jeden
 ## Do zrobienia
 
 ### Słuchanie
-- **Pamięć pozycji w długich utworach** (mały) — miksy/sety wznawiają się od miejsca
-  przerwania przy ponownym odtworzeniu.
 - **Pełny gapless / crossfade** (duży) — następny utwór w playliście ExoPlayera zamiast
   jednego elementu. Dopiero jeśli preload początku dźwięku (`preloadNextTrack`) nie zbije
   przerwy poniżej ~0,2 s. Pomiar 27.10.2026: ~0,8 s przed preloadem.
@@ -27,6 +25,6 @@ usuń stąd — historia jest w gicie. Rozmiar to zgrubna ocena: mały ≈ jeden
   prawdopodobnie zawsze pada (komentarz w kodzie Androida); niezweryfikowane.
 - **Desktop: okładki** — `PlatformRemoteImage.desktop.kt` zwraca `Unit`, okładek nie ma
   (więc i kolor tła z okładki działa tylko na Androidzie).
-- **Scrobbler: identyczny `listened_at`** — dwa kolejne odsłuchania w ListenBrainz miały ten sam
-  `listened_at` (1793096651) przy różnych `inserted_at` (sprawdzone curlem 27.10.2026). Możliwy
-  błąd liczenia `nowMs() - positionMs` w `ListenBrainzScrobbler.submitListen`; do zbadania.
+- **Błędne scrobble sprzed 97fc334** — na koncie zostały podwójne wpisy z auto-przejść (nowy
+  utwór z `listened_at` startu poprzedniego, np. 27.10 i 26.10). Usunięcie wymaga tokenu
+  (`/1/delete-listen` z `listened_at` + `recording_msid`).
