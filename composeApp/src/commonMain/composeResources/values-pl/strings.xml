@@ -161,7 +161,8 @@
     <string name="music_video">Teledysk (YouTube)</string>
     <string name="equalizer_title">Korektor</string>
     <string name="equalizer_desc">Barwa dźwięku, przed normalizacją głośności. Presety z podbiciem lekko ściszają całość, żeby szczyty nigdy się nie przesterowały.</string>
-    <string name="equalizer_bass">Więcej basu</string>
+    <string name="equalizer_off">Wył.</string>
+    <string name="equalizer_bass">Bas</string>
     <string name="equalizer_vocal">Wokal</string>
     <string name="equalizer_bright">Jaśniej</string>
     <string name="equalizer_night">Noc</string>

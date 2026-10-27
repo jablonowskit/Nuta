@@ -481,13 +481,16 @@ class Media3AudioPlayer(
             ).withResolvedDuration(track.id, resolution.match.candidate.durationMs)
             withContext(Dispatchers.Main) {
                 if (!isCurrentLoad(generation, track.id)) return@withContext
-                player.setMediaItem(MediaItem.Builder()
+                val item = MediaItem.Builder()
                     .setMediaId(track.id)
                     .setUri(url)
                     .setMediaMetadata(NotificationArtwork.metadata(track, settingsStore.settings.value.loadCovers))
-                    .build())
+                    .build()
+                // Pozycja w setMediaItem, nie seekTo po prepare: MediaController odrzuca seekTo bez
+                // słowa, dopóki sesja nie potwierdzi COMMAND_SEEK_IN_CURRENT_MEDIA_ITEM dla nowego
+                // itemu — wznowienie po restarcie zaczynało od 0:00 (27.10.2026).
+                if (resumeFromMs != null) player.setMediaItem(item, resumeFromMs) else player.setMediaItem(item)
                 player.prepare()
-                if (resumeFromMs != null) player.seekTo(resumeFromMs)
                 if (!pauseRequested) player.play()
             }
             logger.info("Media3Player", "playback_prepared", "Przekazano strumień YouTube do Media3", fields = mapOf(
