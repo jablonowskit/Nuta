@@ -58,6 +58,7 @@ class PlaybackService : MediaSessionService() {
                 PlaybackQueueBridge.streamCache = it
             }
         }
+        PlaybackQueueBridge.cachingDataSourceFactory = cacheFactory
         val loudnessProcessor = LoudnessAudioProcessor(settingsStore)
         val player = ExoPlayer.Builder(this)
             .setMediaSourceFactory(DefaultMediaSourceFactory(cacheFactory))
@@ -295,6 +296,7 @@ class PlaybackService : MediaSessionService() {
     }
 
     override fun onDestroy() {
+        PlaybackQueueBridge.cachingDataSourceFactory = null
         mediaSession?.run {
             player.release()
             release()

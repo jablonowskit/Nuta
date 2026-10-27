@@ -1,10 +1,13 @@
 package app.nuta.android
 
 import android.content.SharedPreferences
+import android.net.Uri
 import android.util.Base64
+import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
+import androidx.media3.datasource.DataSpec
 import androidx.media3.session.MediaController
 import app.nuta.core.logging.NutaLogger
 import app.nuta.core.models.PlayerState
@@ -290,8 +293,8 @@ class Media3AudioPlayer(
 
     override suspend fun prefetch(tracks: List<Track>) {
         val state = stateFlow.value
-        tracks.take(PREFETCH_LIMIT).forEach { track ->
-            if (track.id == state.currentTrack?.id) return@forEach
+        tracks.take(PREFETCH_LIMIT).forEachIndexed { position, track ->
+            if (track.id == state.currentTrack?.id) return@forEachIndexed
             synchronized(prefetchLock) {
                 if (prefetchCache.containsKey(track.id)) return@synchronized
                 val startedAtMs = System.currentTimeMillis()
@@ -302,11 +305,53 @@ class Media3AudioPlayer(
                             "track" to track.title,
                             "ms" to (System.currentTimeMillis() - startedAtMs).toString(),
                         ))
+                        // tylko najbliższy utwór — pozostałe to głównie oszczędność na resolve,
+                        // a pobieranie bajtów dla 5 utworów marnowałoby transfer przy przeskakiwaniu
+                        if (position == 0) scope.launch(Dispatchers.IO) { preloadStreamStart(track, it.stream.url.use { url -> url }) }
                     }
                 }
                 evictOldestPrefetchesLocked()
             }
         }
+    }
+
+    /**
+     * Wczytuje początek strumienia do cache'u ExoPlayera. Sam prefetch adresu nie wystarczał:
+     * przejście między utworami i tak trwało ~0,8 s (zmierzone 27.10.2026, światłowód) — prawie
+     * cały ten czas to pierwsza odpowiedź googlevideo. Z bajtami w cache'u start idzie z dysku.
+     *
+     * Żądanie od bajtu 0 bez Range, dokładnie jak pierwsze żądanie playera (patrz
+     * ClientAwareDataSourceFactory — Range od 0 dawał 403); czytamy tylko [PRELOAD_BYTES] i
+     * zamykamy, a CacheDataSource zapisuje przeczytany fragment. Klucz cache'u to URL, ten sam,
+     * którego player użyje po prefetch_hit.
+     */
+    private fun preloadStreamStart(track: Track, url: String) {
+        val factory = PlaybackQueueBridge.cachingDataSourceFactory ?: return
+        val startedAtMs = System.currentTimeMillis()
+        val source = factory.createDataSource()
+        runCatching {
+            source.open(DataSpec(Uri.parse(url)))
+            val buffer = ByteArray(16 * 1024)
+            var total = 0
+            while (total < PRELOAD_BYTES) {
+                val read = source.read(buffer, 0, buffer.size)
+                if (read == C.RESULT_END_OF_INPUT) break
+                total += read
+            }
+            total
+        }.onSuccess { total ->
+            logger.info("Media3Player", "preload_ready", "Wczytano początek następnego utworu do cache'u", fields = mapOf(
+                "track" to track.title,
+                "bytes" to total.toString(),
+                "ms" to (System.currentTimeMillis() - startedAtMs).toString(),
+            ))
+        }.onFailure { error ->
+            logger.warn("Media3Player", "preload_failed", "Nie udało się wczytać początku utworu", fields = mapOf(
+                "track" to track.title,
+                "reason" to (error.message ?: error::class.simpleName.orEmpty()),
+            ))
+        }
+        runCatching { source.close() }
     }
 
     /** Wymaga trzymania [prefetchLock]. */
@@ -567,6 +612,8 @@ class Media3AudioPlayer(
 
     private companion object {
         const val PREFETCH_LIMIT = 5
+        /** ~13 s Opus przy 160 kb/s — z zapasem na start, zanim dociągnie się reszta z sieci. */
+        const val PRELOAD_BYTES = 256 * 1024
         const val PREFETCH_CACHE_LIMIT = 40
         const val PREFETCH_EXPIRY_MARGIN_MS = 30_000L
         const val STABLE_PLAYBACK_MS = 8_000L

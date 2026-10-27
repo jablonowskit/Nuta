@@ -1,5 +1,6 @@
 package app.nuta.android
 
+import androidx.media3.datasource.DataSource
 import androidx.media3.datasource.cache.Cache
 import kotlinx.coroutines.flow.MutableStateFlow
 
@@ -8,6 +9,10 @@ object PlaybackQueueBridge {
         leniwie, przy pierwszym otwarciu strumienia (patrz LazyCacheDataSourceFactory), więc przed
         pierwszym odtworzeniem jest nullem i Ustawienia pokazują wtedy 0 B. */
     @Volatile var streamCache: Cache? = null
+
+    /** Ta sama fabryka (cache + upstream z UA/Range dla YouTube), z której czyta ExoPlayer —
+        prefetch wczytuje nią początek następnego utworu do cache'u. Null, gdy usługa nie żyje. */
+    @Volatile var cachingDataSourceFactory: DataSource.Factory? = null
 
     @Volatile var onNext: (() -> Unit)? = null
     @Volatile var onPrevious: (() -> Unit)? = null
