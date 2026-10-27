@@ -287,6 +287,8 @@ class PlaybackService : MediaSessionService() {
     override fun onTaskRemoved(rootIntent: Intent?) {
         val player = mediaSession?.player
         if (player == null || !player.playWhenReady || player.mediaItemCount == 0) {
+            // najpierw odpiąć własny kontroler apki — z nim stopSelf() był no-opem
+            AppServices.releaseForShutdown()
             stopSelf()
         }
         super.onTaskRemoved(rootIntent)

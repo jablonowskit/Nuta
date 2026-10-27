@@ -85,12 +85,16 @@ class LoudnessNormalizerTest {
     }
 
     @Test
-    fun outputNeverExceedsCeiling() {
+    fun outputNeverExceedsInputAndPeaksAreNotHardClipped() {
         val n = normalizer(LoudnessNormalization.NORMAL)
-        // Sygnał na pełnej skali plus próba wypchnięcia poza zakres.
+        // Tylko tłumienie: wyjście nigdy nie przekracza wejścia. Wcześniej limiter obcinał każdą
+        // próbkę powyżej -1.5 dBFS, także gdy wzmocnienie było 1.0 — pierwsza próbka pełnej
+        // skali (zanim zadziała tłumienie) wychodziła spłaszczona do 0.84.
         repeat(48_000 * 2) { i ->
-            val out = n.processSample(if (i % 2 == 0) 1f else -1f)
-            assertTrue(abs(out) <= LoudnessNormalizer.Ceiling + 1e-6f, "próbka $out przekroczyła sufit")
+            val input = if (i % 2 == 0) 1f else -1f
+            val out = n.processSample(input)
+            assertTrue(abs(out) <= abs(input) + 1e-6f, "próbka $out większa niż wejście $input")
+            if (i == 0) assertEquals(1f, out, "szczyt bez wzmocnienia nie może być obcięty")
         }
     }
 

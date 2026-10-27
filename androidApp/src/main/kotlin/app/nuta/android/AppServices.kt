@@ -98,9 +98,24 @@ object AppServices {
         connectController(context.applicationContext, attempt = 0)
     }
 
+    /**
+     * Usługa świadomie się zamyka (apka zamknięta z ostatnich przy pauzie). Ten kontroler
+     * trzymał ją przy życiu — stopSelf() nie niszczy usługi, dopóki ktoś jest do niej podpięty,
+     * a onDisconnected od razu łączyło ponownie. Do następnego onResume nie wracamy.
+     */
+    @Volatile private var shutDown = false
+
+    fun releaseForShutdown() {
+        shutDown = true
+        reconnectJob?.cancel()
+        reconnectJob = null
+        clearPlayer(releaseController = true)
+    }
+
     /** Ręczne ponowienie po trwałym błędzie connect albo z onResume / NetworkCallback. */
     fun retryConnect(context: Context? = null) {
         val ctx = context?.applicationContext ?: appContext ?: return
+        shutDown = false
         if (!started) {
             start(ctx)
             return
@@ -138,7 +153,7 @@ object AppServices {
                     logger.warn("Playback", "controller_disconnected", "Usługa odtwarzania rozłączona — łączę ponownie")
                     // Kontroler już się rozłącza — wrapper nie może wołać controller.release() drugi raz.
                     clearPlayer(releaseController = false)
-                    scheduleReconnect(context, attempt = 0)
+                    if (!shutDown) scheduleReconnect(context, attempt = 0)
                 }
             })
             .buildAsync()
@@ -201,7 +216,7 @@ object AppServices {
             override fun onAvailable(network: Network) {
                 logger.info("Playback", "network_available", "Sieć dostępna — sygnał odświeżenia")
                 _networkResumed.tryEmit(Unit)
-                if (audioPlayer.value == null) retryConnect(context)
+                if (audioPlayer.value == null && !shutDown) retryConnect(context)
             }
         }
         networkCallback = callback

@@ -27,8 +27,10 @@ import kotlin.math.sqrt
  *    maxBoost] (maxBoost=0, więc realnie tylko do [maxAttenuation, 1.0]).
  * 3. Wzmocnienie w obrębie utworu tylko maleje (zapadka) i schodzi płynnie (attack) — nigdy
  *    nie wraca w górę, żeby głośność nie falowała. Wraca do 1.0 dopiero [reset] na nowy utwór.
- * 4. Limiter twardo przycina próbki przekraczające [Ceiling], co chroni przed przesterowaniem
- *    po wzmocnieniu.
+ * 4. Limiter twardo przycina próbki przekraczające [Ceiling] — ale tylko przy wzmocnieniu > 1.
+ *    Przy samym tłumieniu nic nie może wyjść poza oryginał, a obcinanie go do -1.5 dBFS
+ *    spłaszczało szczyty dynamicznych nagrań (klasyka, jazz, stare mastery) — zniekształcenie
+ *    bez żadnej korzyści. Dziś maxBoostDb=0, więc limiter jest bezpiecznikiem na przyszłość.
  *
  * Świadomie NIE jest to pełne EBU R128 (brak K-weightingu i gatingu): różnica jest słyszalna
  * głównie w materiale o dużej dynamice, a koszt to kilkaset linii DSP. Desktop używa
@@ -101,7 +103,8 @@ class LoudnessNormalizer(
         if (!active) return sample
         accumulate(sample)
         currentGain = approach(currentGain, targetGain)
-        return limit(sample * currentGain.toFloat())
+        val out = sample * currentGain.toFloat()
+        return if (currentGain > 1.0) limit(out) else out
     }
 
     private fun accumulate(sample: Float) {

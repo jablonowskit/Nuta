@@ -443,7 +443,11 @@ class Media3AudioPlayer(
             val current = player.getMediaItemAt(index)
             player.replaceMediaItem(index, current.buildUpon().setMediaId(track.id).setMediaMetadata(metadata).build())
         } else {
-            player.setMediaItem(MediaItem.Builder().setMediaId(track.id).setMediaMetadata(metadata).build())
+            // Sesja odrzuca MediaItem bez URI (UnsupportedOperationException w MediaSessionStub,
+            // potwierdzone logcatem 27.10.2026) — wtedy chip/powiadomienie zostawały przy starym
+            // utworze aż do końca resolve. Atrapa nie jest ładowana: player stoi w IDLE do prepare()
+            // z prawdziwym strumieniem w loadTrack.
+            player.setMediaItem(MediaItem.Builder().setMediaId(track.id).setUri(PendingStreamUri).setMediaMetadata(metadata).build())
         }
     }
 
@@ -566,6 +570,8 @@ class Media3AudioPlayer(
         const val PREFETCH_CACHE_LIMIT = 40
         const val PREFETCH_EXPIRY_MARGIN_MS = 30_000L
         const val STABLE_PLAYBACK_MS = 8_000L
+        /** Atrapa URI dla wczesnych metadanych — patrz publishSessionMetadata; nigdy nie ładowana. */
+        const val PendingStreamUri = "nuta://pending-stream"
         val TERMINAL_STATUSES = setOf(PlayerStatus.IDLE, PlayerStatus.ENDED, PlayerStatus.ERROR)
     }
 }
