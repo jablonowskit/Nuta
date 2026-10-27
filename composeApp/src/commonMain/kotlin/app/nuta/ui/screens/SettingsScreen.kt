@@ -40,6 +40,7 @@ import app.nuta.settings.AudioSource
 import app.nuta.settings.BufferSize
 import app.nuta.settings.CodecPreference
 import app.nuta.settings.DataSource
+import app.nuta.settings.EqualizerPreset
 import app.nuta.settings.LoudnessNormalization
 import app.nuta.settings.StreamQuality
 import app.nuta.settings.YouTubeClientProfile
@@ -120,6 +121,20 @@ internal fun SettingsScreen(container: AppContainer, authWarning: String? = null
                     ),
                     selected = settings.loudnessNormalization,
                 ) { value -> container.playbackSettings.update { it.copy(loudnessNormalization = value) } }
+            }
+        }
+        item {
+            SettingsGroup(stringResource(Res.string.equalizer_title), stringResource(Res.string.equalizer_desc)) {
+                SettingOptions(
+                    options = listOf(
+                        EqualizerPreset.OFF to stringResource(Res.string.loudness_off),
+                        EqualizerPreset.BASS to stringResource(Res.string.equalizer_bass),
+                        EqualizerPreset.VOCAL to stringResource(Res.string.equalizer_vocal),
+                        EqualizerPreset.BRIGHT to stringResource(Res.string.equalizer_bright),
+                        EqualizerPreset.NIGHT to stringResource(Res.string.equalizer_night),
+                    ),
+                    selected = settings.equalizer,
+                ) { value -> container.playbackSettings.update { it.copy(equalizer = value) } }
             }
         }
         item {

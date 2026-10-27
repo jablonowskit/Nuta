@@ -2,6 +2,7 @@ package app.nuta.android
 
 import android.content.SharedPreferences
 import app.nuta.settings.BufferSize
+import app.nuta.settings.EqualizerPreset
 import app.nuta.settings.CodecPreference
 import app.nuta.settings.PlaybackSettingsStore
 import app.nuta.settings.StreamQuality
@@ -44,6 +45,7 @@ class AndroidPlaybackSettingsStore(
             .putString("listenBrainzUsername", validated.listenBrainzUsername)
             .putBoolean("prefetchEnabled", validated.prefetchEnabled)
             .putBoolean("autoContinue", validated.autoContinue)
+            .putString("equalizer", validated.equalizer.name)
             .putBoolean("playerCollapsed", validated.playerCollapsed)
             .putInt("cacheSizeMb", validated.cacheSizeMb)
             .putBoolean("cassetteBackground", validated.cassetteBackground)
@@ -69,6 +71,7 @@ class AndroidPlaybackSettingsStore(
         listenBrainzApiToken = readTokenAndMigrate(),
         prefetchEnabled = preferences.getBoolean("prefetchEnabled", false),
         autoContinue = preferences.getBoolean("autoContinue", true),
+        equalizer = enumValue(preferences.getString("equalizer", null), EqualizerPreset.OFF),
         playerCollapsed = preferences.getBoolean("playerCollapsed", false),
         cacheSizeMb = preferences.getInt("cacheSizeMb", 150).coerceIn(25, 500),
         cassetteBackground = preferences.getBoolean("cassetteBackground", true),

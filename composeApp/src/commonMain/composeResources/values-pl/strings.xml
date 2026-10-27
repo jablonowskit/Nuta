@@ -158,6 +158,12 @@
     <string name="play_next">Odtwórz jako następny</string>
     <string name="track_radio">Graj podobne</string>
     <string name="share_track">Udostępnij</string>
+    <string name="equalizer_title">Korektor</string>
+    <string name="equalizer_desc">Barwa dźwięku, przed normalizacją głośności. Presety z podbiciem lekko ściszają całość, żeby szczyty nigdy się nie przesterowały.</string>
+    <string name="equalizer_bass">Więcej basu</string>
+    <string name="equalizer_vocal">Wokal</string>
+    <string name="equalizer_bright">Jaśniej</string>
+    <string name="equalizer_night">Noc</string>
     <string name="lyrics_none">Brak tekstu</string>
     <string name="stats_activity_total">Odsłuchania: %1$d</string>
     <string name="nav_history">Historia</string>

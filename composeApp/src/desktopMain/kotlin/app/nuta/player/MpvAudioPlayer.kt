@@ -1,6 +1,8 @@
 package app.nuta.player
 
 import app.nuta.core.logging.NutaLogger
+import app.nuta.audio.Equalizer
+import app.nuta.settings.YouTubePlaybackSettings
 import app.nuta.core.models.PlayerState
 import app.nuta.core.models.PlayerStatus
 import app.nuta.core.models.Track
@@ -60,7 +62,7 @@ class MpvAudioPlayer(
         scope.coroutineContext[Job]?.invokeOnCompletion { shutdown() }
         scope.launch {
             settingsStore.settings.collect { settings ->
-                if (process?.isAlive == true) runCatching { sendCommand("set_property", "af", loudnormFilter(settings.loudnessNormalization)) }
+                if (process?.isAlive == true) runCatching { sendCommand("set_property", "af", audioFilter(settings)) }
             }
         }
         if (_state.value.queue.isNotEmpty()) {
@@ -182,7 +184,7 @@ class MpvAudioPlayer(
             ensureProcess()
             val loadCommand = resolution.stream.url.use { url -> arrayOf("loadfile", url, "replace") }
             sendCommand(*loadCommand)
-            sendCommand("set_property", "af", loudnormFilter(settingsStore.settings.value.loudnessNormalization))
+            sendCommand("set_property", "af", audioFilter(settingsStore.settings.value))
             sendCommand("set_property", "pause", false)
             _state.value = _state.value.copy(status = PlayerStatus.PLAYING)
                 .withResolvedDuration(current.id, resolution.match.candidate.durationMs)
@@ -435,10 +437,15 @@ class MpvAudioPlayer(
         const val IPC_TIMEOUT_MS = 5_000L
     }
 
-    private fun loudnormFilter(mode: LoudnessNormalization): String = when (mode) {
-        LoudnessNormalization.OFF -> ""
-        LoudnessNormalization.GENTLE -> "lavfi=[loudnorm=I=-20:TP=-1.5:LRA=20]"
-        LoudnessNormalization.NORMAL -> "lavfi=[loudnorm=I=-16:TP=-1.5:LRA=11]"
+    /** Jeden graf lavfi: najpierw korektor, potem loudnorm (jak na Androidzie: normalizacja mierzy skorygowany dźwięk). */
+    private fun audioFilter(settings: YouTubePlaybackSettings): String {
+        val loudnorm = when (settings.loudnessNormalization) {
+            LoudnessNormalization.OFF -> null
+            LoudnessNormalization.GENTLE -> "loudnorm=I=-20:TP=-1.5:LRA=20"
+            LoudnessNormalization.NORMAL -> "loudnorm=I=-16:TP=-1.5:LRA=11"
+        }
+        val chain = Equalizer.ffmpegFilters(settings.equalizer) + listOfNotNull(loudnorm)
+        return if (chain.isEmpty()) "" else "lavfi=[${chain.joinToString(",")}]"
     }
 
     /**

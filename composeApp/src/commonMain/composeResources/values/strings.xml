@@ -156,6 +156,12 @@
     <string name="play_next">Play next</string>
     <string name="track_radio">Play similar</string>
     <string name="share_track">Share</string>
+    <string name="equalizer_title">Equalizer</string>
+    <string name="equalizer_desc">Tone preset applied before loudness normalization. Boosting presets lower the overall level a little so peaks never clip.</string>
+    <string name="equalizer_bass">More bass</string>
+    <string name="equalizer_vocal">Vocals</string>
+    <string name="equalizer_bright">Brighter</string>
+    <string name="equalizer_night">Night</string>
     <string name="lyrics_none">No lyrics found</string>
     <string name="stats_activity_total">Listens: %1$d</string>
     <string name="nav_history">History</string>
