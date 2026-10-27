@@ -67,6 +67,8 @@ object AppServices {
     val sleepTimer = SleepTimer(player = { audioPlayer.value })
     /** Repozytorium bieżącego kontenera UI (zmienia się z sesją Spotify) — dla [QueueContinuation]. */
     @Volatile var repository: SpotifyRepository? = null
+    lateinit var queueContinuation: QueueContinuation
+        private set
     /** Emitowane przy powrocie sieci — UI odświeża listy (App.kt). Nie przy każdym onResume. */
     private val _networkResumed = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
     val networkResumed: SharedFlow<Unit> = _networkResumed.asSharedFlow()
@@ -98,7 +100,9 @@ object AppServices {
             logger,
             likedCache,
         )
-        QueueContinuation(playbackSettings, { repository ?: listenBrainzRepository }, logger).attach(audioPlayer, scope)
+        queueContinuation = QueueContinuation(playbackSettings, { repository ?: listenBrainzRepository }, logger).also {
+            it.attach(audioPlayer, scope)
+        }
         registerNetworkCallback(context.applicationContext)
         connectController(context.applicationContext, attempt = 0)
     }

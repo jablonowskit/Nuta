@@ -228,7 +228,8 @@ private fun NutaAppContent(container: AppContainer) {
         var likedLoaded by remember { mutableStateOf(false) }
         var likedRetryGeneration by remember { mutableStateOf(0) }
         var likedError by remember { mutableStateOf<String?>(null) }
-        var similarModeActive by remember { mutableStateOf(false) }
+        // Stan trybu podobnych (♬+) żyje w QueueContinuation — dokładanie działa też przy zgaszonym ekranie.
+        val similarModeActive by container.queueContinuation.similarMode.collectAsState()
         var currentTrackLiked by remember { mutableStateOf(false) }
         // tylko stan ręcznego kliknięcia — celowo NIE dzielony z tłowym sprawdzaniem "czy polubione"
         // przy zmianie utworu; gdyby to sprawdzenie się zawiesiło, nie może trwale zablokować przycisku
@@ -403,33 +404,6 @@ private fun NutaAppContent(container: AppContainer) {
                 }
         }
 
-        LaunchedEffect(similarModeActive, playerState.currentIndex, playerState.queue.size) {
-            // Bez osobnej flagi „ładuje się”: zmiana kluczy i tak anuluje poprzedni przebieg, a flaga
-            // zerowana w jego finally za późno blokowała nowy — dokładanie przepadało przy szybkim skipie.
-            if (!similarModeActive || playerState.currentIndex < 0) return@LaunchedEffect
-            val remaining = playerState.queue.lastIndex - playerState.currentIndex
-            if (remaining > 3) return@LaunchedEffect
-            val seed = playerState.currentTrack ?: return@LaunchedEffect
-            try {
-                val recommendations = container.spotifyRepository.getTrackRadio(seed)
-                    val knownIds = playerState.queue.mapTo(mutableSetOf(), Track::id)
-                    val additions = recommendations.shuffled().filter { knownIds.add(it.id) }
-                    container.audioPlayer.appendToQueue(additions)
-                    container.logger.info(
-                        "SpotifyRadio", "continuous_queue_extended", "Automatycznie rozszerzono kolejkę podobnych utworów",
-                        fields = mapOf("added" to additions.size.toString()),
-                    )
-            } catch (error: CancellationException) {
-                throw error
-            } catch (error: Throwable) {
-                container.logger.warn("SpotifyRadio", "continuous_queue_failed", "Nie udało się rozszerzyć kolejki podobnych utworów", fields = mapOf("reason" to (error::class.simpleName ?: "unknown")))
-            }
-        }
-
-        LaunchedEffect(playerState.queue.isEmpty()) {
-            if (playerState.queue.isEmpty()) similarModeActive = false
-        }
-
         LaunchedEffect(container.spotifyRepository) {
             if (likedTracks.isEmpty() && !likedLoaded) {
                 runCatching { container.spotifyRepository.getCachedLikedTracks() }
@@ -598,7 +572,7 @@ private fun NutaAppContent(container: AppContainer) {
                 if (compact) {
                     if (showPlayerBar) {
                         Divider(color = LocalNutaPalette.current.divider)
-                        CompactPlayerBar(playerState, container, similarModeActive, { similarModeActive = it }, openQueue, displayedTrackLiked, favoriteLoading, toggleCurrentTrackLiked, playbackSettings.playerCollapsed, setCollapsed)
+                        CompactPlayerBar(playerState, container, similarModeActive, container.queueContinuation::setSimilarMode, openQueue, displayedTrackLiked, favoriteLoading, toggleCurrentTrackLiked, playbackSettings.playerCollapsed, setCollapsed)
                     }
                     BottomNavigation(destination) { navigate(it) }
                 } else if (showPlayerBar) {
@@ -607,7 +581,7 @@ private fun NutaAppContent(container: AppContainer) {
                         state = playerState,
                         container = container,
                         similarModeActive = similarModeActive,
-                        onSimilarModeChange = { similarModeActive = it },
+                        onSimilarModeChange = container.queueContinuation::setSimilarMode,
                         onOpenQueue = openQueue,
                         isLiked = displayedTrackLiked,
                         favoriteLoading = favoriteLoading,

@@ -148,6 +148,7 @@ class MainActivity : ComponentActivity() {
                         onSpotifySessionInvalid = { AppServices.notifySpotifySessionInvalid() },
                         listenBrainzTokenUnreadable = { AppServices.listenBrainzTokenUnreadable },
                         sleepTimer = AppServices.sleepTimer,
+                        queueContinuation = AppServices.queueContinuation,
                     )
                 }
                 NutaApp(container)
