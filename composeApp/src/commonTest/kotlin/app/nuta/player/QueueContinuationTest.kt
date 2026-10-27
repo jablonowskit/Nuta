@@ -47,4 +47,41 @@ class QueueContinuationTest {
     fun restoredQueueDoesNotGrowBeforePlayback() {
         assertEquals(1, run(autoContinue = true, play = false))
     }
+
+    private fun runMidQueue(similar: Boolean): Int = runBlocking {
+        val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
+        val player = FakeAudioPlayer(scope, logger)
+        val settings = InMemoryPlaybackSettingsStore(YouTubePlaybackSettings(autoContinue = true))
+        val continuation = QueueContinuation(settings, { FakeSpotifyRepository(logger) }, logger)
+        continuation.attach(flowOf(player), scope)
+        // 3 utwory, gra pierwszy: zostały 2 — tryb podobnych (próg 3) dokłada, „Graj dalej” jeszcze nie.
+        player.setQueue(listOf(seed, Track("b", "B", listOf("X"), "", 1), Track("c", "C", listOf("X"), "", 1)))
+        continuation.setSimilarMode(similar)
+        player.play()
+        delay(500)
+        scope.cancel()
+        player.state.value.queue.size
+    }
+
+    @Test
+    fun similarModeExtendsBeforeLastTrack() {
+        assertTrue(runMidQueue(similar = true) > 3)
+    }
+
+    @Test
+    fun withoutSimilarModeMidQueueStaysUntouched() {
+        assertEquals(3, runMidQueue(similar = false))
+    }
+
+    @Test
+    fun emptyQueueTurnsSimilarModeOff() = runBlocking {
+        val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
+        val player = FakeAudioPlayer(scope, logger)
+        val continuation = QueueContinuation(InMemoryPlaybackSettingsStore(), { FakeSpotifyRepository(logger) }, logger)
+        continuation.attach(flowOf(player), scope)
+        continuation.setSimilarMode(true)
+        delay(300)
+        scope.cancel()
+        assertEquals(false, continuation.similarMode.value)
+    }
 }

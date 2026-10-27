@@ -8,6 +8,7 @@ import app.nuta.core.logging.LogLevel
 import app.nuta.core.logging.MemoryLogger
 import app.nuta.data.fake.FakeSpotifyRepository
 import app.nuta.domain.DataSourceSelectingRepository
+import app.nuta.domain.SpotifyRepository
 import app.nuta.data.FileLikedTracksCache
 import app.nuta.listenbrainz.ListenBrainzRepository
 import app.nuta.listenbrainz.ListenBrainzScrobbler
@@ -73,6 +74,10 @@ fun main() {
     ListenBrainzScrobbler(playbackSettings, logger).attach(audioPlayer, scope)
     val tokenStore = SpotifyTestTokenStore(logger)
     val restoredToken = tokenStore.load()
+    // Kontener podmienia się po zalogowaniu do Spotify — getter zawsze bierze bieżące repozytorium.
+    var currentRepository: SpotifyRepository? = null
+    val queueContinuation = QueueContinuation(playbackSettings, { currentRepository }, logger)
+    queueContinuation.attach(flowOf(audioPlayer), scope)
     val container = AppContainer(
         spotifyRepository = DataSourceSelectingRepository(
             playbackSettings,
@@ -83,10 +88,9 @@ fun main() {
         logger = logger,
         youtubeMediaService = youtubeMediaService,
         playbackSettings = playbackSettings,
+        queueContinuation = queueContinuation,
     )
-    // Kontener podmienia się po zalogowaniu do Spotify — getter zawsze bierze bieżące repozytorium.
-    var currentRepository = container.spotifyRepository
-    QueueContinuation(playbackSettings, { currentRepository }, logger).attach(flowOf(audioPlayer), scope)
+    currentRepository = container.spotifyRepository
 
     application {
         Window(
@@ -141,6 +145,7 @@ fun main() {
                             // odtwarzania resetowały się przy każdym odświeżeniu tokenu
                             playbackSettings = playbackSettings,
                             sleepTimer = container.sleepTimer,
+                            queueContinuation = queueContinuation,
                         )
                         currentRepository = activeContainer.spotifyRepository
                         tokenExpiresAtMs = token.expiresAtMs

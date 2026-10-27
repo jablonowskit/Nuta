@@ -3,6 +3,7 @@ package app.nuta
 import app.nuta.core.logging.MemoryLogger
 import app.nuta.domain.AudioPlayer
 import app.nuta.domain.SpotifyRepository
+import app.nuta.player.QueueContinuation
 import app.nuta.player.SleepTimer
 import app.nuta.youtube.YouTubeMediaService
 import app.nuta.settings.InMemoryPlaybackSettingsStore
@@ -27,4 +28,6 @@ data class AppContainer(
     val listenBrainzTokenUnreadable: () -> Boolean = { false },
     /** Jeden na proces, przekazywany do każdego nowego kontenera — patrz [SleepTimer]. */
     val sleepTimer: SleepTimer = SleepTimer(player = { audioPlayer }),
+    /** Jak [sleepTimer]: jeden na proces, żyje poza UI (tryb podobnych ♬+ i „Graj dalej”). */
+    val queueContinuation: QueueContinuation = QueueContinuation(playbackSettings, { spotifyRepository }, logger),
 )
