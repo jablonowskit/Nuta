@@ -3,6 +3,7 @@ package app.nuta.ui
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -192,15 +193,22 @@ internal fun openMusicVideo(track: Track) = openUrlInBrowser(musicVideoUrl(track
 
 /** „YT” w rozwiniętym playerze — teledysk bieżącego utworu (patrz [musicVideoUrl]). */
 @Composable
-internal fun MusicVideoButton(track: Track?) {
+internal fun MusicVideoButton(track: Track?, compact: Boolean = false) {
     Text(
         "YT",
         color = if (track != null) MaterialTheme.colors.primary else LocalNutaPalette.current.muted,
-        fontSize = 13.sp,
+        fontSize = if (compact) 10.sp else 13.sp,
+        lineHeight = if (compact) CompactIconLineHeight else TextUnit.Unspecified,
         fontWeight = FontWeight.Bold,
-        modifier = Modifier.clickable(enabled = track != null) { track?.let(::openMusicVideo) }.padding(horizontal = 8.dp, vertical = 6.dp),
+        modifier = Modifier.clickable(enabled = track != null) { track?.let(::openMusicVideo) }.padding(iconPadding(compact)),
     )
 }
+
+/** Ikony w pionie obok tytułu (telefon) muszą zmieścić się we wysokości dwóch linii tekstu. */
+internal val CompactIconLineHeight = 14.sp
+
+internal fun iconPadding(compact: Boolean): PaddingValues =
+    if (compact) PaddingValues(horizontal = 10.dp, vertical = 1.dp) else PaddingValues(horizontal = 8.dp, vertical = 6.dp)
 
 /** Udostępnia [track] systemowo (desktop: schowek). Źródło danych czytane w chwili kliknięcia. */
 internal fun shareTrack(container: AppContainer, track: Track) =
