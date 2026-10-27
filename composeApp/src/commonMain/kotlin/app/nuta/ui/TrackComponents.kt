@@ -13,6 +13,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.DropdownMenu
+import androidx.compose.material.DropdownMenuItem
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
@@ -31,8 +33,12 @@ import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.nuta.core.models.Track
+import app.nuta.resources.Res
+import app.nuta.resources.add_to_playlist_menu
+import app.nuta.resources.play_next
 import app.nuta.ui.theme.LocalNutaPalette
 import kotlinx.coroutines.delay
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * Wiersz utworu i jego przyciski akcji — używane przez ekrany Playlisty, Ulubione, Szukaj
@@ -49,14 +55,19 @@ internal fun TrackRow(
     // Zamiast trzeciej ikony "☰" na stałe widocznej w wierszu: przytrzymanie utworu
     // otwiera dodawanie do playlisty — mniej ikon, więcej miejsca, gest znany z innych appek.
     onLongPress: (() -> Unit)? = null,
+    // Z tym przytrzymanie otwiera menu („Odtwórz jako następny” + dodawanie do playlisty)
+    // zamiast od razu dialogu playlist.
+    onPlayNext: (() -> Unit)? = null,
 ) {
     val palette = LocalNutaPalette.current
+    var menuOpen by remember { mutableStateOf(false) }
+    val longPress: (() -> Unit)? = if (onPlayNext != null) ({ menuOpen = true }) else onLongPress
     BoxWithConstraints(Modifier.fillMaxWidth()) {
     val compact = maxWidth < 520.dp
     val rowModifier = Modifier.fillMaxWidth()
         .background(if (active) palette.activeHighlight else Color.Transparent, RoundedCornerShape(8.dp))
         .let { base ->
-            if (onLongPress != null) base.combinedClickable(onClick = onPlay, onLongClick = onLongPress)
+            if (longPress != null) base.combinedClickable(onClick = onPlay, onLongClick = longPress)
             else base.clickable(onClick = onPlay)
         }
         .padding(horizontal = 12.dp, vertical = 8.dp)
@@ -88,6 +99,14 @@ internal fun TrackRow(
             Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 titleAction?.invoke()
                 subtitleAction?.invoke()
+            }
+        }
+    }
+    if (onPlayNext != null) {
+        DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+            DropdownMenuItem(onClick = { menuOpen = false; onPlayNext() }) { Text(stringResource(Res.string.play_next)) }
+            if (onLongPress != null) {
+                DropdownMenuItem(onClick = { menuOpen = false; onLongPress() }) { Text(stringResource(Res.string.add_to_playlist_menu)) }
             }
         }
     }

@@ -13,6 +13,8 @@ import app.nuta.core.logging.NutaLogger
 import app.nuta.core.models.PlayerState
 import app.nuta.core.models.PlayerStatus
 import app.nuta.core.models.Track
+import app.nuta.core.models.withInsertedNext
+import app.nuta.core.models.withMoved
 import app.nuta.core.models.withResolvedDuration
 import app.nuta.domain.AudioPlayer
 import app.nuta.settings.PlaybackSettingsStore
@@ -67,6 +69,7 @@ class Media3AudioPlayer(
     private val prefetchCache = LinkedHashMap<String, Deferred<YouTubeResolution>>()
     private val prefetchLock = Any()
     private var released = false
+    private var preloadJob: Job? = null
     /**
      * Pauza przyszła, zanim [loadTrack] skończył resolve — wtedy nie wolno mu na końcu wołać
      * play(). Inaczej wyłącznik „do końca utworu” (pauza tuż po przejściu na następny) i pauza
@@ -152,6 +155,7 @@ class Media3AudioPlayer(
         cancelLoad()
         stopTicker()
         cancelStabilityJob()
+        preloadJob?.cancel()
         bridgeQueueJob?.cancel()
         bridgeBufferingJob?.cancel()
         synchronized(prefetchLock) {
@@ -243,6 +247,15 @@ class Media3AudioPlayer(
         saveQueue()
         savePosition(0)
     }
+    override suspend fun insertNext(tracks: List<Track>) {
+        if (tracks.isEmpty()) return
+        stateFlow.value = stateFlow.value.withInsertedNext(tracks)
+        saveQueue()
+    }
+    override suspend fun moveInQueue(from: Int, to: Int) {
+        stateFlow.value = stateFlow.value.withMoved(from, to)
+        saveQueue()
+    }
     override suspend fun appendToQueue(tracks: List<Track>) { if (tracks.isNotEmpty()) { stateFlow.value = stateFlow.value.copy(queue = stateFlow.value.queue + tracks); saveQueue() } }
 
     override suspend fun removeFromQueue(index: Int) {
@@ -293,8 +306,8 @@ class Media3AudioPlayer(
 
     override suspend fun prefetch(tracks: List<Track>) {
         val state = stateFlow.value
-        tracks.take(PREFETCH_LIMIT).forEachIndexed { position, track ->
-            if (track.id == state.currentTrack?.id) return@forEachIndexed
+        tracks.take(PREFETCH_LIMIT).forEach { track ->
+            if (track.id == state.currentTrack?.id) return@forEach
             synchronized(prefetchLock) {
                 if (prefetchCache.containsKey(track.id)) return@synchronized
                 val startedAtMs = System.currentTimeMillis()
@@ -305,13 +318,29 @@ class Media3AudioPlayer(
                             "track" to track.title,
                             "ms" to (System.currentTimeMillis() - startedAtMs).toString(),
                         ))
-                        // tylko najbliższy utwór — pozostałe to głównie oszczędność na resolve,
-                        // a pobieranie bajtów dla 5 utworów marnowałoby transfer przy przeskakiwaniu
-                        if (position == 0) scope.launch(Dispatchers.IO) { preloadStreamStart(track, it.stream.url.use { url -> url }) }
                     }
                 }
                 evictOldestPrefetchesLocked()
             }
+        }
+    }
+
+    /**
+     * Po starcie utworu przygotowuje następny z kolejki: adres (prefetch) i początek dźwięku.
+     * Woła to sam player, nie UI — prefetch z UI zależy od widocznej listy i staje przy
+     * wygaszonym ekranie (kompozycja nie dostaje klatek), a wtedy najczęściej leci muzyka.
+     * Tylko jeden następny utwór: bajty dla kilku marnowałyby transfer przy przeskakiwaniu.
+     */
+    private fun preloadNextTrack() {
+        if (!settingsStore.settings.value.prefetchEnabled) return
+        val state = stateFlow.value
+        val next = state.queue.getOrNull(state.currentIndex + 1) ?: return
+        preloadJob?.cancel()
+        preloadJob = scope.launch(Dispatchers.IO) {
+            prefetch(listOf(next))
+            val pending = synchronized(prefetchLock) { prefetchCache[next.id] } ?: return@launch
+            val resolution = runCatching { pending.await() }.getOrNull() ?: return@launch
+            preloadStreamStart(next, resolution.stream.url.use { it })
         }
     }
 
@@ -466,6 +495,7 @@ class Media3AudioPlayer(
                 "mimeType" to resolution.stream.mimeType,
                 "bitrate" to resolution.stream.bitrate.toString(),
             ))
+            preloadNextTrack()
         } catch (_: CancellationException) {
             // Zmiana kolejki/utworu świadomie anuluje resolve; to nie jest błąd odtwarzania.
         } catch (error: Throwable) {
