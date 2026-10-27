@@ -8,6 +8,9 @@ enum class StreamQuality { AUTO, DATA_SAVER, STANDARD, BEST }
 enum class CodecPreference { AUTO, AAC, OPUS }
 enum class BufferSize { SMALL, STANDARD, LARGE }
 enum class LoudnessNormalization { OFF, GENTLE, NORMAL }
+
+/** Presety korektora — pasma w [app.nuta.audio.Equalizer.bandsFor]. */
+enum class EqualizerPreset { OFF, BASS, VOCAL, BRIGHT, NIGHT }
 /**
  * Który profil klienta InnerTube resolver ma próbować przy rozwiązywaniu strumienia YouTube.
  * AUTO i VISIONOS używają obecnie tego samego, jedynego działającego profilu. Fallback między
@@ -54,6 +57,7 @@ data class YouTubePlaybackSettings(
     val prefetchEnabled: Boolean = false,
     /** Na ostatnim utworze kolejki dokładaj podobne, zamiast kończyć (patrz QueueContinuation). */
     val autoContinue: Boolean = true,
+    val equalizer: EqualizerPreset = EqualizerPreset.OFF,
     /** Pasek playera jest zawsze widoczny; to pole trzyma tylko stan zwinięcia do wąskiego paska. */
     val playerCollapsed: Boolean = false,
     /** Limit cache'u zbuforowanych strumieni audio (MB). Zmiana działa dopiero po restarcie aplikacji. */
@@ -68,7 +72,7 @@ data class YouTubePlaybackSettings(
         "loudnessNormalization=$loudnessNormalization, youtubeClientProfile=$youtubeClientProfile, " +
         "audioSource=$audioSource, dataSource=$dataSource, listenBrainzUsername=$listenBrainzUsername, " +
         "listenBrainzApiToken=${if (listenBrainzApiToken.isBlank()) "" else "[REDACTED]"}, " +
-        "prefetchEnabled=$prefetchEnabled, autoContinue=$autoContinue, playerCollapsed=$playerCollapsed, cacheSizeMb=$cacheSizeMb, " +
+        "prefetchEnabled=$prefetchEnabled, autoContinue=$autoContinue, equalizer=$equalizer, playerCollapsed=$playerCollapsed, cacheSizeMb=$cacheSizeMb, " +
         "cassetteBackground=$cassetteBackground, loadCovers=$loadCovers, theme=$theme)"
 }
 

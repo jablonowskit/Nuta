@@ -3,7 +3,9 @@ package app.nuta.android
 import androidx.media3.common.audio.AudioProcessor
 import androidx.media3.common.audio.BaseAudioProcessor
 import androidx.media3.common.C
+import app.nuta.audio.Equalizer
 import app.nuta.audio.LoudnessNormalizer
+import app.nuta.settings.EqualizerPreset
 import app.nuta.settings.LoudnessNormalization
 import app.nuta.settings.PlaybackSettingsStore
 import java.nio.ByteBuffer
@@ -25,6 +27,10 @@ class LoudnessAudioProcessor(
 ) : BaseAudioProcessor() {
     private var normalizer: LoudnessNormalizer? = null
     private var activeMode: LoudnessNormalization? = null
+    // Korektor siedzi w tym samym procesorze (przed normalizacją, żeby ta mierzyła już
+    // skorygowany dźwięk) — osobny procesor wymagałby drugiego miejsca w potoku Media3.
+    private var equalizer: Equalizer? = null
+    private var activePreset: EqualizerPreset? = null
 
     @Throws(AudioProcessor.UnhandledAudioFormatException::class)
     override fun onConfigure(inputAudioFormat: AudioProcessor.AudioFormat): AudioProcessor.AudioFormat {
@@ -35,7 +41,14 @@ class LoudnessAudioProcessor(
             throw AudioProcessor.UnhandledAudioFormatException(inputAudioFormat)
         }
         rebuildNormalizer(inputAudioFormat)
+        rebuildEqualizer(inputAudioFormat)
         return inputAudioFormat
+    }
+
+    private fun rebuildEqualizer(format: AudioProcessor.AudioFormat) {
+        val preset = settingsStore.settings.value.equalizer
+        activePreset = preset
+        equalizer = Equalizer(format.sampleRate, format.channelCount, preset)
     }
 
     private fun rebuildNormalizer(format: AudioProcessor.AudioFormat) {
@@ -59,15 +72,17 @@ class LoudnessAudioProcessor(
         // liczył według nowego celu (bez tego trzeba by restartować odtwarzanie).
         val mode = settingsStore.settings.value.loudnessNormalization
         if (mode != activeMode) rebuildNormalizer(inputAudioFormat)
+        if (settingsStore.settings.value.equalizer != activePreset) rebuildEqualizer(inputAudioFormat)
         consumeNewTrack()
         val current = normalizer
+        val eq = equalizer
 
         // Liczymy w pełnych próbkach 16-bit, nie w bajtach: gdyby bufor miał nieparzystą liczbę
         // bajtów, asShortBuffer() zobaczyłby o jedną próbkę mniej, a konsumpcja całego `remaining`
         // zgubiłaby ostatni bajt — przy stereo trwale zamieniłoby to kanały L/R w reszcie strumienia.
         val size = inputBuffer.remaining() / BytesPerSample * BytesPerSample
         val output = replaceOutputBuffer(size)
-        if (current == null || !current.active) {
+        if ((current == null || !current.active) && (eq == null || !eq.active)) {
             // Tryb OFF: przepisujemy bajty bez zmian (procesor zostaje w potoku — patrz isActive).
             val limit = inputBuffer.limit()
             inputBuffer.limit(inputBuffer.position() + size)
@@ -82,9 +97,12 @@ class LoudnessAudioProcessor(
         val input = inputBuffer.asShortBuffer()
         val out = output.asShortBuffer()
         val samples = size / BytesPerSample
-        repeat(samples) {
+        val channels = inputAudioFormat.channelCount.coerceAtLeast(1)
+        repeat(samples) { index ->
             val sample = input.get().toFloat() / Short.MAX_VALUE
-            val processed = current.processSample(sample)
+            // Bufor zaczyna się zawsze od pełnej ramki, więc kanał to indeks modulo liczba kanałów.
+            val equalized = eq?.processSample(sample, index % channels) ?: sample
+            val processed = current?.processSample(equalized) ?: equalized
             out.put((processed * Short.MAX_VALUE).toInt().coerceIn(MinPcm, MaxPcm).toShort())
         }
         // Przesuwamy pozycje: widoki ShortBuffer nie ruszają pozycji buforów bazowych.
@@ -118,6 +136,7 @@ class LoudnessAudioProcessor(
             // Seek: pomiar od nowa, ściszenie zostaje.
             normalizer?.clearDelay()
         }
+        equalizer?.reset()
     }
 
     /** Przejście bez flush() (gapless): reset ściszenia przy pierwszym buforze nowego utworu. */
@@ -130,6 +149,8 @@ class LoudnessAudioProcessor(
     override fun onReset() {
         normalizer = null
         activeMode = null
+        equalizer = null
+        activePreset = null
         newTrackPending = false
     }
 
