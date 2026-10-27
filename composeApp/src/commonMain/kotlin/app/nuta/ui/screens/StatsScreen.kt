@@ -36,7 +36,9 @@ import app.nuta.AppContainer
 import app.nuta.core.models.Artist
 import app.nuta.core.models.PlayerState
 import app.nuta.core.models.PlayerStatus
+import app.nuta.listenbrainz.ActivityBucket
 import app.nuta.listenbrainz.ListenBrainzStats
+import app.nuta.ui.ActivityChart
 import app.nuta.listenbrainz.StatsEntry
 import app.nuta.listenbrainz.StatsKind
 import app.nuta.listenbrainz.StatsRange
@@ -74,6 +76,22 @@ internal fun StatsScreen(
     var entries by remember { mutableStateOf<List<StatsEntry>>(emptyList()) }
     var loading by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
+    var activity by remember { mutableStateOf<List<ActivityBucket>>(emptyList()) }
+
+    // Wykres tylko dla „Moje”: listening-activity nie ma wersji ogólnoświatowej. Błąd wykresu
+    // nie zasłania topki — po prostu go nie pokazujemy.
+    LaunchedEffect(mine, username, range) {
+        activity = emptyList()
+        val user = username?.takeIf { mine } ?: return@LaunchedEffect
+        activity = try {
+            stats.activity(user, range)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            container.logger.warn("Stats", "activity_failed", "Nie udało się pobrać aktywności", fields = mapOf("reason" to (e.message ?: "unknown")))
+            emptyList()
+        }
+    }
 
     LaunchedEffect(mine, username, kind, range) {
         entries = emptyList()
@@ -114,6 +132,10 @@ internal fun StatsScreen(
             range,
         ) { range = it }
         Spacer(Modifier.height(12.dp))
+        if (activity.isNotEmpty()) {
+            ActivityChart(activity, Modifier.fillMaxWidth())
+            Spacer(Modifier.height(12.dp))
+        }
         val tracks = entries.mapNotNull { it.track }
         when {
             mine && username == null -> EmptyState(stringResource(Res.string.stats_no_username))

@@ -156,6 +156,12 @@
     <string name="play_next">Play next</string>
     <string name="track_radio">Play similar</string>
     <string name="lyrics_none">No lyrics found</string>
+    <string name="stats_activity_total">Listens: %1$d</string>
+    <string name="nav_history">History</string>
+    <string name="home_open_history">History</string>
+    <string name="history_empty">No listens yet</string>
+    <string name="history_load_older">Load older</string>
+    <string name="history_loading">Loading…</string>
     <string name="lyrics_instrumental">Instrumental</string>
     <string name="lyrics_failed">Couldn't load lyrics</string>
     <string name="auto_continue_title">Keep playing</string>

@@ -34,4 +34,26 @@ class ListenBrainzStatsTest {
         // HTTP 204: ListenBrainz jeszcze nie policzył statystyk użytkownika.
         assertTrue(ListenBrainzStats.parse("", StatsKind.ARTISTS).isEmpty())
     }
+
+    @Test
+    fun activityIsSortedAndLeadingZerosAreDropped() {
+        // Kształt jak z curla (listening-activity, 27.10.2026), all_time zaczyna się od pustych lat.
+        val body = """{"payload":{"from_ts":1009843200,"listening_activity":[
+            {"from_ts":1767225600,"listen_count":503,"time_range":"2026","to_ts":1798761599},
+            {"from_ts":1009843200,"listen_count":0,"time_range":"2002","to_ts":1041379199},
+            {"from_ts":1735689600,"listen_count":0,"time_range":"2025","to_ts":1767225599}
+        ],"range":"all_time"}}"""
+        assertEquals(listOf(ActivityBucket("2026", 1767225600, 503)), ListenBrainzStats.parseActivity(body))
+    }
+
+    @Test
+    fun activityKeepsZeroBucketsInsideTheRange() {
+        val body = """{"payload":{"listening_activity":[
+            {"from_ts":1,"listen_count":4,"time_range":"Mon"},
+            {"from_ts":2,"listen_count":0,"time_range":"Tue"},
+            {"from_ts":3,"listen_count":7,"time_range":"Wed"}
+        ]}}"""
+        assertEquals(listOf(4L, 0L, 7L), ListenBrainzStats.parseActivity(body).map { it.count })
+        assertTrue(ListenBrainzStats.parseActivity("").isEmpty())
+    }
 }
