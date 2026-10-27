@@ -7,8 +7,6 @@ usuń stąd — historia jest w gicie. Rozmiar to zgrubna ocena: mały ≈ jeden
 ## Do zrobienia
 
 ### Słuchanie
-- **Equalizer** (średni) — presety (bas, wokal) w tym samym łańcuchu audio co
-  `LoudnessAudioProcessor`.
 - **Pamięć pozycji w długich utworach** (mały) — miksy/sety wznawiają się od miejsca
   przerwania przy ponownym odtworzeniu.
 - **Pełny gapless / crossfade** (duży) — następny utwór w playliście ExoPlayera zamiast
