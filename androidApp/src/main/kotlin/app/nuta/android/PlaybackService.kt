@@ -3,6 +3,12 @@ package app.nuta.android
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.media.AudioDeviceCallback
+import android.media.AudioDeviceInfo
+import android.media.AudioManager
+import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.os.Bundle
 import androidx.media3.common.ForwardingPlayer
 import androidx.media3.common.MediaItem
@@ -37,6 +43,9 @@ import java.io.File
 class PlaybackService : MediaSessionService() {
     private var mediaSession: MediaSession? = null
     private var streamCache: SimpleCache? = null
+    /** Kiedy ExoPlayer spauzował przez odłączenie słuchawek (0 = nie z tego powodu). */
+    private var pausedByNoisyAtMs = 0L
+    private var deviceCallback: AudioDeviceCallback? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -79,7 +88,16 @@ class PlaybackService : MediaSessionService() {
             override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
                 loudnessProcessor.markNewTrack()
             }
+
+            override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
+                // Tylko pauza z odłączenia słuchawek uprawnia do auto-wznowienia; każda inna zmiana
+                // (pauza/play użytkownika, koniec kolejki) je kasuje.
+                pausedByNoisyAtMs = if (!playWhenReady && reason == Player.PLAY_WHEN_READY_CHANGE_REASON_AUDIO_BECOMING_NOISY) {
+                    System.currentTimeMillis()
+                } else 0L
+            }
         })
+        registerHeadsetReconnect(player)
         // Normalizacja głośności siedzi teraz w łańcuchu audio (LoudnessAudioProcessor wpięty
         // przez loudnessAwareRenderersFactory), a nie w systemowym efekcie audio — procesor sam
         // czyta aktualny tryb z ustawień przy każdym buforze, więc nie ma tu czego subskrybować
@@ -295,8 +313,39 @@ class PlaybackService : MediaSessionService() {
         super.onTaskRemoved(rootIntent)
     }
 
+    /**
+     * Drugi kierunek do setHandleAudioBecomingNoisy: po ponownym podłączeniu słuchawek/BT wracamy
+     * do grania — ale tylko po pauzie z odłączenia i najwyżej [HEADSET_RESUME_WINDOW_MS] później,
+     * żeby słuchawki podłączone godzinę później nie odpaliły muzyki niespodziewanie.
+     * Callback przy rejestracji zgłasza już podłączone urządzenia — wtedy znacznik jest pusty.
+     */
+    private fun registerHeadsetReconnect(player: Player) {
+        val audioManager = getSystemService(AudioManager::class.java) ?: return
+        val callback = object : AudioDeviceCallback() {
+            override fun onAudioDevicesAdded(addedDevices: Array<out AudioDeviceInfo>) {
+                val pausedAt = pausedByNoisyAtMs
+                if (pausedAt == 0L || System.currentTimeMillis() - pausedAt > HEADSET_RESUME_WINDOW_MS) return
+                if (addedDevices.none { it.isSink && it.type in headsetTypes() }) return
+                pausedByNoisyAtMs = 0L
+                player.play()
+            }
+        }
+        audioManager.registerAudioDeviceCallback(callback, Handler(Looper.getMainLooper()))
+        deviceCallback = callback
+    }
+
+    private fun headsetTypes(): Set<Int> = buildSet {
+        add(AudioDeviceInfo.TYPE_WIRED_HEADSET)
+        add(AudioDeviceInfo.TYPE_WIRED_HEADPHONES)
+        add(AudioDeviceInfo.TYPE_BLUETOOTH_A2DP)
+        add(AudioDeviceInfo.TYPE_USB_HEADSET)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) add(AudioDeviceInfo.TYPE_BLE_HEADSET)
+    }
+
     override fun onDestroy() {
         PlaybackQueueBridge.cachingDataSourceFactory = null
+        deviceCallback?.let { getSystemService(AudioManager::class.java)?.unregisterAudioDeviceCallback(it) }
+        deviceCallback = null
         mediaSession?.run {
             player.release()
             release()
@@ -311,6 +360,7 @@ class PlaybackService : MediaSessionService() {
 
     companion object {
         private const val COMMAND_SEEK_BACK_10 = "app.nuta.SEEK_BACK_10"
+        private const val HEADSET_RESUME_WINDOW_MS = 10 * 60_000L
         private const val COMMAND_SEEK_FORWARD_10 = "app.nuta.SEEK_FORWARD_10"
 
         private fun loadControl(size: BufferSize): DefaultLoadControl {

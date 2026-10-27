@@ -158,6 +158,9 @@
     <string name="lyrics_none">No lyrics found</string>
     <string name="stats_activity_total">Listens: %1$d</string>
     <string name="nav_history">History</string>
+    <string name="sort_recent">↓ Recently added</string>
+    <string name="sort_title">↓ Title</string>
+    <string name="sort_artist">↓ Artist</string>
     <string name="home_open_history">History</string>
     <string name="history_empty">No listens yet</string>
     <string name="history_load_older">Load older</string>

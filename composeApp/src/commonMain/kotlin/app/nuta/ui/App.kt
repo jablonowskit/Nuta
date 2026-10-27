@@ -44,6 +44,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.setValue
@@ -114,7 +115,15 @@ internal fun ScrollableLazyColumn(
     listState: LazyListState = rememberLazyListState(),
     content: LazyListScope.() -> Unit,
 ) {
+    // Po powrocie na zakładkę lista ma przywróconą pozycję (SaveableStateProvider w NutaApp) —
+    // pierwsze automatyczne przewinięcie do bieżącego utworu by ją nadpisało, więc je pomijamy.
+    // Kolejne zmiany scrollToIndex (np. nowy utwór) przewijają jak zawsze.
+    val restored = remember { listState.firstVisibleItemIndex != 0 || listState.firstVisibleItemScrollOffset != 0 }
+    var firstScroll by remember { mutableStateOf(true) }
     LaunchedEffect(scrollToIndex) {
+        val skip = firstScroll && restored
+        firstScroll = false
+        if (skip) return@LaunchedEffect
         scrollToIndex?.takeIf { it >= 0 }?.let { index ->
             listState.animateScrollToItem(index)
         }
@@ -286,8 +295,13 @@ private fun NutaAppContent(container: AppContainer) {
         // Otwieranie playlisty/wykonawcy w toku — anulowane przy zmianie zakładki i kolejnym otwarciu,
         // inaczej wolna odpowiedź podmieniała zakładkę, na którą użytkownik zdążył już przejść.
         var openJob by remember { mutableStateOf<Job?>(null) }
+        // „Ponów” po nieudanym otwarciu playlisty/wykonawcy ma powtórzyć TO otwarcie — wcześniej
+        // przeładowywało listy na Start, a użytkownik lądował z powrotem na zakładce bez playlisty.
+        var retryOpen by remember { mutableStateOf<(() -> Unit)?>(null) }
+        val screenStates = rememberSaveableStateHolder()
         fun navigate(target: Destination) {
             openJob?.cancel()
+            retryOpen = null
             destination = target
             selectedPlaylist = null
             loadError = null
@@ -299,6 +313,7 @@ private fun NutaAppContent(container: AppContainer) {
             openJob = scope.launch {
                 loading = true
                 loadError = null
+                retryOpen = null
                 runCatching { container.spotifyRepository.getPlaylistTracks(playlist.id) }
                     .onSuccess { tracks ->
                         tracks.firstNotNullOfOrNull { it.imageUrl }?.let { playlistCovers[playlist.id] = it }
@@ -306,7 +321,9 @@ private fun NutaAppContent(container: AppContainer) {
                     }
                     .onFailure { error ->
                         if (error is CancellationException) throw error
-                        loadError = error.message
+                        // bez ?: przy wyjątku bez komunikatu nie pokazywało się nic — ani błąd, ani playlista
+                        loadError = error.message ?: errorUnknownLabel
+                        retryOpen = { selectPlaylist(playlist) }
                         container.logger.error(
                             "SpotifyPlaylist",
                             "playlist_open_failed",
@@ -329,6 +346,7 @@ private fun NutaAppContent(container: AppContainer) {
             openJob = scope.launch {
                 loading = true
                 loadError = null
+                retryOpen = null
                 runCatching { container.spotifyRepository.getArtistTracks(artist) }
                     .onSuccess { tracks ->
                         selectedPlaylist = Playlist(
@@ -341,6 +359,7 @@ private fun NutaAppContent(container: AppContainer) {
                     .onFailure { error ->
                         if (error is CancellationException) throw error
                         loadError = error.message ?: errorUnknownLabel
+                        retryOpen = { selectArtist(artist) }
                         container.logger.warn(
                             "Search", "artist_open_failed", "Nie udało się otworzyć wykonawcy",
                             fields = mapOf("reason" to (error.message ?: "unknown")),
@@ -515,8 +534,11 @@ private fun NutaAppContent(container: AppContainer) {
                                 ErrorState(loadError ?: errorUnknownLabel)
                                 Spacer(Modifier.height(10.dp))
                                 Button(onClick = {
-                                    savedPlaylistsLoaded = false
-                                    loadRetryGeneration++
+                                    val retry = retryOpen
+                                    if (retry != null) retry() else {
+                                        savedPlaylistsLoaded = false
+                                        loadRetryGeneration++
+                                    }
                                 }) { Text("Ponów") }
                             }
                             selectedPlaylist != null -> PlaylistDetails(
@@ -528,7 +550,9 @@ private fun NutaAppContent(container: AppContainer) {
                                 // żyje wyżej, więc wyniki wyszukiwania są nadal na miejscu.
                                 onBack = { selectedPlaylist = null },
                             )
-                            else -> when (destination) {
+                            // SaveableStateProvider: każda zakładka pamięta swój stan (pozycję listy,
+                            // filtr) po przejściu na inną — wcześniej wracało się zawsze na górę.
+                            else -> screenStates.SaveableStateProvider(destination.name) { when (destination) {
                                 Destination.HOME -> HomeScreen(
                                     playlists = playlists,
                                     playerState = playerState,
@@ -562,7 +586,7 @@ private fun NutaAppContent(container: AppContainer) {
                                 Destination.QUEUE -> QueueScreen(playerState, container)
                                 Destination.SETTINGS -> SettingsScreen(container, authWarning = listenBrainzAuthWarning)
                                 Destination.DIAGNOSTICS -> DiagnosticsScreen(container)
-                            }
+                            } }
                         }
                     }
                 }
