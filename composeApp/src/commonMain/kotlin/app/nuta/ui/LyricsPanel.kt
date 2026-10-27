@@ -22,6 +22,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.nuta.core.models.Track
@@ -37,12 +38,13 @@ import org.jetbrains.compose.resources.stringResource
 
 /** „♪” obok wyłącznika czasowego — pokazuje/chowa [LyricsPanel]. */
 @Composable
-internal fun LyricsToggleButton(visible: Boolean, onToggle: (Boolean) -> Unit) {
+internal fun LyricsToggleButton(visible: Boolean, onToggle: (Boolean) -> Unit, compact: Boolean = false) {
     Text(
         "♪",
         color = if (visible) MaterialTheme.colors.primary else LocalNutaPalette.current.muted,
-        fontSize = 16.sp,
-        modifier = Modifier.clickable { onToggle(!visible) }.padding(horizontal = 8.dp, vertical = 6.dp),
+        fontSize = if (compact) 12.sp else 16.sp,
+        lineHeight = if (compact) CompactIconLineHeight else TextUnit.Unspecified,
+        modifier = Modifier.clickable { onToggle(!visible) }.padding(iconPadding(compact)),
     )
 }
 

@@ -41,6 +41,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.nuta.AppContainer
@@ -338,9 +339,9 @@ internal fun CompactPlayerBar(
         }
         // w pionie: tytuł zostaje szeroki na długie nazwy
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            MusicVideoButton(track)
-            LyricsToggleButton(lyricsVisible, onLyricsVisibleChange)
-            SleepTimerButton(container)
+            MusicVideoButton(track, compact = true)
+            LyricsToggleButton(lyricsVisible, onLyricsVisibleChange, compact = true)
+            SleepTimerButton(container, compact = true)
         }
     }
     if (lyricsVisible) LyricsPanel(track, state.positionMs, Modifier.fillMaxWidth().height(240.dp))
@@ -414,7 +415,7 @@ private fun PositionSlider(
 
 /** ☾ z menu: 15/30/45/60 min, do końca utworu, wyłącz. Aktywny pokazuje pozostałe minuty. */
 @Composable
-private fun SleepTimerButton(container: AppContainer) {
+private fun SleepTimerButton(container: AppContainer, compact: Boolean = false) {
     val timer by container.sleepTimer.state.collectAsState()
     var open by remember { mutableStateOf(false) }
     val active = timer != SleepTimerState.Off
@@ -426,9 +427,10 @@ private fun SleepTimerButton(container: AppContainer) {
                 SleepTimerState.Off -> "☾"
             },
             color = if (active) MaterialTheme.colors.primary else LocalNutaPalette.current.muted,
-            fontSize = 16.sp,
+            fontSize = if (compact) 12.sp else 16.sp,
+            lineHeight = if (compact) CompactIconLineHeight else TextUnit.Unspecified,
             maxLines = 1,
-            modifier = Modifier.clickable { open = true }.padding(horizontal = 8.dp, vertical = 6.dp),
+            modifier = Modifier.clickable { open = true }.padding(iconPadding(compact)),
         )
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
             Text(stringResource(Res.string.sleep_timer), fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp))
