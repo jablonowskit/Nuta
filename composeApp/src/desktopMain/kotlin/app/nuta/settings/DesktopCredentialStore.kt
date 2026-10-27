@@ -20,7 +20,16 @@ class DesktopCredentialStore(
 ) : CredentialStore {
     private val lock = Any()
 
+    /**
+     * Ostatni odczyt padł (DPAPI, IO) — to NIE to samo co „brak tokenu”. Bez rozróżnienia
+     * pierwszy zapis ustawień po nieudanym odczycie kasował poprawny sekret (jak na Androidzie
+     * `AndroidCredentialStore.lastDecryptFailed`).
+     */
+    @Volatile var lastLoadFailed = false
+        private set
+
     override fun load(key: String): String? = synchronized(lock) {
+        lastLoadFailed = false
         runCatching {
             if (!Files.exists(file)) return null
             val properties = Properties().apply { Files.newInputStream(file).use(::load) }
@@ -31,7 +40,8 @@ class DesktopCredentialStore(
                 else -> null
             }
         }.onFailure {
-            logger.warn("Credentials", "credential_load_failed", "Nie udało się odczytać poświadczenia")
+            lastLoadFailed = true
+            logger.warn("Credentials", "credential_load_failed", "Nie udało się odczytać poświadczenia", fields = mapOf("reason" to (it.message ?: "unknown")))
         }.getOrNull()
     }
 
@@ -47,8 +57,9 @@ class DesktopCredentialStore(
                 val stored = if (isWindows()) DpapiPrefix + requireNotNull(dpapi(encoded, protect = true)) else PlainPrefix + encoded
                 properties.setProperty(key, stored)
                 writeProperties(properties)
+                lastLoadFailed = false
             }.onFailure {
-                logger.warn("Credentials", "credential_save_failed", "Nie udało się zapisać poświadczenia")
+                logger.warn("Credentials", "credential_save_failed", "Nie udało się zapisać poświadczenia", fields = mapOf("reason" to (it.message ?: "unknown")))
             }
         }
     }
@@ -83,7 +94,10 @@ class DesktopCredentialStore(
 
     private fun dpapi(input: String, protect: Boolean): String? {
         val method = if (protect) "Protect" else "Unprotect"
+        // Windows PowerShell 5.1 nie ładuje System.Security sam — bez Add-Type typ ProtectedData
+        // nie istnieje, skrypt kończy się błędem i token nigdy nie trafiał na dysk
         val script = """
+            Add-Type -AssemblyName System.Security
             ${'$'}raw=[Console]::In.ReadToEnd().Trim()
             ${'$'}bytes=[Convert]::FromBase64String(${'$'}raw)
             ${'$'}result=[Security.Cryptography.ProtectedData]::$method(${'$'}bytes,${'$'}null,[Security.Cryptography.DataProtectionScope]::CurrentUser)

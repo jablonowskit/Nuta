@@ -26,6 +26,12 @@ data class StatsEntry(
 )
 
 /**
+ * Nazwa użytkownika jako segment ścieżki URL. URLEncoder koduje formularze (spacja → `+`),
+ * a w ścieżce `+` to dosłowny plus — stąd zamiana na `%20`.
+ */
+internal fun userPathSegment(user: String): String = URLEncoder.encode(user.trim(), "UTF-8").replace("+", "%20")
+
+/**
  * Topki z `/1/stats/{sitewide|user/<nazwa>}/{recordings|artists|releases}` — to samo, co pokazuje
  * listenbrainz.org/statistics. Statystyki liczone są po stronie ListenBrainz okresowo (pole
  * `last_updated`), więc nie ma sensu odpytywać częściej niż przy wejściu na ekran.
@@ -33,7 +39,7 @@ data class StatsEntry(
 class ListenBrainzStats {
     /** [user] == null → statystyki ogólnoświatowe. Pusta lista = brak policzonych danych (HTTP 204). */
     suspend fun top(user: String?, kind: StatsKind, range: StatsRange, count: Int = 50): List<StatsEntry> {
-        val scope = if (user == null) "sitewide" else "user/${URLEncoder.encode(user, "UTF-8")}"
+        val scope = if (user == null) "sitewide" else "user/${userPathSegment(user)}"
         val path = when (kind) {
             StatsKind.RECORDINGS -> "recordings"
             StatsKind.ARTISTS -> "artists"

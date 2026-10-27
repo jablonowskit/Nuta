@@ -51,6 +51,7 @@ import androidx.compose.material.DropdownMenu
 import androidx.compose.material.DropdownMenuItem
 import androidx.compose.runtime.collectAsState
 import app.nuta.player.SleepTimerState
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.stringResource
 
@@ -369,6 +370,13 @@ private fun PositionSlider(
         val pending = pendingSeekMs ?: return@LaunchedEffect
         if (kotlin.math.abs(state.positionMs - pending) < SeekSettledToleranceMs) pendingSeekMs = null
     }
+    // Seek, który nie dojechał (⏪/⏩ zaraz po przeciągnięciu, błąd, przeładowanie strumienia),
+    // trzymałby uchwyt w miejscu aż do naturalnego dojścia odtwarzania do celu.
+    LaunchedEffect(pendingSeekMs) {
+        if (pendingSeekMs == null) return@LaunchedEffect
+        delay(SeekSettleTimeoutMs)
+        pendingSeekMs = null
+    }
     val displayedMs = scrubbingMs ?: pendingSeekMs?.toFloat() ?: state.positionMs.toFloat()
     val durationMs = state.durationMs.coerceAtLeast(1).toFloat()
     Slider(
@@ -388,7 +396,7 @@ private fun PositionSlider(
     )
 }
 
-/** ⏾ z menu: 15/30/45/60 min, do końca utworu, wyłącz. Aktywny pokazuje pozostałe minuty. */
+/** ☾ z menu: 15/30/45/60 min, do końca utworu, wyłącz. Aktywny pokazuje pozostałe minuty. */
 @Composable
 private fun SleepTimerButton(container: AppContainer) {
     val timer by container.sleepTimer.state.collectAsState()
@@ -397,9 +405,9 @@ private fun SleepTimerButton(container: AppContainer) {
     Box {
         Text(
             when (val t = timer) {
-                is SleepTimerState.Countdown -> "⏾ ${(t.remainingMs + 59_999) / 60_000}′"
-                SleepTimerState.EndOfTrack -> "⏾ ⇥"
-                SleepTimerState.Off -> "⏾"
+                is SleepTimerState.Countdown -> "☾ ${(t.remainingMs + 59_999) / 60_000}′"
+                SleepTimerState.EndOfTrack -> "☾ ⇥"
+                SleepTimerState.Off -> "☾"
             },
             color = if (active) MaterialTheme.colors.primary else LocalNutaPalette.current.muted,
             fontSize = 16.sp,
@@ -427,6 +435,7 @@ private fun SleepTimerButton(container: AppContainer) {
 
 /** Na tyle blisko celu, że uznajemy seek za wykonany (player raportuje pozycję skokowo). */
 private const val SeekSettledToleranceMs = 1_500L
+private const val SeekSettleTimeoutMs = 3_000L
 
 private fun playerSubtitle(track: Track, state: PlayerState): String {
     val stream = streamDescription(state).takeIf(String::isNotBlank)

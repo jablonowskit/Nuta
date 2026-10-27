@@ -227,7 +227,6 @@ private fun NutaAppContent(container: AppContainer) {
         var likedRetryGeneration by remember { mutableStateOf(0) }
         var likedError by remember { mutableStateOf<String?>(null) }
         var similarModeActive by remember { mutableStateOf(false) }
-        var similarModeLoading by remember { mutableStateOf(false) }
         var currentTrackLiked by remember { mutableStateOf(false) }
         // tylko stan ręcznego kliknięcia — celowo NIE dzielony z tłowym sprawdzaniem "czy polubione"
         // przy zmianie utworu; gdyby to sprawdzenie się zawiesiło, nie może trwale zablokować przycisku
@@ -279,8 +278,20 @@ private fun NutaAppContent(container: AppContainer) {
             listenBrainzAuthWarning = if (valid == false) listenBrainzTokenInvalidLabel else null
         }
 
+        // Otwieranie playlisty/wykonawcy w toku — anulowane przy zmianie zakładki i kolejnym otwarciu,
+        // inaczej wolna odpowiedź podmieniała zakładkę, na którą użytkownik zdążył już przejść.
+        var openJob by remember { mutableStateOf<Job?>(null) }
+        fun navigate(target: Destination) {
+            openJob?.cancel()
+            destination = target
+            selectedPlaylist = null
+            loadError = null
+            loading = false
+        }
+
         fun selectPlaylist(playlist: Playlist) {
-            scope.launch {
+            openJob?.cancel()
+            openJob = scope.launch {
                 loading = true
                 loadError = null
                 runCatching { container.spotifyRepository.getPlaylistTracks(playlist.id) }
@@ -309,7 +320,8 @@ private fun NutaAppContent(container: AppContainer) {
          * [PlaylistDetails] co playlisty — bez osobnego ekranu i drugiej ścieżki nawigacji.
          */
         fun selectArtist(artist: Artist) {
-            scope.launch {
+            openJob?.cancel()
+            openJob = scope.launch {
                 loading = true
                 loadError = null
                 runCatching { container.spotifyRepository.getArtistTracks(artist) }
@@ -357,8 +369,11 @@ private fun NutaAppContent(container: AppContainer) {
         }
 
         LaunchedEffect(container.spotifyRepository, playbackSettings.dataSource, loadRetryGeneration) {
+            // Odświeżenie (powrót sieci) przy już pokazanej liście nie może zasłaniać spinnerem ani
+            // błędem zakładki, na której akurat jest użytkownik (Kolejka, Statystyki, Ustawienia…).
+            val refreshing = playlists.isNotEmpty()
             loadError = null
-            loading = true
+            loading = !refreshing
             container.logger.info("Application", "app_started", "Uruchomiono Nuta")
             runCatching { container.spotifyRepository.getPlaylists() }
                 .onSuccess { playlists = it }
@@ -370,7 +385,7 @@ private fun NutaAppContent(container: AppContainer) {
                     if (error.message?.contains("Sesja Spotify wygasła", ignoreCase = true) == true) {
                         container.onSpotifySessionInvalid()
                     }
-                    loadError = error.message
+                    if (!refreshing) loadError = error.message
                 }
             loading = false
         }
@@ -387,11 +402,12 @@ private fun NutaAppContent(container: AppContainer) {
         }
 
         LaunchedEffect(similarModeActive, playerState.currentIndex, playerState.queue.size) {
-            if (!similarModeActive || similarModeLoading || playerState.currentIndex < 0) return@LaunchedEffect
+            // Bez osobnej flagi „ładuje się”: zmiana kluczy i tak anuluje poprzedni przebieg, a flaga
+            // zerowana w jego finally za późno blokowała nowy — dokładanie przepadało przy szybkim skipie.
+            if (!similarModeActive || playerState.currentIndex < 0) return@LaunchedEffect
             val remaining = playerState.queue.lastIndex - playerState.currentIndex
             if (remaining > 3) return@LaunchedEffect
             val seed = playerState.currentTrack ?: return@LaunchedEffect
-            similarModeLoading = true
             try {
                 val recommendations = container.spotifyRepository.getTrackRadio(seed)
                     val knownIds = playerState.queue.mapTo(mutableSetOf(), Track::id)
@@ -405,8 +421,6 @@ private fun NutaAppContent(container: AppContainer) {
                 throw error
             } catch (error: Throwable) {
                 container.logger.warn("SpotifyRadio", "continuous_queue_failed", "Nie udało się rozszerzyć kolejki podobnych utworów", fields = mapOf("reason" to (error::class.simpleName ?: "unknown")))
-            } finally {
-                similarModeLoading = false
             }
         }
 
@@ -426,27 +440,25 @@ private fun NutaAppContent(container: AppContainer) {
             likedTracks = emptyList()
         }
         LaunchedEffect(destination, container.spotifyRepository, playbackSettings.dataSource, likedRetryGeneration) {
-            if (destination != Destination.PLAYLISTS && destination != Destination.LIKED || likedLoaded || likedLoading) return@LaunchedEffect
+            // Bez `|| likedLoading` w warunku: anulowany przebieg (szybkie Biblioteka → Lubię) zostawiał
+            // flagę na true, nowy wychodził od razu i zostawał wieczny spinner albo pusta lista.
+            // Każdy przebieg sam ustawia flagę, a anulowany nie zeruje jej za plecami następnego.
+            if (destination != Destination.PLAYLISTS && destination != Destination.LIKED || likedLoaded) return@LaunchedEffect
             likedLoading = true
             likedError = null
-            // finally: anulowanie (np. przejście Playlisty → Polubione w trakcie ładowania)
-            // zostawiało likedLoading = true i każdy kolejny efekt wychodził od razu — wieczny spinner
-            try {
-                runCatching { container.spotifyRepository.getLikedTracks() }
-                    .onSuccess {
-                        likedTracks = it
-                        likedLoaded = true
-                    }
-                    .onFailure { error ->
-                        // Zmiana źródła danych/ekranu anuluje ten efekt — bez tego rzutu anulowanie
-                        // lądowało w likedError i użytkownik widział czerwony błąd zamiast po prostu
-                        // przerwanego ładowania.
-                        if (error is CancellationException) throw error
-                        likedError = error.message ?: likedFetchFailedLabel
-                    }
-            } finally {
-                likedLoading = false
-            }
+            runCatching { container.spotifyRepository.getLikedTracks() }
+                .onSuccess {
+                    likedTracks = it
+                    likedLoaded = true
+                }
+                .onFailure { error ->
+                    // Zmiana źródła danych/ekranu anuluje ten efekt — bez tego rzutu anulowanie
+                    // lądowało w likedError i użytkownik widział czerwony błąd zamiast po prostu
+                    // przerwanego ładowania.
+                    if (error is CancellationException) throw error
+                    likedError = error.message ?: likedFetchFailedLabel
+                }
+            likedLoading = false
         }
 
         LaunchedEffect(playerState.currentTrack?.id, container.spotifyRepository, playbackSettings.dataSource) {
@@ -473,7 +485,9 @@ private fun NutaAppContent(container: AppContainer) {
         val toggleCurrentTrackLiked = {
             val track = playerState.currentTrack
             if (track != null && !favoriteLoading) {
-                val targetLiked = !currentTrackLiked
+                // to, co widać (serce), a nie samo currentTrackLiked — gdy sprawdzenie per utwór padło
+                // (np. 429), serce było pełne z listy polubionych, a klik polubiał zamiast cofać
+                val targetLiked = !displayedTrackLiked
                 scope.launch {
                     favoriteLoading = true
                     runCatching { container.spotifyRepository.setTrackLiked(track, targetLiked) }
@@ -505,10 +519,7 @@ private fun NutaAppContent(container: AppContainer) {
                 TopBar(compact)
                 Row(Modifier.weight(1f).fillMaxWidth()) {
                     if (!compact) Sidebar(destination) {
-                        destination = it
-                        selectedPlaylist = null
-                        loadError = null
-                        loading = false
+                        navigate(it)
                         container.logger.debug("Navigation", "destination_changed", "Zmieniono ekran", fields = mapOf("destination" to it.name))
                     }
                     if (!compact) Divider(Modifier.fillMaxHeight().width(1.dp), color = LocalNutaPalette.current.divider)
@@ -575,11 +586,7 @@ private fun NutaAppContent(container: AppContainer) {
                         }
                     }
                 }
-                val openQueue = {
-                    destination = Destination.QUEUE
-                    selectedPlaylist = null
-                    loadError = null
-                }
+                val openQueue = { navigate(Destination.QUEUE) }
                 // Player jest częścią chrome'u aplikacji: widoczny na każdej zakładce, gdy jest co grać.
                 // Na zakładce Kolejka pokazujemy go nawet bez utworu (stan „Nic nie gra”).
                 val showPlayerBar = destination == Destination.QUEUE || playerState.currentTrack != null
@@ -591,12 +598,7 @@ private fun NutaAppContent(container: AppContainer) {
                         Divider(color = LocalNutaPalette.current.divider)
                         CompactPlayerBar(playerState, container, similarModeActive, { similarModeActive = it }, openQueue, displayedTrackLiked, favoriteLoading, toggleCurrentTrackLiked, playbackSettings.playerCollapsed, setCollapsed)
                     }
-                    BottomNavigation(destination) {
-                        destination = it
-                        selectedPlaylist = null
-                        loadError = null
-                        loading = false
-                    }
+                    BottomNavigation(destination) { navigate(it) }
                 } else if (showPlayerBar) {
                     Divider(color = LocalNutaPalette.current.divider)
                     PlayerBar(

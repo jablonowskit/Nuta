@@ -379,6 +379,9 @@ class MpvAudioPlayer(
                     }
                     if (paused == true) _state.value = _state.value.copy(status = PlayerStatus.PAUSED)
                 } catch (error: Throwable) {
+                    // ticker.cancel() z pause()/stop w trakcie zapytania IPC to nie błąd mpv — bez tego
+                    // ERROR nadpisywał PAUSED i play() ładował utwór od 0. Timeout (żywa korutyna) już tak.
+                    if (error is CancellationException && !currentCoroutineContext().isActive) throw error
                     _state.value = _state.value.copy(status = PlayerStatus.ERROR, errorMessage = error.message)
                     logger.error("MpvPlayer", "playback_monitor_failed", "Utracono kontakt z procesem mpv", throwable = error)
                     break
