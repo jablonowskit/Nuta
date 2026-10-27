@@ -52,6 +52,8 @@ data class YouTubePlaybackSettings(
     val listenBrainzApiToken: String = "",
     /** Eksperymentalne: rozwiązuj strumień dla widocznych utworów zanim użytkownik kliknie play. */
     val prefetchEnabled: Boolean = false,
+    /** Na ostatnim utworze kolejki dokładaj podobne, zamiast kończyć (patrz QueueContinuation). */
+    val autoContinue: Boolean = true,
     /** Pasek playera jest zawsze widoczny; to pole trzyma tylko stan zwinięcia do wąskiego paska. */
     val playerCollapsed: Boolean = false,
     /** Limit cache'u zbuforowanych strumieni audio (MB). Zmiana działa dopiero po restarcie aplikacji. */
@@ -66,7 +68,7 @@ data class YouTubePlaybackSettings(
         "loudnessNormalization=$loudnessNormalization, youtubeClientProfile=$youtubeClientProfile, " +
         "audioSource=$audioSource, dataSource=$dataSource, listenBrainzUsername=$listenBrainzUsername, " +
         "listenBrainzApiToken=${if (listenBrainzApiToken.isBlank()) "" else "[REDACTED]"}, " +
-        "prefetchEnabled=$prefetchEnabled, playerCollapsed=$playerCollapsed, cacheSizeMb=$cacheSizeMb, " +
+        "prefetchEnabled=$prefetchEnabled, autoContinue=$autoContinue, playerCollapsed=$playerCollapsed, cacheSizeMb=$cacheSizeMb, " +
         "cassetteBackground=$cassetteBackground, loadCovers=$loadCovers, theme=$theme)"
 }
 

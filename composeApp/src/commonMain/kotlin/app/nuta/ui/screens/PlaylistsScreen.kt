@@ -30,6 +30,7 @@ import app.nuta.ui.ScrollableLazyColumn
 import app.nuta.ui.TrackPlayButton
 import app.nuta.ui.TrackQueueButton
 import app.nuta.ui.TrackRow
+import app.nuta.ui.startTrackRadio
 import app.nuta.ui.rememberPrefetchHandler
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.stringResource
@@ -85,7 +86,7 @@ internal fun PlaylistDetails(
                     } }
                 }, subtitleAction = {
                     TrackQueueButton { scope.launch { container.audioPlayer.appendToQueue(listOf(track)) } }
-                }, onLongPress = { onAddToPlaylist(track) }, onPlayNext = { scope.launch { container.audioPlayer.insertNext(listOf(track)) } })
+                }, onLongPress = { onAddToPlaylist(track) }, onPlayNext = { scope.launch { container.audioPlayer.insertNext(listOf(track)) } }, onRadio = { scope.launch { startTrackRadio(container, track) } })
             }
         }
     }

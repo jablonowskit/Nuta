@@ -136,6 +136,7 @@ class MainActivity : ComponentActivity() {
                         AppServices.listenBrainzRepository,
                     )
                 }
+                AppServices.repository = repository
                 val container = remember(repository, activePlayer) {
                     AppContainer(
                         spotifyRepository = repository,

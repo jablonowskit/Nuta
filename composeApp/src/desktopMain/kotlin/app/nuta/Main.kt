@@ -13,6 +13,7 @@ import app.nuta.listenbrainz.ListenBrainzRepository
 import app.nuta.listenbrainz.ListenBrainzScrobbler
 import app.nuta.musicbrainz.MusicBrainzRepository
 import app.nuta.player.MpvAudioPlayer
+import app.nuta.player.QueueContinuation
 import app.nuta.platform.RotatingJsonLogSink
 import app.nuta.spotify.SpotifyLoginPrototype
 import app.nuta.spotify.SpotifyTestTokenStore
@@ -34,6 +35,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.plus
 import java.time.Instant
 
@@ -82,6 +84,9 @@ fun main() {
         youtubeMediaService = youtubeMediaService,
         playbackSettings = playbackSettings,
     )
+    // Kontener podmienia się po zalogowaniu do Spotify — getter zawsze bierze bieżące repozytorium.
+    var currentRepository = container.spotifyRepository
+    QueueContinuation(playbackSettings, { currentRepository }, logger).attach(flowOf(audioPlayer), scope)
 
     application {
         Window(
@@ -137,6 +142,7 @@ fun main() {
                             playbackSettings = playbackSettings,
                             sleepTimer = container.sleepTimer,
                         )
+                        currentRepository = activeContainer.spotifyRepository
                         tokenExpiresAtMs = token.expiresAtMs
                         showSpotifyLogin = false
                         if (refreshingSession) {

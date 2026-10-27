@@ -156,6 +156,9 @@
     <string name="sleep_end_of_track">Do końca utworu</string>
     <string name="sleep_off">Wyłącz</string>
     <string name="play_next">Odtwórz jako następny</string>
+    <string name="track_radio">Graj podobne</string>
+    <string name="auto_continue_title">Graj dalej</string>
+    <string name="auto_continue_desc">Gdy gra ostatni utwór kolejki, dołóż podobne, żeby muzyka nie ucichła.</string>
     <string name="add_to_playlist_menu">Dodaj do playlisty…</string>
     <string name="filter_liked">Szukaj po tytule lub wykonawcy</string>
     <string name="queue_drag_handle">Przeciągnij, by zmienić kolejność</string>
