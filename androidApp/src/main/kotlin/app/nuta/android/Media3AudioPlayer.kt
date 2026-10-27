@@ -95,6 +95,10 @@ class Media3AudioPlayer(
             newPosition: Player.PositionInfo,
             reason: Int,
         ) {
+            // W trakcie ładowania item ma już mediaId nowego utworu (publishSessionMetadata), ale
+            // strumień i pozycję jeszcze starego — taki skok przypisałby nowemu utworowi końcówkę
+            // poprzedniego (podwójne scrobble z ListenBrainz, 27.10.2026).
+            if (stateFlow.value.status == PlayerStatus.LOADING || stateFlow.value.status == PlayerStatus.IDLE) return
             val position = newPosition.positionMs.coerceAtLeast(0)
             stateFlow.value = stateFlow.value.copy(positionMs = position)
             savePosition(position)

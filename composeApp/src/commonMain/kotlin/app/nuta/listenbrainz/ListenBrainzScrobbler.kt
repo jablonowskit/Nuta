@@ -1,6 +1,7 @@
 package app.nuta.listenbrainz
 
 import app.nuta.core.logging.NutaLogger
+import app.nuta.core.models.PlayerState
 import app.nuta.core.models.PlayerStatus
 import app.nuta.core.models.Track
 import app.nuta.domain.AudioPlayer
@@ -10,6 +11,7 @@ import app.nuta.settings.PlaybackSettingsStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonArray
@@ -59,12 +61,25 @@ class ListenBrainzScrobbler(
     private var nowPlayingKey: String? = null
 
     /**
+     * Bieżące odsłuchanie: próg liczymy z faktycznie przegranego czasu ([playedMs]), a nie z
+     * pozycji. Pozycja z playera potrafi przy przejściu utworu chwilowo należeć do poprzedniego —
+     * 27.10.2026 niemal każde auto-przejście dawało drugi wpis: nowy utwór z pozycją ~240 s
+     * z końca starego i `listened_at` jego startu. Skok pozycji to nie słuchanie, więc się nie liczy.
+     */
+    private var listenKey: String? = null
+    private var listenStartedAtMs: Long? = null
+    private var playedMs = 0L
+    private var lastPlayingPositionMs = -1L
+
+    /**
      * Podłącza scrobblera do [player] w podanym [scope]. Zwraca natychmiast; obserwacja żyje
      * tak długo jak [scope] (na Androidzie skope'owane do procesu usługi/aplikacji).
      */
-    fun attach(player: AudioPlayer, scope: CoroutineScope) {
+    fun attach(player: AudioPlayer, scope: CoroutineScope) = attach(player.state, scope)
+
+    internal fun attach(states: Flow<PlayerState>, scope: CoroutineScope) {
         scope.launch {
-            player.state
+            states
                 .distinctUntilChanged { old, new ->
                     // Reagujemy tylko na zmianę utworu, statusu i pozycji zaokrąglonej do
                     // sekundy — bez tego każde tyknięcie pozycji budziłoby całą logikę.
@@ -81,6 +96,7 @@ class ListenBrainzScrobbler(
                     if (settingsStore.settings.value.dataSource != DataSource.LISTENBRAINZ) return@collect
 
                     val key = trackKey(track)
+                    if (key != listenKey) startListen(key)
                     // Ten sam utwór puszczony ponownie (zapętlenie, powrót do niego później) to
                     // nowe odsłuchanie i należy je zgłosić jeszcze raz. Rozpoznajemy to po
                     // cofnięciu pozycji na początek — bez tego `scrobbledKey` blokowałby utwór
@@ -89,18 +105,29 @@ class ListenBrainzScrobbler(
                         scrobbledKey = null
                         pendingScrobbleKey = null
                         nowPlayingKey = null
+                        startListen(key)
                     }
-                    if (key == failedScrobbleKey && state.positionMs < RestartPositionMs) failedScrobbleKey = null
+                    if (key == failedScrobbleKey && state.positionMs < RestartPositionMs) {
+                        failedScrobbleKey = null
+                        startListen(key)
+                    }
+                    if (state.status == PlayerStatus.PLAYING) {
+                        if (listenStartedAtMs == null) listenStartedAtMs = nowMs()
+                        // zwykłe tyknięcie; seek, wznowienie po skoku i cudza pozycja się nie liczą
+                        val delta = state.positionMs - lastPlayingPositionMs
+                        if (lastPlayingPositionMs >= 0 && delta in 1..MaxTickGapMs) playedMs += delta
+                        lastPlayingPositionMs = state.positionMs
+                    }
                     if (key != scrobbledKey && key != nowPlayingKey && state.status == PlayerStatus.PLAYING) {
                         nowPlayingKey = key
                         submitPlayingNow(track)
                     }
-                    if (key != scrobbledKey && key != pendingScrobbleKey && key != failedScrobbleKey && ListenThreshold.isReached(state.positionMs, state.durationMs)) {
+                    if (key != scrobbledKey && key != pendingScrobbleKey && key != failedScrobbleKey && ListenThreshold.isReached(playedMs, state.durationMs)) {
                         pendingScrobbleKey = key
-                        val positionMs = state.positionMs
+                        val startedAtMs = listenStartedAtMs ?: nowMs()
                         val durationMs = state.durationMs
                         launch {
-                            val submitted = submitListen(track, positionMs, durationMs)
+                            val submitted = submitListen(track, startedAtMs, durationMs)
                             if (pendingScrobbleKey == key) {
                                 if (submitted) scrobbledKey = key else failedScrobbleKey = key
                                 pendingScrobbleKey = null
@@ -109,6 +136,13 @@ class ListenBrainzScrobbler(
                     }
                 }
         }
+    }
+
+    private fun startListen(key: String) {
+        listenKey = key
+        listenStartedAtMs = null
+        playedMs = 0
+        lastPlayingPositionMs = -1
     }
 
     /** Utwory z różnych źródeł mogą mieć ten sam (albo puste) `id`, więc kluczujemy też metadanymi. */
@@ -122,13 +156,11 @@ class ListenBrainzScrobbler(
         )
     }
 
-    private suspend fun submitListen(track: Track, positionMs: Long, durationMs: Long): Boolean {
-        // `listened_at` to moment ROZPOCZĘCIA odsłuchania, nie zgłoszenia — odejmujemy to, co
-        // faktycznie zdążyło polecieć, żeby historia nie przesuwała się o próg (do 4 minut).
-        val startedAtSeconds = (nowMs() - positionMs) / 1000
+    /** `listened_at` to moment ROZPOCZĘCIA odsłuchania (pierwsze PLAYING tego utworu), nie zgłoszenia. */
+    private suspend fun submitListen(track: Track, startedAtMs: Long, durationMs: Long): Boolean {
         return post(
             event = "listen",
-            body = requestBody(listenType = "single", track = track, listenedAt = startedAtSeconds, durationMs = durationMs),
+            body = requestBody(listenType = "single", track = track, listenedAt = startedAtMs / 1000, durationMs = durationMs),
             track = track,
         )
     }
@@ -200,6 +232,8 @@ class ListenBrainzScrobbler(
         /** Poniżej 3 s od początku uznajemy, że utwór wystartował od nowa (a nie że użytkownik
             przewinął w tył pod koniec) — margines na niedokładność raportowanej pozycji. */
         const val RestartPositionMs = 3_000L
+        /** Większy przyrost pozycji między obserwacjami to seek (np. +10 s), a nie granie. */
+        const val MaxTickGapMs = 5_000L
         const val MaxAttempts = 3
         const val RetryBaseMs = 500L
         val MbidRegex = Regex("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
