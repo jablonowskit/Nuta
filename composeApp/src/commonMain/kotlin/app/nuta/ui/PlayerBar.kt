@@ -336,6 +336,7 @@ internal fun CompactPlayerBar(
                 }
             }
         }
+        MusicVideoButton(track)
         LyricsToggleButton(lyricsVisible, onLyricsVisibleChange)
         SleepTimerButton(container)
     }
@@ -620,6 +621,7 @@ internal fun PlayerBar(
         )
         Text(formatTime(state.durationMs), color = palette.muted, fontSize = 11.sp)
         Spacer(Modifier.width(8.dp))
+        MusicVideoButton(track)
         LyricsToggleButton(lyricsVisible, onLyricsVisibleChange)
         SleepTimerButton(container)
         Spacer(Modifier.width(6.dp))
