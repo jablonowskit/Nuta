@@ -34,19 +34,13 @@ object ListenThreshold {
         if (durationMs <= 0L) AbsoluteThresholdMs else minOf(durationMs / 2, AbsoluteThresholdMs)
 
     /**
-     * Czy utwór o długości [durationMs] odsłuchany do pozycji [positionMs] kwalifikuje się do
+     * Czy utwór o długości [durationMs] odsłuchany przez [playedMs] kwalifikuje się do
      * zgłoszenia. Utwory krótsze niż [MinimumTrackLengthMs] odrzucamy zawsze; przy nieznanej
      * długości (0) nie wiemy, czy są za krótkie, więc dopuszczamy je i polegamy na progu czasowym.
+     * Przewijanie/zapętlenie (playedMs > durationMs) nie dyskwalifikuje utworu.
      */
-    fun isReached(positionMs: Long, durationMs: Long): Boolean {
+    fun isReached(playedMs: Long, durationMs: Long): Boolean {
         if (durationMs in 1 until MinimumTrackLengthMs) return false
-        // Pozycja większa niż długość utworu nie może pochodzić z tego utworu — to pozostałość
-        // po poprzednim (patrz błąd tickera w Media3AudioPlayer.startTicker, potwierdzony na
-        // danych z konta 09.09.2026: 215-sekundowy utwór zgłoszony z pozycją 241 s natychmiast
-        // po starcie). Sam ticker jest naprawiony, ale próg też nie może takiej pozycji
-        // zaakceptować: to jedyne miejsce, które w ogóle zna długość utworu, a wynikiem jest
-        // trwały, błędny wpis w historii — nie da się go „odzobaczyć" po fakcie.
-        if (durationMs > 0L && positionMs > durationMs) return false
-        return positionMs >= requiredMs(durationMs)
+        return playedMs >= requiredMs(durationMs)
     }
 }

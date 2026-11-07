@@ -190,7 +190,7 @@ class PlaybackService : MediaSessionService() {
                     // dodanie Range od bajtu 0 samo w sobie okazało się powodować natychmiastowe 403,
                     // czego nie było, gdy pierwsze żądanie szło bez nagłówka Range wcale.
                     val boundedSpec = if (contentLength != null && dataSpec.position > 0 && dataSpec.length == androidx.media3.common.C.LENGTH_UNSET.toLong()) {
-                        dataSpec.buildUpon().setLength(contentLength - dataSpec.position).build()
+                        dataSpec.buildUpon().setLength((contentLength - dataSpec.position).coerceAtLeast(0)).build()
                     } else dataSpec
                     logger.debug("PlaybackHttp", "range_open", "Otwieram żądanie bajtów", fields = mapOf(
                         "itag" to (itag ?: "?"),

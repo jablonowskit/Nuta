@@ -10,8 +10,8 @@ class ListenThresholdTest {
     fun requiresHalfOfShortTrack() {
         val threeMinutes = 3 * 60 * 1000L
         assertEquals(90_000L, ListenThreshold.requiredMs(threeMinutes))
-        assertFalse(ListenThreshold.isReached(positionMs = 89_999, durationMs = threeMinutes))
-        assertTrue(ListenThreshold.isReached(positionMs = 90_000, durationMs = threeMinutes))
+        assertFalse(ListenThreshold.isReached(playedMs = 89_999, durationMs = threeMinutes))
+        assertTrue(ListenThreshold.isReached(playedMs = 90_000, durationMs = threeMinutes))
     }
 
     @Test
@@ -19,8 +19,8 @@ class ListenThresholdTest {
         // Godzinny set: połowa to 30 minut, ale reguła ListenBrainz zalicza go już po 4 minutach.
         val oneHour = 60 * 60 * 1000L
         assertEquals(ListenThreshold.AbsoluteThresholdMs, ListenThreshold.requiredMs(oneHour))
-        assertTrue(ListenThreshold.isReached(positionMs = 4 * 60 * 1000L, durationMs = oneHour))
-        assertFalse(ListenThreshold.isReached(positionMs = 3 * 60 * 1000L, durationMs = oneHour))
+        assertTrue(ListenThreshold.isReached(playedMs = 4 * 60 * 1000L, durationMs = oneHour))
+        assertFalse(ListenThreshold.isReached(playedMs = 3 * 60 * 1000L, durationMs = oneHour))
     }
 
     @Test
@@ -28,29 +28,24 @@ class ListenThresholdTest {
         // durationMs = 0 zdarza się realnie: wpisy ListenBrainz mające tylko MSID oraz wyniki
         // MusicBrainz bez pola `length`. Bez znanej długości zostaje sam próg 4 minut.
         assertEquals(ListenThreshold.AbsoluteThresholdMs, ListenThreshold.requiredMs(0))
-        assertFalse(ListenThreshold.isReached(positionMs = 60_000, durationMs = 0))
-        assertTrue(ListenThreshold.isReached(positionMs = ListenThreshold.AbsoluteThresholdMs, durationMs = 0))
+        assertFalse(ListenThreshold.isReached(playedMs = 60_000, durationMs = 0))
+        assertTrue(ListenThreshold.isReached(playedMs = ListenThreshold.AbsoluteThresholdMs, durationMs = 0))
     }
 
     @Test
-    fun rejectsPositionBeyondTrackLength() {
-        // Regresja z prawdziwych danych (konto piotrowskit, 09.09.2026): „Chandelier" (215 280 ms)
-        // dostał pozycję 241 000 ms odziedziczoną po poprzednim utworze „United" (240 000 ms).
-        // Próg 107 640 ms był wtedy spełniony natychmiast, więc odsłuchanie zgłoszono po zerowym
-        // czasie słuchania i z `listened_at` sprzed czterech minut.
-        assertFalse(ListenThreshold.isReached(positionMs = 241_000, durationMs = 215_280))
-        // Ta sama pozycja jest w porządku dla utworu, który faktycznie tyle trwa.
-        assertTrue(ListenThreshold.isReached(positionMs = 241_000, durationMs = 240_000 + 1_000))
-        // Nieznana długość (0) nie daje podstawy do odrzucenia — zostaje próg czasowy.
-        assertTrue(ListenThreshold.isReached(positionMs = 999_000, durationMs = 0))
+    fun allowsPlayingLongerThanTrackLengthDueToSeekingOrLooping() {
+        // Przewijanie/słuchanie dłuższe niż czas utworu (np. powtórzenie fragmentu)
+        // nadal spełnia próg odsłuchania.
+        assertTrue(ListenThreshold.isReached(playedMs = 241_000, durationMs = 215_280))
+        assertTrue(ListenThreshold.isReached(playedMs = 999_000, durationMs = 0))
     }
 
     @Test
     fun rejectsTracksShorterThanClientMinimum() {
         // 20-sekundowy jingiel: nawet odsłuchany do końca nie kwalifikuje się do zgłoszenia.
         // To nasza decyzja, nie ograniczenie API — serwis takie wpisy przyjmuje.
-        assertFalse(ListenThreshold.isReached(positionMs = 20_000, durationMs = 20_000))
+        assertFalse(ListenThreshold.isReached(playedMs = 20_000, durationMs = 20_000))
         // Dokładnie 30 s to już akceptowalna długość — zaliczana po połowie.
-        assertTrue(ListenThreshold.isReached(positionMs = 15_000, durationMs = 30_000))
+        assertTrue(ListenThreshold.isReached(playedMs = 15_000, durationMs = 30_000))
     }
 }

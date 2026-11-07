@@ -54,6 +54,7 @@ import androidx.compose.material.DropdownMenu
 import androidx.compose.material.DropdownMenuItem
 import androidx.compose.runtime.collectAsState
 import app.nuta.player.SleepTimerState
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.stringResource
@@ -148,6 +149,8 @@ private fun CompactTransportRow(
                                         else container.audioPlayer.appendToQueue(additions)
                                         onSimilarModeChange(true)
                                         onOpenQueue()
+                                    } catch (error: CancellationException) {
+                                        throw error
                                     } catch (error: Throwable) {
                                         radioError = error.message ?: "Nie udało się pobrać podobnych utworów"
                                     } finally {

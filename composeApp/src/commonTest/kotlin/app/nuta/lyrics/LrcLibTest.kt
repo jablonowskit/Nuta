@@ -46,7 +46,7 @@ class LrcLibTest {
             [ar:Metallica]
             [00:20.5]Druga
             [00:10.123][01:00.00]Refren
-            [00:30]
+              [00:30]
             bez znacznika
             """.trimIndent(),
         )

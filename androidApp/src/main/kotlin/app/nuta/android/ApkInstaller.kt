@@ -25,10 +25,12 @@ object ApkInstaller {
     suspend fun install(context: Context, url: String, onProgress: (Float) -> Unit) = withContext(Dispatchers.IO) {
         val app = context.applicationContext
         val apk = File(app.cacheDir, "update.apk")
+        val installer = app.packageManager.packageInstaller
+        var createdSessionId: Int? = null
         try {
             download(url, apk, onProgress)
-            val installer = app.packageManager.packageInstaller
             val sessionId = installer.createSession(PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL))
+            createdSessionId = sessionId
             installer.openSession(sessionId).use { session ->
                 session.openWrite("nuta.apk", 0, apk.length()).use { out ->
                     apk.inputStream().use { it.copyTo(out) }
@@ -40,7 +42,11 @@ object ApkInstaller {
                     PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE,
                 )
                 session.commit(status.intentSender)
+                createdSessionId = null
             }
+        } catch (error: Throwable) {
+            createdSessionId?.let { runCatching { installer.abandonSession(it) } }
+            throw error
         } finally {
             apk.delete()
         }

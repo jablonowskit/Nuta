@@ -80,7 +80,8 @@ class LrcLibClient {
          * refren: `[00:12.00][01:30.00]tekst`). Linie bez tekstu (przerwy instrumentalne) zostają —
          * pusta linia podświetlona w trakcie solówki jest lepsza niż wisząca poprzednia.
          */
-        fun parseLrc(text: String): List<LyricLine> = text.lineSequence().flatMap { line ->
+        fun parseLrc(text: String): List<LyricLine> = text.lineSequence().flatMap { rawLine ->
+            val line = rawLine.trimStart()
             val tags = TimeTag.findAll(line).toList()
             if (tags.isEmpty() || tags.first().range.first != 0) return@flatMap emptySequence()
             val lyric = line.substring(tags.last().range.last + 1).trim()

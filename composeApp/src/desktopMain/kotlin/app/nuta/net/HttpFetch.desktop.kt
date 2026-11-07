@@ -10,7 +10,9 @@ import kotlinx.coroutines.withContext
 
 // connectTimeout jest per-request (patrz httpGet/httpPost), nie per-client — HttpClient
 // współdzielony między wszystkimi wywołaniami niezależnie od timeoutMs.
-private val client = HttpClient.newBuilder().build()
+private val client = HttpClient.newBuilder()
+    .followRedirects(HttpClient.Redirect.NORMAL)
+    .build()
 
 actual suspend fun httpGet(url: String, headers: Map<String, String>, timeoutMs: Int): String {
     val builder = HttpRequest.newBuilder(URI(url)).timeout(Duration.ofMillis(timeoutMs.toLong())).GET()

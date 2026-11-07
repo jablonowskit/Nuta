@@ -66,11 +66,11 @@ class AppUpdater(
         private const val ReleaseUrl = "https://github.com/jablonowskit/Nuta/releases/download/nightly"
         const val VersionUrl = "$ReleaseUrl/nuta-version.txt"
         const val ApkUrl = "$ReleaseUrl/nuta.apk"
-        private val ShortSha = Regex("^[0-9a-f]{7}$")
+        private val ShaRegex = Regex("^[0-9a-fA-F]{7,40}$")
 
         internal fun newerVersion(remote: String, installed: String): String? {
             val version = remote.trim()
-            return version.takeIf { ShortSha.matches(it) && ShortSha.matches(installed) && it != installed }
+            return version.takeIf { ShaRegex.matches(it) && ShaRegex.matches(installed) && !it.equals(installed, ignoreCase = true) }
         }
     }
 }
