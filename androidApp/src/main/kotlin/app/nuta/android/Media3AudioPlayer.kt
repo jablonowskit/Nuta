@@ -59,6 +59,7 @@ class Media3AudioPlayer(
     /** Rośnie przy każdym [startTicker]; pozwala starej korutynie rozpoznać, że jest już nieaktualna. */
     private var tickerGeneration = 0
     private var retryingAfterError = false
+    private var consecutiveFailures = 0
     /** Reset retryingAfterError czeka na STABLE_PLAYBACK_MS realnie lecącego dźwięku, nie na samo
         chwilowe player.isPlaying == true zaraz po udanym rozwiązaniu URL-a. Bez tego utwór, który
         pada kilka sekund po starcie (typowe dla wygasających/blokowanych URLi YouTube z HTTP 403),
@@ -125,6 +126,8 @@ class Media3AudioPlayer(
                     }
                     startPlayback()
                 }
+            } else if (retryingAfterError) {
+                skipFailedTrack("playback_failed")
             }
             logger.error("Media3Player", "playback_failed", "Media3 zgłosił błąd odtwarzania", throwable = error)
         }
@@ -232,7 +235,7 @@ class Media3AudioPlayer(
             }
             player.isPlaying -> {
                 if (stabilityJob?.isActive != true) {
-                    stabilityJob = scope.launch { delay(STABLE_PLAYBACK_MS); retryingAfterError = false }
+                    stabilityJob = scope.launch { delay(STABLE_PLAYBACK_MS); retryingAfterError = false; consecutiveFailures = 0 }
                 }
                 stateFlow.value = stateFlow.value.copy(status = PlayerStatus.PLAYING)
             }
@@ -515,7 +518,24 @@ class Media3AudioPlayer(
             if (!isCurrentLoad(generation, track.id)) return
             stateFlow.value = stateFlow.value.copy(status = PlayerStatus.ERROR, errorMessage = error.message)
             logger.error("Media3Player", "resolution_failed", "Nie udało się przygotować strumienia YouTube", throwable = error)
+            skipFailedTrack("resolution_failed")
         }
+    }
+
+    /**
+     * Utwór, którego nie da się zagrać (po nieudanym ponowieniu albo błędzie rozwiązywania strumienia),
+     * nie zatrzymuje słuchania: przeskakujemy do następnego. Po [MaxConsecutiveFailures] porażkach z rzędu
+     * zostajemy w ERROR — przy braku sieci nie przelatujemy całej kolejki. Licznik zeruje stabilne granie.
+     */
+    private fun skipFailedTrack(reason: String) {
+        val state = stateFlow.value
+        if (pauseRequested || ++consecutiveFailures >= MaxConsecutiveFailures) return
+        if (state.currentIndex + 1 !in state.queue.indices) return
+        logger.warn("Media3Player", "track_skipped", "Pomijam utwór, którego nie da się zagrać", fields = mapOf(
+            "reason" to reason, "track" to state.currentTrack?.title.orEmpty(), "failures" to consecutiveFailures.toString(),
+        ))
+        retryingAfterError = false
+        scope.launch { next() }
     }
 
     private fun isCurrentLoad(generation: Long, trackId: String): Boolean =
@@ -668,6 +688,7 @@ class Media3AudioPlayer(
         const val PREFETCH_CACHE_LIMIT = 40
         const val PREFETCH_EXPIRY_MARGIN_MS = 30_000L
         const val STABLE_PLAYBACK_MS = 8_000L
+        const val MaxConsecutiveFailures = 3
         /** Atrapa URI dla wczesnych metadanych — patrz publishSessionMetadata; nigdy nie ładowana. */
         const val PendingStreamUri = "nuta://pending-stream"
         val TERMINAL_STATUSES = setOf(PlayerStatus.IDLE, PlayerStatus.ENDED, PlayerStatus.ERROR)
