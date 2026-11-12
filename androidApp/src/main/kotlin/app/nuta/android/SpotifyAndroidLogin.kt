@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.Button
 import androidx.compose.material.Text
+import androidx.compose.material.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -44,6 +45,7 @@ import org.json.JSONObject
 fun SpotifyAndroidLogin(
     logger: NutaLogger,
     onSessionDetected: (SpotifyWebToken) -> Unit,
+    onBackToListenBrainz: () -> Unit,
 ) {
     var status by remember { mutableStateOf("Zaloguj się na stronie Spotify") }
     var webView by remember { mutableStateOf<WebView?>(null) }
@@ -77,6 +79,10 @@ fun SpotifyAndroidLogin(
             Text(status, color = Color.White, modifier = Modifier.weight(1f).padding(10.dp), maxLines = 2)
             Button(onClick = connectSession, modifier = Modifier.padding(end = 4.dp)) {
                 Text("Połącz", maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+            }
+            // Bez tego przycisku po wybraniu „Spotify” w Ustawieniach nie ma jak wrócić do ListenBrainz.
+            TextButton(onClick = onBackToListenBrainz) {
+                Text("ListenBrainz", maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
             }
         }
         AndroidView(

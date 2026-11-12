@@ -114,12 +114,18 @@ class MainActivity : ComponentActivity() {
                 }
             }
             if (settings.dataSource == DataSource.SPOTIFY && token == null) {
-                SpotifyAndroidLogin(logger) { session ->
-                    session.value.use { value ->
-                        preferences.edit().putString("accessToken", value).putLong("expiresAt", session.expiresAtMs).apply()
-                    }
-                    token = session
-                }
+                SpotifyAndroidLogin(
+                    logger = logger,
+                    onSessionDetected = { session ->
+                        session.value.use { value ->
+                            preferences.edit().putString("accessToken", value).putLong("expiresAt", session.expiresAtMs).apply()
+                        }
+                        token = session
+                    },
+                    onBackToListenBrainz = {
+                        playbackSettings.update { it.copy(dataSource = DataSource.LISTENBRAINZ) }
+                    },
+                )
             } else {
                 val activeToken = token
                 val repository = remember(activeToken) {
